@@ -2,10 +2,21 @@ namespace FMDesktop.Models;
 
 public class Spieler
 {
-    public long   Id                   { get; set; }
-    public string Name                 { get; set; } = "";
-    public int    Alter                { get; set; }
-    public string Nationalitaet        { get; set; } = "";
+    public long     Id             { get; set; }
+    public string   Name           { get; set; } = "";
+    public DateOnly Geburtsdatum   { get; set; }
+    public string   Nationalitaet  { get; set; } = "";
+
+    public int Alter
+    {
+        get
+        {
+            var heute = DateOnly.FromDateTime(DateTime.Today);
+            int alter = heute.Year - Geburtsdatum.Year;
+            if (Geburtsdatum.AddYears(alter) > heute) alter--;
+            return alter;
+        }
+    }
     public string Position             { get; set; } = "";
     public string Kader                { get; set; } = "";
     public int    Staerke              { get; set; }
