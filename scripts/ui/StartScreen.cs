@@ -1,3 +1,4 @@
+#nullable enable
 using Godot;
 using System;
 using System.Collections.Generic;
@@ -103,8 +104,8 @@ public partial class StartScreen : Control
         vbox.Alignment = BoxContainer.AlignmentMode.Center;
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("🏆", 48, FmTheme.Gold) with { HorizontalAlignment = HorizontalAlignment.Center });
-        vbox.AddChild(FmTheme.MakeLabel("Neues Spiel", 22, FmTheme.TextPrimary) with { HorizontalAlignment = HorizontalAlignment.Center });
+        vbox.AddChild(FmTheme.MakeLabel("🏆", 48, FmTheme.Gold, HorizontalAlignment.Center));
+        vbox.AddChild(FmTheme.MakeLabel("Neues Spiel", 22, FmTheme.TextPrimary, HorizontalAlignment.Center));
 
         var desc = FmTheme.MakeLabel(
             "Du startest als Trainer in der Oberliga.\nWähle einen Verein und führe ihn nach oben.",
@@ -141,8 +142,8 @@ public partial class StartScreen : Control
         vbox.AddThemeConstantOverride("separation", 14);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("⚙", 48) with { HorizontalAlignment = HorizontalAlignment.Center });
-        vbox.AddChild(FmTheme.MakeLabel("Ligenwelt wird aufgebaut …", 20, FmTheme.TextPrimary) with { HorizontalAlignment = HorizontalAlignment.Center });
+        vbox.AddChild(FmTheme.MakeLabel("⚙", 48, align: HorizontalAlignment.Center));
+        vbox.AddChild(FmTheme.MakeLabel("Ligenwelt wird aufgebaut …", 20, FmTheme.TextPrimary, HorizontalAlignment.Center));
 
         _progressLabel = FmTheme.MakeLabel("Starte …", 13, FmTheme.TextSecondary);
         _progressLabel.HorizontalAlignment = HorizontalAlignment.Center;
@@ -159,8 +160,8 @@ public partial class StartScreen : Control
         var vbox = new VBoxContainer();
         vbox.AddThemeConstantOverride("separation", 20);
 
-        vbox.AddChild(FmTheme.MakeLabel("Wähle deinen Verein – Oberliga", 22, FmTheme.TextPrimary) with { HorizontalAlignment = HorizontalAlignment.Center });
-        vbox.AddChild(FmTheme.MakeLabel("Drei zufällige Vereine aus der Oberliga stehen zur Auswahl.", 13, FmTheme.TextSecondary) with { HorizontalAlignment = HorizontalAlignment.Center });
+        vbox.AddChild(FmTheme.MakeLabel("Wähle deinen Verein – Oberliga", 22, FmTheme.TextPrimary, HorizontalAlignment.Center));
+        vbox.AddChild(FmTheme.MakeLabel("Drei zufällige Vereine aus der Oberliga stehen zur Auswahl.", 13, FmTheme.TextSecondary, HorizontalAlignment.Center));
 
         _vereineContainer = new HBoxContainer();
         _vereineContainer.AddThemeConstantOverride("separation", 24);
@@ -194,7 +195,7 @@ public partial class StartScreen : Control
         vbox.AddThemeConstantOverride("separation", 10);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("🛡", 40) with { HorizontalAlignment = HorizontalAlignment.Center });
+        vbox.AddChild(FmTheme.MakeLabel("🛡", 40, align: HorizontalAlignment.Center));
 
         var name = FmTheme.MakeLabel(verein.Name, 16, FmTheme.TextPrimary);
         name.HorizontalAlignment = HorizontalAlignment.Center;

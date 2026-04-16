@@ -56,10 +56,18 @@ public partial class KaderView : Control
         };
         tree.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 
+        // Spalte: Name, Pos, Stärke, Alter, Wert, Nation
+        int[] minBreiten    = {  120,  48,  64,  52, 110,  90 };
+        bool[] expandiert   = { true, false, false, false, true, true };
+        int[] expandRatios  = {    3,    0,    0,    0,   2,   1 };
+
         for (int i = 0; i < Spalten.Length; i++)
         {
             tree.SetColumnTitle(i, Spalten[i]);
-            tree.SetColumnExpand(i, i == 0); // Name-Spalte expandiert
+            tree.SetColumnCustomMinimumWidth(i, minBreiten[i]);
+            tree.SetColumnExpand(i, expandiert[i]);
+            if (expandiert[i])
+                tree.SetColumnExpandRatio(i, expandRatios[i]);
         }
 
         tree.AddThemeColorOverride("title_button_color", FmTheme.TextSecondary);

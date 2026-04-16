@@ -67,11 +67,13 @@ public static class FmTheme
         btn.AddThemeColorOverride("font_color",  Colors.White);
     }
 
-    public static Label MakeLabel(string text, int size = 14, Color? color = null)
+    public static Label MakeLabel(string text, int size = 14, Color? color = null,
+        HorizontalAlignment align = HorizontalAlignment.Left)
     {
         var lbl = new Label
         {
             Text = text,
+            HorizontalAlignment = align,
             AutowrapMode = TextServer.AutowrapMode.Off,
         };
         lbl.AddThemeColorOverride("font_color", color ?? TextPrimary);

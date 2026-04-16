@@ -1,3 +1,4 @@
+#nullable enable
 namespace FMDesktop.Models;
 
 public class TabellenEintrag

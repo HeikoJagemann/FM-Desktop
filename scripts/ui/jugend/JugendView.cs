@@ -50,10 +50,17 @@ public partial class JugendView : Control
             SelectMode          = Tree.SelectModeEnum.Row,
         };
         tree.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        int[] minBreiten  = { 120,  48,  64,  90,  52,  90 };
+        bool[] expandiert = { true, false, false, false, false, true };
+        int[] ratios      = {    3,    0,    0,    0,    0,   1 };
+
         for (int i = 0; i < Spalten.Length; i++)
         {
             tree.SetColumnTitle(i, Spalten[i]);
-            tree.SetColumnExpand(i, i == 0);
+            tree.SetColumnCustomMinimumWidth(i, minBreiten[i]);
+            tree.SetColumnExpand(i, expandiert[i]);
+            if (expandiert[i])
+                tree.SetColumnExpandRatio(i, ratios[i]);
         }
         _tabs.AddChild(tree);
         return tree;
@@ -76,23 +83,48 @@ public partial class JugendView : Control
         }
     }
 
+    private static string TalentSterne(int talent)
+    {
+        int sterne = talent switch
+        {
+            >= 80 => 5,
+            >= 65 => 4,
+            >= 50 => 3,
+            >= 35 => 2,
+            _     => 1,
+        };
+        return new string('★', sterne) + new string('☆', 5 - sterne);
+    }
+
     private static void FuelleBaum(Tree tree, List<Spieler> spieler)
     {
         tree.Clear();
         var root = tree.CreateItem();
-        foreach (var s in spieler.OrderByDescending(x => x.Talent))
+        foreach (var s in spieler
+            .OrderBy(x => PositionsPrioritaet(x.Position))
+            .ThenByDescending(x => x.Talent))
         {
             var item = tree.CreateItem(root);
             item.SetText(0, s.Name);
             item.SetText(1, s.Position);
             item.SetText(2, s.Staerke.ToString());
-            item.SetText(3, s.Talent.ToString());
+            item.SetText(3, TalentSterne(s.Talent));
             item.SetText(4, s.Alter.ToString());
             item.SetText(5, s.Nationalitaet);
 
-            // Talente hervorheben
-            if (s.Talent >= 80)
-                item.SetCustomColor(3, FmTheme.Gold);
+            var talentFarbe = s.Talent >= 80 ? FmTheme.Gold
+                            : s.Talent >= 65 ? FmTheme.Success
+                            : FmTheme.TextSecondary;
+            item.SetCustomColor(3, talentFarbe);
         }
     }
+
+    private static int PositionsPrioritaet(string pos) => pos switch
+    {
+        "TW"                                    => 0,
+        "IV" or "LV" or "RV"                   => 1,
+        "DM" or "ZM" or "LM" or "RM" or "OM"  => 2,
+        "LA" or "RA" or "HS" or "ST"           => 3,
+        _                                       => 9,
+    };
 }

@@ -1,11 +1,16 @@
+#nullable enable
+using System;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Threading.Tasks;
+using Godot;
 
 namespace FMDesktop.Api;
 
 public static class ApiClient
 {
-    private static readonly HttpClient Http = new()
+    private static readonly System.Net.Http.HttpClient Http = new()
     {
         BaseAddress = new Uri("http://localhost:8081/api/"),
         Timeout     = TimeSpan.FromSeconds(30)
