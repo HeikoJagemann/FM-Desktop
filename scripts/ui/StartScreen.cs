@@ -91,38 +91,65 @@ public partial class StartScreen : Control
         var center = new CenterContainer();
 
         var panel = new PanelContainer();
-        panel.CustomMinimumSize = new Vector2(420, 0);
+        panel.CustomMinimumSize = new Vector2(360, 0);
         panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
         center.AddChild(panel);
 
         var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 32);
+        FmTheme.SetMargin(margin, 40, 48);
         panel.AddChild(margin);
 
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 16);
+        vbox.AddThemeConstantOverride("separation", 12);
         vbox.Alignment = BoxContainer.AlignmentMode.Center;
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("🏆", 48, FmTheme.Gold, HorizontalAlignment.Center));
-        vbox.AddChild(FmTheme.MakeLabel("Neues Spiel", 22, FmTheme.TextPrimary, HorizontalAlignment.Center));
+        vbox.AddChild(FmTheme.MakeLabel("🏆", 52, FmTheme.Gold, HorizontalAlignment.Center));
+        vbox.AddChild(FmTheme.MakeLabel("Fussball-Manager", 24, FmTheme.TextPrimary, HorizontalAlignment.Center));
 
-        var desc = FmTheme.MakeLabel(
-            "Du startest als Trainer in der Oberliga.\nWähle einen Verein und führe ihn nach oben.",
-            14, FmTheme.TextSecondary);
-        desc.HorizontalAlignment = HorizontalAlignment.Center;
-        desc.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        vbox.AddChild(desc);
+        var spacer = new Control { CustomMinimumSize = new Vector2(0, 8) };
+        vbox.AddChild(spacer);
 
-        var btn = new Button { Text = "▶   Spiel starten", CustomMinimumSize = new Vector2(220, 48) };
-        FmTheme.ApplyButton(btn, FmTheme.Accent);
-        btn.Pressed += OnSpielStarten;
+        var btnNeuesSpiel = MakeMenuButton("▶   Neues Spiel", FmTheme.Accent);
+        btnNeuesSpiel.Pressed += OnSpielStarten;
+        vbox.AddChild(btnNeuesSpiel);
 
-        var btnCenter = new CenterContainer();
-        btnCenter.AddChild(btn);
-        vbox.AddChild(btnCenter);
+        var btnFortsetzen = MakeMenuButton("↩   Spiel fortsetzen", FmTheme.BgPanel);
+        btnFortsetzen.Disabled = true;
+        btnFortsetzen.TooltipText = "Noch nicht verfügbar";
+        vbox.AddChild(btnFortsetzen);
+
+        var btnLaden = MakeMenuButton("📂   Spiel laden", FmTheme.BgPanel);
+        btnLaden.Disabled = true;
+        btnLaden.TooltipText = "Noch nicht verfügbar";
+        vbox.AddChild(btnLaden);
+
+        var btnEinstellungen = MakeMenuButton("⚙   Einstellungen", FmTheme.BgPanel);
+        btnEinstellungen.Disabled = true;
+        btnEinstellungen.TooltipText = "Noch nicht verfügbar";
+        vbox.AddChild(btnEinstellungen);
+
+        var spacer2 = new Control { CustomMinimumSize = new Vector2(0, 4) };
+        vbox.AddChild(spacer2);
+
+        var btnBeenden = MakeMenuButton("✕   Beenden", FmTheme.BgPanel);
+        btnBeenden.AddThemeColorOverride("font_color", FmTheme.Danger);
+        btnBeenden.Pressed += () => GetTree().Quit();
+        vbox.AddChild(btnBeenden);
 
         return center;
+    }
+
+    private static Button MakeMenuButton(string text, Color bg)
+    {
+        var btn = new Button
+        {
+            Text = text,
+            CustomMinimumSize = new Vector2(280, 46),
+            Flat = false,
+        };
+        FmTheme.ApplyButton(btn, bg);
+        return btn;
     }
 
     private Control BuildLadenPanel()

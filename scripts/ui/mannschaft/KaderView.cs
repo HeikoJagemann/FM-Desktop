@@ -13,7 +13,7 @@ public partial class KaderView : Control
     private Tree         _amateurTree = null!;
     private Label        _statusLabel = null!;
 
-    private static readonly string[] Spalten = { "Name", "Pos", "Stärke", "Alter", "Wert (€)", "Nation" };
+    private static readonly string[] Spalten = { "Name", "Pos", "Stärke", "Talent", "Alter", "Wert (€)", "Nation" };
 
     public override async void _Ready()
     {
@@ -56,10 +56,10 @@ public partial class KaderView : Control
         };
         tree.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 
-        // Spalte: Name, Pos, Stärke, Alter, Wert, Nation
-        int[] minBreiten    = {  120,  48,  64,  52, 110,  90 };
-        bool[] expandiert   = { true, false, false, false, true, true };
-        int[] expandRatios  = {    3,    0,    0,    0,   2,   1 };
+        // Spalte: Name, Pos, Stärke, Talent, Alter, Wert, Nation
+        int[] minBreiten    = {  120,  48,  64,  90,  52, 110,  90 };
+        bool[] expandiert   = { true, false, false, false, false, true, true };
+        int[] expandRatios  = {    3,    0,    0,    0,    0,   2,   1 };
 
         for (int i = 0; i < Spalten.Length; i++)
         {
@@ -92,6 +92,19 @@ public partial class KaderView : Control
         FuelleBaum(_amateurTree, alle.Where(s => s.Kader == "Amateur").ToList());
     }
 
+    private static string TalentSterne(int talent)
+    {
+        int sterne = talent switch
+        {
+            >= 80 => 5,
+            >= 65 => 4,
+            >= 50 => 3,
+            >= 35 => 2,
+            _     => 1,
+        };
+        return new string('★', sterne) + new string('☆', 5 - sterne);
+    }
+
     private static void FuelleBaum(Tree tree, List<Spieler> spieler)
     {
         tree.Clear();
@@ -103,15 +116,20 @@ public partial class KaderView : Control
             item.SetText(0, s.Name);
             item.SetText(1, s.Position);
             item.SetText(2, s.Staerke.ToString());
-            item.SetText(3, s.Alter.ToString());
-            item.SetText(4, $"{s.Wert:N0}");
-            item.SetText(5, s.Nationalitaet);
+            item.SetText(3, TalentSterne(s.Talent));
+            item.SetText(4, s.Alter.ToString());
+            item.SetText(5, $"{s.Wert:N0}");
+            item.SetText(6, s.Nationalitaet);
 
-            // Stärke einfärben
-            var col = s.Staerke >= 70 ? FmTheme.Success
-                    : s.Staerke >= 50 ? FmTheme.TextPrimary
-                    : FmTheme.TextSecondary;
-            item.SetCustomColor(2, col);
+            var staerkeFarbe = s.Staerke >= 70 ? FmTheme.Success
+                             : s.Staerke >= 50 ? FmTheme.TextPrimary
+                             : FmTheme.TextSecondary;
+            item.SetCustomColor(2, staerkeFarbe);
+
+            var talentFarbe = s.Talent >= 80 ? FmTheme.Gold
+                            : s.Talent >= 65 ? FmTheme.Success
+                            : FmTheme.TextSecondary;
+            item.SetCustomColor(3, talentFarbe);
         }
     }
 
