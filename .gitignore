@@ -1,0 +1,13 @@
+# Godot
+.godot/
+*.uid
+
+# Build
+.mono/
+bin/
+obj/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
