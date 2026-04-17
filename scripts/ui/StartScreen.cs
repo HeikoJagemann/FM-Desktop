@@ -262,47 +262,9 @@ public partial class StartScreen : Control
     private async void OnSpielStarten()
     {
         ZeigePanel(Zustand.Laden);
-        _progressBar.Value = 0;
-        _progressLabel.Text = "Starte …";
-
-        bool ok = await ApiClient.PostAsync("spiel/initialisieren");
-        if (!ok)
-        {
-            ZeigePanel(Zustand.Start);
-            OS.Alert("Backend nicht erreichbar.\nBitte Backend starten.", "Verbindungsfehler");
-            return;
-        }
-        StartePolling();
-    }
-
-    private void StartePolling()
-    {
-        _pollTimer = new Timer { WaitTime = 0.6 };
-        _pollTimer.Timeout += OnPollTick;
-        AddChild(_pollTimer);
-        _pollTimer.Start();
-    }
-
-    private async void OnPollTick()
-    {
-        if (_polling) return;
-        _polling = true;
-        try
-        {
-            var f = await ApiClient.GetAsync<Fortschritt>("spiel/fortschritt");
-            if (f == null) return;
-
-            _progressBar.Value  = f.Prozent;
-            _progressLabel.Text = f.Nachricht;
-
-            if (f.Fertig)
-            {
-                _pollTimer?.Stop();
-                _pollTimer?.QueueFree();
-                await LadeAngebote();
-            }
-        }
-        finally { _polling = false; }
+        _progressLabel.Text = "Lade Vereine …";
+        _progressBar.Value  = 0;
+        await LadeAngebote();
     }
 
     private async Task LadeAngebote()
