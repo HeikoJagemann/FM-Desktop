@@ -1,3 +1,5 @@
+using System;
+
 namespace FMDesktop.Models;
 
 public class Spieler
