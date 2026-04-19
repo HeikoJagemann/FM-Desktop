@@ -12,6 +12,7 @@ public partial class GameMain : Control
     private const string SceneTabelle     = "res://scenes/liga/TabelleView.tscn";
     private const string SceneSpielplan   = "res://scenes/liga/SpielplanView.tscn";
     private const string SceneStatistiken = "res://scenes/liga/StatistikenView.tscn";
+    private const string SceneAufstellung = "res://scenes/taktik/AufstellungView.tscn";
 
     public override void _Ready()
     {
@@ -74,8 +75,12 @@ public partial class GameMain : Control
 
         // Mannschaft-Dropdown
         hbox.AddChild(BuildDropdown("👥  Mannschaft", new[] {
-            ("Kader",       SceneKader),
-            ("Aufstellung", ""),          // noch nicht implementiert
+            ("Kader", SceneKader),
+        }));
+
+        // Taktik-Dropdown
+        hbox.AddChild(BuildDropdown("🎯  Taktik", new[] {
+            ("Aufstellung", SceneAufstellung),
         }));
 
         // Liga-Dropdown

@@ -59,4 +59,23 @@ public static class ApiClient
             return false;
         }
     }
+
+    public static async Task<TResult?> PostAsync<TBody, TResult>(string path, TBody body)
+    {
+        try
+        {
+            var request = new System.Net.Http.HttpRequestMessage(
+                System.Net.Http.HttpMethod.Post, path);
+            request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
+            request.Content = JsonContent.Create(body);
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return default;
+            return await response.Content.ReadFromJsonAsync<TResult>(JsonOpts);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[ApiClient] POST {path} fehlgeschlagen: {e.Message}");
+            return default;
+        }
+    }
 }

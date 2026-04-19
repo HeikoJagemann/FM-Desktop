@@ -18,7 +18,7 @@ public partial class StartScreen : Control
     private ProgressBar  _progressBar = null!;
     private Label        _progressLabel = null!;
     private HBoxContainer _vereineContainer = null!;
-    private Timer?       _pollTimer;
+    private Godot.Timer? _pollTimer;
     private bool         _polling;
 
     public override void _Ready()

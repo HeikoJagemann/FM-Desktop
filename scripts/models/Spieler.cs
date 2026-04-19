@@ -39,8 +39,9 @@ public class Spieler
     public int    Fuehrungsqualitaet   { get; set; }
     public int    Disziplin            { get; set; }
     // Torwart
-    public int    TalentTW             { get; set; }
+    public int    TalentTW              { get; set; }
     public int    Strafraumbeherrschung { get; set; }
     public int    Fangsicherheit        { get; set; }
-    public int    Reflexe              { get; set; }
+    public int    Reflexe               { get; set; }
+    public int    SpieleInSaison        { get; set; }
 }
