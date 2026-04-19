@@ -1,4 +1,5 @@
 using Godot;
+using FMDesktop.Api;
 
 namespace FMDesktop;
 
@@ -7,10 +8,11 @@ public partial class GameState : Node
 {
     public static GameState Instance { get; private set; } = null!;
 
-    public long   VereinId   { get; private set; }
-    public string VereinName { get; private set; } = "";
-    public long   LigaId     { get; private set; }
-    public string LigaName   { get; private set; } = "";
+    public long   VereinId      { get; private set; }
+    public string VereinName    { get; private set; } = "";
+    public long   LigaId        { get; private set; }
+    public string LigaName      { get; private set; } = "";
+    public string CurrentSchema { get; private set; } = "db_default";
 
     public override void _Ready()
     {
@@ -23,5 +25,11 @@ public partial class GameState : Node
         VereinName = vereinName;
         LigaId     = ligaId;
         LigaName   = ligaName;
+    }
+
+    public void SetSchema(string schema)
+    {
+        CurrentSchema          = schema;
+        ApiClient.CurrentSchema = schema;
     }
 }

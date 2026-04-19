@@ -10,16 +10,21 @@ namespace FMDesktop.UI;
 
 public partial class StartScreen : Control
 {
-    private enum Zustand { Start, Laden, Auswahl }
+    private enum Zustand { Start, DbAuswahl, Laden, Auswahl }
 
-    private Control      _startPanel  = null!;
-    private Control      _ladenPanel  = null!;
-    private Control      _auswahlPanel = null!;
-    private ProgressBar  _progressBar = null!;
-    private Label        _progressLabel = null!;
+    private Control      _startPanel      = null!;
+    private Control      _dbAuswahlPanel  = null!;
+    private Control      _ladenPanel      = null!;
+    private Control      _auswahlPanel    = null!;
+    private ProgressBar  _progressBar     = null!;
+    private Label        _progressLabel   = null!;
     private HBoxContainer _vereineContainer = null!;
     private Godot.Timer? _pollTimer;
     private bool         _polling;
+
+    private VBoxContainer _schemaListeContainer = null!;
+    private string        _gewaehlteSchema      = "db_default";
+    private readonly Dictionary<string, Button> _schemaButtons = new();
 
     public override void _Ready()
     {
@@ -55,6 +60,10 @@ public partial class StartScreen : Control
         _startPanel = BuildStartPanel();
         _startPanel.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         stack.AddChild(_startPanel);
+
+        _dbAuswahlPanel = BuildDbAuswahlPanel();
+        _dbAuswahlPanel.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        stack.AddChild(_dbAuswahlPanel);
 
         _ladenPanel = BuildLadenPanel();
         _ladenPanel.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -150,6 +159,60 @@ public partial class StartScreen : Control
         };
         FmTheme.ApplyButton(btn, bg);
         return btn;
+    }
+
+    private Control BuildDbAuswahlPanel()
+    {
+        var center = new CenterContainer();
+
+        var panel = new PanelContainer();
+        panel.CustomMinimumSize = new Vector2(440, 0);
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+        center.AddChild(panel);
+
+        var margin = new MarginContainer();
+        FmTheme.SetMargin(margin, 32, 40);
+        panel.AddChild(margin);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 16);
+        margin.AddChild(vbox);
+
+        vbox.AddChild(FmTheme.MakeLabel("🗄   Datenbank auswählen", 22, FmTheme.TextPrimary, HorizontalAlignment.Center));
+        vbox.AddChild(FmTheme.MakeLabel("Wähle die Spielwelt, mit der du starten möchtest.", 13, FmTheme.TextSecondary, HorizontalAlignment.Center));
+
+        var scrollContainer = new ScrollContainer { CustomMinimumSize = new Vector2(0, 180) };
+        vbox.AddChild(scrollContainer);
+
+        _schemaListeContainer = new VBoxContainer();
+        _schemaListeContainer.AddThemeConstantOverride("separation", 6);
+        scrollContainer.AddChild(_schemaListeContainer);
+
+        var hbox = new HBoxContainer();
+        hbox.AddThemeConstantOverride("separation", 12);
+        hbox.Alignment = BoxContainer.AlignmentMode.Center;
+        vbox.AddChild(hbox);
+
+        var btnZurueck = new Button { Text = "←   Zurück", CustomMinimumSize = new Vector2(140, 40) };
+        FmTheme.ApplyButton(btnZurueck, FmTheme.BgPanel);
+        btnZurueck.Pressed += () => ZeigePanel(Zustand.Start);
+        hbox.AddChild(btnZurueck);
+
+        var btnWeiter = new Button { Text = "▶   Weiter", CustomMinimumSize = new Vector2(160, 40) };
+        FmTheme.ApplyButton(btnWeiter, FmTheme.Accent);
+        btnWeiter.Pressed += OnDbAuswahlBestaetigt;
+        hbox.AddChild(btnWeiter);
+
+        return center;
+    }
+
+    private void AktualisiereSchemaButtons()
+    {
+        foreach (var (schema, btn) in _schemaButtons)
+        {
+            var bg = schema == _gewaehlteSchema ? FmTheme.Accent : FmTheme.BgPanel;
+            FmTheme.ApplyButton(btn, bg);
+        }
     }
 
     private Control BuildLadenPanel()
@@ -254,13 +317,55 @@ public partial class StartScreen : Control
 
     private void ZeigePanel(Zustand z)
     {
-        _startPanel.Visible   = z == Zustand.Start;
-        _ladenPanel.Visible   = z == Zustand.Laden;
-        _auswahlPanel.Visible = z == Zustand.Auswahl;
+        _startPanel.Visible     = z == Zustand.Start;
+        _dbAuswahlPanel.Visible = z == Zustand.DbAuswahl;
+        _ladenPanel.Visible     = z == Zustand.Laden;
+        _auswahlPanel.Visible   = z == Zustand.Auswahl;
     }
 
     private async void OnSpielStarten()
     {
+        var schemas = await ApiClient.GetAsync<List<string>>("schemas");
+        if (schemas == null || schemas.Count <= 1)
+        {
+            GameState.Instance.SetSchema("db_default");
+            ZeigePanel(Zustand.Laden);
+            _progressLabel.Text = "Lade Vereine …";
+            _progressBar.Value  = 0;
+            await LadeAngebote();
+            return;
+        }
+
+        _gewaehlteSchema = "db_default";
+        _schemaButtons.Clear();
+        foreach (Node child in _schemaListeContainer.GetChildren())
+            child.QueueFree();
+
+        foreach (var schema in schemas)
+        {
+            var s = schema;
+            var btn = new Button
+            {
+                Text = s,
+                CustomMinimumSize = new Vector2(0, 38),
+                Alignment = HorizontalAlignment.Left,
+            };
+            FmTheme.ApplyButton(btn, s == _gewaehlteSchema ? FmTheme.Accent : FmTheme.BgPanel);
+            btn.Pressed += () =>
+            {
+                _gewaehlteSchema = s;
+                AktualisiereSchemaButtons();
+            };
+            _schemaButtons[s] = btn;
+            _schemaListeContainer.AddChild(btn);
+        }
+
+        ZeigePanel(Zustand.DbAuswahl);
+    }
+
+    private async void OnDbAuswahlBestaetigt()
+    {
+        GameState.Instance.SetSchema(_gewaehlteSchema);
         ZeigePanel(Zustand.Laden);
         _progressLabel.Text = "Lade Vereine …";
         _progressBar.Value  = 0;
