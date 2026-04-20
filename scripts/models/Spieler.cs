@@ -1,6 +1,15 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace FMDesktop.Models;
+
+public class PositionsStaerke
+{
+    public string Position { get; set; } = "";
+    public int    Staerke  { get; set; }
+}
+
 
 public class Spieler
 {
@@ -46,4 +55,13 @@ public class Spieler
     public int    Fangsicherheit        { get; set; }
     public int    Reflexe               { get; set; }
     public int    SpieleInSaison        { get; set; }
+    public List<PositionsStaerke>? Top3Positionen { get; set; }
+
+    public int BestPositionStaerke =>
+        Top3Positionen?.Count > 0 ? Top3Positionen[0].Staerke : Staerke;
+
+    public string Top3PositionenText =>
+        Top3Positionen?.Count > 0
+            ? string.Join(" / ", Top3Positionen.Select(p => $"{p.Position} {p.Staerke}"))
+            : Staerke.ToString();
 }

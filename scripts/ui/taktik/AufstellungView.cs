@@ -54,7 +54,7 @@ public partial class PlayerRow : PanelContainer
         AddCell(s.Position, 42);
         AddCell(s.Name, 140, expand: true);
         AddCell(s.Alter.ToString(), 38, align: HorizontalAlignment.Center);
-        AddCell(s.Staerke.ToString(), 42, align: HorizontalAlignment.Center);
+        AddCell(s.BestPositionStaerke.ToString(), 42, align: HorizontalAlignment.Center);
         AddCell(s.Talent.ToString(), 42, align: HorizontalAlignment.Center);
         AddCell(s.SpieleInSaison.ToString(), 44, align: HorizontalAlignment.Center);
 

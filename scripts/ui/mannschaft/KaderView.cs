@@ -13,7 +13,7 @@ public partial class KaderView : Control
     private Tree         _amateurTree = null!;
     private Label        _statusLabel = null!;
 
-    private static readonly string[] Spalten = { "Name", "Pos", "Stärke", "Talent", "Alter", "Wert (€)", "Nation" };
+    private static readonly string[] Spalten = { "Name", "Pos", "Stärken", "Talent", "Alter", "Wert (€)", "Nation" };
 
     public override async void _Ready()
     {
@@ -56,10 +56,10 @@ public partial class KaderView : Control
         };
         tree.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 
-        // Spalte: Name, Pos, Stärke, Talent, Alter, Wert, Nation
-        int[] minBreiten    = {  120,  48,  64,  90,  52, 110,  90 };
-        bool[] expandiert   = { true, false, false, false, false, true, true };
-        int[] expandRatios  = {    3,    0,    0,    0,    0,   2,   1 };
+        // Spalte: Name, Pos, Stärken, Talent, Alter, Wert, Nation
+        int[] minBreiten    = {  120,  48, 190,  90,  52, 110,  90 };
+        bool[] expandiert   = { true, false, true, false, false, true, true };
+        int[] expandRatios  = {    3,    0,    2,    0,    0,   2,   1 };
 
         for (int i = 0; i < Spalten.Length; i++)
         {
@@ -115,14 +115,15 @@ public partial class KaderView : Control
             var item = tree.CreateItem(root);
             item.SetText(0, s.Name);
             item.SetText(1, s.Position);
-            item.SetText(2, s.Staerke.ToString());
+            item.SetText(2, s.Top3PositionenText);
             item.SetText(3, TalentSterne(s.Talent));
             item.SetText(4, s.Alter.ToString());
             item.SetText(5, $"{s.Wert:N0}");
             item.SetText(6, s.Nationalitaet);
 
-            var staerkeFarbe = s.Staerke >= 70 ? FmTheme.Success
-                             : s.Staerke >= 50 ? FmTheme.TextPrimary
+            var bestStaerke = s.BestPositionStaerke;
+            var staerkeFarbe = bestStaerke >= 70 ? FmTheme.Success
+                             : bestStaerke >= 50 ? FmTheme.TextPrimary
                              : FmTheme.TextSecondary;
             item.SetCustomColor(2, staerkeFarbe);
 
