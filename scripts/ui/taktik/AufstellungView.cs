@@ -230,6 +230,7 @@ public partial class AufstellungView : Control
     private Control      _fieldControl = null!;
     private VBoxContainer _playerVBox  = null!;
     private Label         _statusLabel = null!;
+    private Label         _staerkeLabel = null!;
 
     private string _currentFormation = "4-4-2";
     private readonly Dictionary<string, PositionSlot> _slots = new();
@@ -286,6 +287,12 @@ public partial class AufstellungView : Control
         FmTheme.ApplyButton(saveBtn, FmTheme.Accent);
         saveBtn.Pressed += async () => await Speichern();
         hbox.AddChild(saveBtn);
+
+        var spacer2 = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        hbox.AddChild(spacer2);
+
+        _staerkeLabel = FmTheme.MakeLabel("Gesamtstärke: –", 13, FmTheme.TextPrimary);
+        hbox.AddChild(_staerkeLabel);
 
         _statusLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
         hbox.AddChild(_statusLabel);
@@ -476,6 +483,7 @@ public partial class AufstellungView : Control
             if (idx >= 0) _formationBtn.Selected = idx;
             BuildSlots(_currentFormation);
             WendeSpielerZuweisungenAn(aufstellung.Positionen);
+            AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
         }
 
         _statusLabel.Text = $"{_alleSpieler.Count} Spieler";
@@ -581,8 +589,18 @@ public partial class AufstellungView : Control
         var result = await ApiClient.PostAsync<AufstellungModel, AufstellungModel>(
             $"aufstellung/{vereinId}", dto);
 
+        if (result != null)
+            AktualisiereSaerkeLabel(result.Gesamtstaerke);
+
         if (!silent)
             _statusLabel.Text = result != null ? "Gespeichert ✓" : "Fehler beim Speichern";
+    }
+
+    private void AktualisiereSaerkeLabel(int gesamtstaerke)
+    {
+        _staerkeLabel.Text = gesamtstaerke > 0
+            ? $"Gesamtstärke: {gesamtstaerke}"
+            : "Gesamtstärke: –";
     }
 
     private static int PositionsPrioritaet(Spieler s) => s.Position switch
