@@ -98,20 +98,28 @@ public partial class PositionSlot : Button
     public string SlotName { get; private set; } = "";
     public long?  SpielerId { get; private set; }
     public string SpielerName { get; private set; } = "";
+    public int?   Staerke { get; private set; }
 
     public event Action<PositionSlot, long, string>? PlayerDropped;
     public static PositionSlot Create(string slotName)
     {
         var slot = new PositionSlot { SlotName = slotName };
-        slot.CustomMinimumSize = new Vector2(64, 44);
+        slot.CustomMinimumSize = new Vector2(64, 52);
         slot.Refresh();
         return slot;
     }
 
-    public void Assign(long spielerId, string spielerName)
+    public void Assign(long spielerId, string spielerName, int? staerke = null)
     {
         SpielerId   = spielerId;
         SpielerName = spielerName;
+        Staerke     = staerke;
+        Refresh();
+    }
+
+    public void UpdateStaerke(int staerke)
+    {
+        Staerke = staerke;
         Refresh();
     }
 
@@ -119,6 +127,7 @@ public partial class PositionSlot : Button
     {
         SpielerId   = null;
         SpielerName = "";
+        Staerke     = null;
         Refresh();
     }
 
@@ -145,9 +154,16 @@ public partial class PositionSlot : Button
         AddThemeFontSizeOverride("font_size", 11);
 
         if (occupied)
-            Text = $"{SlotName}\n{TruncateName(SpielerName)}";
+        {
+            if (Staerke.HasValue)
+                Text = $"{SlotName}\n{TruncateName(SpielerName)}\n{Staerke.Value}";
+            else
+                Text = $"{SlotName}\n{TruncateName(SpielerName)}";
+        }
         else
+        {
             Text = SlotName;
+        }
     }
 
     private static StyleBoxFlat MakeSlotStyle(Color bg, bool occupied)
@@ -224,7 +240,7 @@ public partial class AufstellungView : Control
     private const float FieldW = 330f;
     private const float FieldH = 520f;
     private const float SlotW  = 64f;
-    private const float SlotH  = 44f;
+    private const float SlotH  = 52f;
 
     private OptionButton _formationBtn = null!;
     private Control      _fieldControl = null!;
@@ -288,12 +304,6 @@ public partial class AufstellungView : Control
         saveBtn.Pressed += async () => await Speichern();
         hbox.AddChild(saveBtn);
 
-        var spacer2 = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        hbox.AddChild(spacer2);
-
-        _staerkeLabel = FmTheme.MakeLabel("Gesamtstärke: –", 13, FmTheme.TextPrimary);
-        hbox.AddChild(_staerkeLabel);
-
         _statusLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
         hbox.AddChild(_statusLabel);
 
@@ -321,6 +331,16 @@ public partial class AufstellungView : Control
 
         DrawFieldBackground();
         BuildSlots(_currentFormation);
+
+        _staerkeLabel = FmTheme.MakeLabel("Gesamtstärke: –", 12, FmTheme.TextPrimary);
+        _staerkeLabel.Position = new Vector2(FieldW - 162, 6);
+        _staerkeLabel.CustomMinimumSize = new Vector2(156, 0);
+        _staerkeLabel.HorizontalAlignment = HorizontalAlignment.Right;
+        _staerkeLabel.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.85f));
+        _staerkeLabel.AddThemeConstantOverride("shadow_offset_x", 1);
+        _staerkeLabel.AddThemeConstantOverride("shadow_offset_y", 1);
+        _fieldControl.AddChild(_staerkeLabel);
+
         return panel;
     }
 
@@ -388,6 +408,9 @@ public partial class AufstellungView : Control
             _slots[slotName] = slot;
             _fieldControl.AddChild(slot);
         }
+
+        if (_staerkeLabel?.GetParent() == _fieldControl)
+            _fieldControl.MoveChild(_staerkeLabel, _fieldControl.GetChildCount() - 1);
     }
 
     private Control BuildPlayerList()
@@ -482,7 +505,7 @@ public partial class AufstellungView : Control
             int idx = Array.IndexOf(FormationNames, _currentFormation);
             if (idx >= 0) _formationBtn.Selected = idx;
             BuildSlots(_currentFormation);
-            WendeSpielerZuweisungenAn(aufstellung.Positionen);
+            WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken);
             AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
         }
 
@@ -505,7 +528,8 @@ public partial class AufstellungView : Control
         }
     }
 
-    private void WendeSpielerZuweisungenAn(Dictionary<string, long>? positionen)
+    private void WendeSpielerZuweisungenAn(Dictionary<string, long>? positionen,
+        Dictionary<string, int>? slotStaerken = null)
     {
         if (positionen == null) return;
         foreach (var (slot, spielerId) in positionen)
@@ -513,7 +537,10 @@ public partial class AufstellungView : Control
             if (_slots.TryGetValue(slot, out var slotCtrl) &&
                 _playerNames.TryGetValue(spielerId, out var name))
             {
-                slotCtrl.Assign(spielerId, name);
+                int? slotStaerke = null;
+                if (slotStaerken != null && slotStaerken.TryGetValue(slot, out var st))
+                    slotStaerke = st;
+                slotCtrl.Assign(spielerId, name, slotStaerke);
             }
         }
     }
@@ -528,15 +555,15 @@ public partial class AufstellungView : Control
         // Bestehende Zuweisungen retten, sofern Slot noch existiert
         var alteZuweisungen = _slots
             .Where(kv => kv.Value.SpielerId.HasValue)
-            .ToDictionary(kv => kv.Key, kv => (kv.Value.SpielerId!.Value, kv.Value.SpielerName));
+            .ToDictionary(kv => kv.Key, kv => (kv.Value.SpielerId!.Value, kv.Value.SpielerName, kv.Value.Staerke));
 
         _currentFormation = newFormation;
         BuildSlots(_currentFormation);
 
-        foreach (var (slotName, (spielerId, name)) in alteZuweisungen)
+        foreach (var (slotName, (spielerId, name, staerke)) in alteZuweisungen)
         {
             if (_slots.TryGetValue(slotName, out var slot))
-                slot.Assign(spielerId, name);
+                slot.Assign(spielerId, name, staerke);
         }
 
         _statusLabel.Text = $"Formation: {_currentFormation}";
@@ -590,7 +617,14 @@ public partial class AufstellungView : Control
             $"aufstellung/{vereinId}", dto);
 
         if (result != null)
+        {
             AktualisiereSaerkeLabel(result.Gesamtstaerke);
+            foreach (var (slotName, staerke) in result.SlotStaerken)
+            {
+                if (_slots.TryGetValue(slotName, out var slot) && slot.SpielerId.HasValue)
+                    slot.UpdateStaerke(staerke);
+            }
+        }
 
         if (!silent)
             _statusLabel.Text = result != null ? "Gespeichert ✓" : "Fehler beim Speichern";
