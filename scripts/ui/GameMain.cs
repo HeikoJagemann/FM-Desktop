@@ -1,4 +1,6 @@
 using Godot;
+using FMDesktop.Api;
+using FMDesktop.Models;
 
 namespace FMDesktop.UI;
 
@@ -6,6 +8,14 @@ public partial class GameMain : Control
 {
     private Control _contentArea = null!;
     private Label   _vereinLabel = null!;
+    private Label   _spieltagLabel = null!;
+    private Label   _fortschrittLabel = null!;
+    private Button  _simulierenButton = null!;
+    private Timer   _pollTimer = null!;
+
+    /// Aktuell angezeigte Szene - nach einer Simulation wird sie neu geladen,
+    /// weil die Views ihre Daten nur einmal in _Ready() holen.
+    private string _aktuelleScene = SceneKader;
 
     private const string SceneKader       = "res://scenes/mannschaft/KaderView.tscn";
     private const string SceneJugend      = "res://scenes/jugend/JugendView.tscn";
@@ -14,10 +24,16 @@ public partial class GameMain : Control
     private const string SceneStatistiken = "res://scenes/liga/StatistikenView.tscn";
     private const string SceneAufstellung = "res://scenes/taktik/AufstellungView.tscn";
 
-    public override void _Ready()
+    public override async void _Ready()
     {
         BuildUI();
         LadeScene(SceneKader);
+
+        _pollTimer = new Timer { WaitTime = 0.5, OneShot = false, Autostart = false };
+        _pollTimer.Timeout += OnPollTimeout;
+        AddChild(_pollTimer);
+
+        await AktualisiereSaisonStand();
     }
 
     private void BuildUI()
@@ -110,11 +126,95 @@ public partial class GameMain : Control
         var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         hbox.AddChild(spacer);
 
+        // Fortschritt der laufenden Simulation
+        _fortschrittLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        hbox.AddChild(_fortschrittLabel);
+
+        // Saison- und Spieltagsanzeige
+        _spieltagLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        hbox.AddChild(_spieltagLabel);
+
+        _simulierenButton = new Button { Text = "▶  Spieltag simulieren" };
+        FmTheme.ApplyButton(_simulierenButton, FmTheme.Accent);
+        _simulierenButton.Pressed += OnSimulierenPressed;
+        hbox.AddChild(_simulierenButton);
+
+        hbox.AddChild(new VSeparator());
+
         // Vereinsname rechts
         _vereinLabel = FmTheme.MakeLabel(GameState.Instance.VereinName, 14, FmTheme.TextPrimary);
         hbox.AddChild(_vereinLabel);
 
         return panel;
+    }
+
+    // ── Spieltagssimulation ──────────────────────────────────────────────────
+
+    private async void OnSimulierenPressed()
+    {
+        _simulierenButton.Disabled = true;
+        _fortschrittLabel.Text = "Starte …";
+
+        bool gestartet = await ApiClient.PostAsync("spiel/spieltag/simulieren");
+        if (!gestartet)
+        {
+            _fortschrittLabel.Text = "Simulation konnte nicht gestartet werden";
+            _simulierenButton.Disabled = false;
+            return;
+        }
+        _pollTimer.Start();
+    }
+
+    private async void OnPollTimeout()
+    {
+        var stand = await ApiClient.GetAsync<Fortschritt>("spiel/spieltag/fortschritt");
+        if (stand == null)
+        {
+            return; // Nächster Tick versucht es erneut.
+        }
+
+        _fortschrittLabel.Text = stand.Fertig ? "" : $"{stand.Nachricht} ({stand.Prozent} %)";
+
+        if (!stand.Fertig)
+        {
+            return;
+        }
+
+        _pollTimer.Stop();
+        _simulierenButton.Disabled = false;
+
+        await AktualisiereSaisonStand();
+
+        // Eigenes Spiel live nachspielen. Die Ansicht wird erst beim Schließen aktualisiert,
+        // damit das Ergebnis nicht schon im Hintergrund verraten wird.
+        var bericht = await ApiClient.GetAsync<SpielBericht>(
+            $"spiel/verein/{GameState.Instance.VereinId}/letztes");
+
+        if (bericht is { Gespielt: true })
+        {
+            LiveSpielDialog.Zeige(this, bericht, () => LadeScene(_aktuelleScene));
+        }
+        else
+        {
+            // Spielfrei oder Bericht nicht abrufbar - dann direkt aktualisieren.
+            LadeScene(_aktuelleScene);
+        }
+    }
+
+    private async System.Threading.Tasks.Task AktualisiereSaisonStand()
+    {
+        var stand = await ApiClient.GetAsync<SaisonStand>("spiel/saison");
+        if (stand == null)
+        {
+            _spieltagLabel.Text = "";
+            return;
+        }
+        _spieltagLabel.Text = stand.Anzeige;
+        _simulierenButton.Disabled = stand.SaisonBeendet;
+        if (stand.SaisonBeendet)
+        {
+            _simulierenButton.TooltipText = "Alle Spieltage dieser Saison sind gespielt.";
+        }
     }
 
     private MenuButton BuildDropdown(string label, (string Label, string Scene)[] items)
@@ -139,6 +239,8 @@ public partial class GameMain : Control
 
     private void LadeScene(string path)
     {
+        _aktuelleScene = path;
+
         foreach (Node child in _contentArea.GetChildren())
             child.QueueFree();
 

@@ -56,6 +56,13 @@ public partial class StatistikenView : Control
             ("Ø Tore / Spiel",   $"{(double)tore / gesamt:F2}"),
         }));
 
+        // ── Torjäger ─────────────────────────────────────────
+        var torjaeger = await ApiClient.GetAsync<List<Torjaeger>>($"spiel/liga/{ligaId}/torjaeger?limit=10");
+        if (torjaeger is { Count: > 0 })
+        {
+            _root.AddChild(BaueTorjaegerCard(torjaeger));
+        }
+
         // ── Treffsicherste Vereine ────────────────────────────
         var torschuetzen = ergebnisse
             .SelectMany(s => new[] {
@@ -103,6 +110,63 @@ public partial class StatistikenView : Control
 
         _root.AddChild(BaueStatCard("🥇  Meiste Siege",
             siege.Select((x, i) => ($"{i + 1}. {x.Name}", $"{x.Siege} Siege")).ToArray()));
+    }
+
+    /// <summary>Torschützenliste - eigene Karte, weil hier drei Werte pro Zeile stehen.</summary>
+    private static Control BaueTorjaegerCard(List<Torjaeger> torjaeger)
+    {
+        var panel = new PanelContainer();
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+
+        var margin = new MarginContainer();
+        FmTheme.SetMargin(margin, 16);
+        panel.AddChild(margin);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 8);
+        margin.AddChild(vbox);
+
+        vbox.AddChild(FmTheme.MakeLabel("👟  Torjäger", 15, FmTheme.TextPrimary));
+
+        var sep = new HSeparator();
+        sep.AddThemeColorOverride("color", FmTheme.Border);
+        vbox.AddChild(sep);
+
+        int platz = 1;
+        foreach (var t in torjaeger)
+        {
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 8);
+
+            var nr = FmTheme.MakeLabel($"{platz}.", 13, FmTheme.TextSecondary, HorizontalAlignment.Right);
+            nr.CustomMinimumSize = new Vector2(26, 0);
+            row.AddChild(nr);
+
+            bool eigener = t.VereinId == GameState.Instance.VereinId;
+            var name = FmTheme.MakeLabel(t.Name, 13,
+                eigener ? FmTheme.Accent : FmTheme.TextPrimary);
+            name.CustomMinimumSize = new Vector2(160, 0);
+            row.AddChild(name);
+
+            var verein = FmTheme.MakeLabel(t.Verein ?? "", 12, FmTheme.TextSecondary);
+            verein.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            row.AddChild(verein);
+
+            var tore = FmTheme.MakeLabel($"{t.Tore} Tore", 13, FmTheme.TextPrimary,
+                HorizontalAlignment.Right);
+            tore.CustomMinimumSize = new Vector2(70, 0);
+            row.AddChild(tore);
+
+            var vorlagen = FmTheme.MakeLabel($"{t.Vorlagen} Vorl.", 12, FmTheme.TextSecondary,
+                HorizontalAlignment.Right);
+            vorlagen.CustomMinimumSize = new Vector2(70, 0);
+            row.AddChild(vorlagen);
+
+            vbox.AddChild(row);
+            platz++;
+        }
+
+        return panel;
     }
 
     private static Control BaueStatCard(string titel, (string Label, string Wert)[] zeilen)
