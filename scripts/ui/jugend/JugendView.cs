@@ -10,6 +10,7 @@ public partial class JugendView : Control
 {
     private TabContainer _tabs = null!;
     private Label        _statusLabel = null!;
+    private List<Spieler> _alleSpieler = new();
 
     private static readonly string[] Spalten = { "Name", "Pos", "Stärke", "Talent", "Alter", "Nation" };
 
@@ -48,6 +49,7 @@ public partial class JugendView : Control
             ColumnTitlesVisible = true,
             HideRoot            = true,
             SelectMode          = Tree.SelectModeEnum.Row,
+            AllowRmbSelect      = true,
         };
         tree.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         int[] minBreiten  = { 120,  48,  64,  90,  52,  90 };
@@ -62,8 +64,22 @@ public partial class JugendView : Control
             if (expandiert[i])
                 tree.SetColumnExpandRatio(i, ratios[i]);
         }
+        tree.ItemMouseSelected += (position, mouseButtonIndex) => OnItemMouseSelected(tree, mouseButtonIndex);
         _tabs.AddChild(tree);
         return tree;
+    }
+
+    private void OnItemMouseSelected(Tree tree, long mouseButtonIndex)
+    {
+        if (mouseButtonIndex != (long)MouseButton.Right) return;
+
+        var item = tree.GetSelected();
+        if (item == null) return;
+        var id = item.GetMetadata(0).AsInt64();
+        var spieler = _alleSpieler.FirstOrDefault(s => s.Id == id);
+        if (spieler == null) return;
+
+        SpielerKontextmenue.Zeige(this, spieler);
     }
 
     private async System.Threading.Tasks.Task LadeSpieler()
@@ -74,6 +90,7 @@ public partial class JugendView : Control
         if (alle == null) { _statusLabel.Text = "Fehler beim Laden."; return; }
 
         _statusLabel.Text = $"{alle.Count(s => s.Kader.StartsWith("Jugend"))} Jugendspieler geladen";
+        _alleSpieler = alle;
 
         foreach (var tab in _tabs.GetChildren())
         {
@@ -105,6 +122,7 @@ public partial class JugendView : Control
             .ThenByDescending(x => x.Talent))
         {
             var item = tree.CreateItem(root);
+            item.SetMetadata(0, s.Id);
             item.SetText(0, s.Name);
             item.SetText(1, s.Position);
             item.SetText(2, s.Staerke.ToString());

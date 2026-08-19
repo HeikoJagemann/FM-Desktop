@@ -12,6 +12,7 @@ public partial class KaderView : Control
     private Tree         _profiTree   = null!;
     private Tree         _amateurTree = null!;
     private Label        _statusLabel = null!;
+    private List<Spieler> _alleSpieler = new();
 
     private static readonly string[] Spalten = { "Name", "Pos", "Stärken", "Talent", "Alter", "Wert (€)", "Nation" };
 
@@ -53,6 +54,7 @@ public partial class KaderView : Control
             ColumnTitlesVisible = true,
             HideRoot            = true,
             SelectMode          = Tree.SelectModeEnum.Row,
+            AllowRmbSelect      = true,
         };
         tree.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 
@@ -71,8 +73,22 @@ public partial class KaderView : Control
         }
 
         tree.AddThemeColorOverride("title_button_color", FmTheme.TextSecondary);
+        tree.ItemMouseSelected += (position, mouseButtonIndex) => OnItemMouseSelected(tree, mouseButtonIndex);
         _tabs.AddChild(tree);
         return tree;
+    }
+
+    private void OnItemMouseSelected(Tree tree, long mouseButtonIndex)
+    {
+        if (mouseButtonIndex != (long)MouseButton.Right) return;
+
+        var item = tree.GetSelected();
+        if (item == null) return;
+        var id = item.GetMetadata(0).AsInt64();
+        var spieler = _alleSpieler.FirstOrDefault(s => s.Id == id);
+        if (spieler == null) return;
+
+        SpielerKontextmenue.Zeige(this, spieler);
     }
 
     private async System.Threading.Tasks.Task LadeSpieler()
@@ -87,6 +103,7 @@ public partial class KaderView : Control
         }
 
         _statusLabel.Text = $"{alle.Count} Spieler geladen";
+        _alleSpieler = alle;
 
         FuelleBaum(_profiTree,   alle.Where(s => s.Kader == "Profi").ToList());
         FuelleBaum(_amateurTree, alle.Where(s => s.Kader == "Amateur").ToList());
@@ -113,6 +130,7 @@ public partial class KaderView : Control
         foreach (var s in spieler.OrderBy(x => PositionsPrioritaet(x.Position)))
         {
             var item = tree.CreateItem(root);
+            item.SetMetadata(0, s.Id);
             item.SetText(0, s.Name);
             item.SetText(1, s.Position);
             item.SetText(2, s.Top3PositionenText);
