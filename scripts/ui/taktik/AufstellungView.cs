@@ -247,6 +247,7 @@ public partial class AufstellungView : Control
     private VBoxContainer _playerVBox  = null!;
     private Label         _statusLabel = null!;
     private Label         _staerkeLabel = null!;
+    private Label         _warnungLabel = null!;
 
     private const int BankSpalten = 5;
 
@@ -275,6 +276,9 @@ public partial class AufstellungView : Control
         AddChild(root);
 
         root.AddChild(BuildHeader());
+
+        _warnungLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        root.AddChild(_warnungLabel);
 
         var content = new HSplitContainer();
         content.SizeFlagsVertical = SizeFlags.ExpandFill;
@@ -314,6 +318,29 @@ public partial class AufstellungView : Control
         hbox.AddChild(_statusLabel);
 
         return hbox;
+    }
+
+    /// <summary>Zeigt an, ob die Mannschaft so antreten kann.</summary>
+    private void AktualisiereWarnung(AufstellungModel? aufstellung)
+    {
+        if (aufstellung == null)
+        {
+            _warnungLabel.Text = "";
+            return;
+        }
+
+        var warnung = aufstellung.Warnung;
+        if (warnung == null)
+        {
+            _warnungLabel.Text = "✓  Mannschaft vollständig aufgestellt";
+            _warnungLabel.AddThemeColorOverride("font_color", FmTheme.Success);
+            return;
+        }
+
+        // Zu wenige Spieler verhindern den Anpfiff, fehlende Positionen sind nur ein Hinweis.
+        _warnungLabel.Text = (aufstellung.Spielbereit ? "⚠  " : "✖  ") + warnung;
+        _warnungLabel.AddThemeColorOverride("font_color",
+            aufstellung.Spielbereit ? FmTheme.Gold : FmTheme.Danger);
     }
 
     private Control BuildField()
@@ -564,6 +591,7 @@ public partial class AufstellungView : Control
         {
             WendeBankAn(aufstellung.Ersatzbank);
         }
+        AktualisiereWarnung(aufstellung);
 
         _statusLabel.Text = $"{_alleSpieler.Count} Spieler";
     }
@@ -697,6 +725,7 @@ public partial class AufstellungView : Control
 
         if (result != null)
         {
+            AktualisiereWarnung(result);
             AktualisiereSaerkeLabel(result.Gesamtstaerke);
             foreach (var (slotName, staerke) in result.SlotStaerken)
             {

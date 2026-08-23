@@ -1,4 +1,6 @@
+#nullable enable
 using Godot;
+using System;
 using FMDesktop.Api;
 using FMDesktop.Models;
 
@@ -153,9 +155,41 @@ public partial class GameMain : Control
     private async void OnSimulierenPressed()
     {
         _simulierenButton.Disabled = true;
+        _fortschrittLabel.Text = "Prüfe Aufstellung …";
+
+        long vereinId = GameState.Instance.VereinId;
+        var aufstellung = await ApiClient.GetAsync<AufstellungModel>($"aufstellung/{vereinId}");
+
+        if (aufstellung is { Spielbereit: false })
+        {
+            _fortschrittLabel.Text = "";
+            _simulierenButton.Disabled = false;
+            ZeigeHinweis("Mannschaft nicht spielbereit",
+                aufstellung.Warnung + "\n\nStelle deine Mannschaft unter Taktik → Aufstellung auf.");
+            return;
+        }
+
+        // Unbesetzte Positionen sind erlaubt - die Mannschaft spielt dann in Unterzahl.
+        if (aufstellung?.Warnung != null)
+        {
+            _fortschrittLabel.Text = "";
+            _simulierenButton.Disabled = false;
+            FrageNach("Aufstellung unvollständig",
+                aufstellung.Warnung + "\n\nDeine Mannschaft tritt dann in Unterzahl an. Trotzdem spielen?",
+                StarteSimulation);
+            return;
+        }
+
+        StarteSimulation();
+    }
+
+    private async void StarteSimulation()
+    {
+        _simulierenButton.Disabled = true;
         _fortschrittLabel.Text = "Starte …";
 
-        bool gestartet = await ApiClient.PostAsync("spiel/spieltag/simulieren");
+        long vereinId = GameState.Instance.VereinId;
+        bool gestartet = await ApiClient.PostAsync($"spiel/spieltag/simulieren?vereinId={vereinId}");
         if (!gestartet)
         {
             _fortschrittLabel.Text = "Simulation konnte nicht gestartet werden";
@@ -163,6 +197,33 @@ public partial class GameMain : Control
             return;
         }
         _pollTimer.Start();
+    }
+
+    // ── Dialoge ──────────────────────────────────────────────────────────────
+
+    private void ZeigeHinweis(string titel, string text)
+    {
+        var dialog = new AcceptDialog { Title = titel, DialogText = text, Exclusive = true };
+        dialog.Confirmed += dialog.QueueFree;
+        dialog.Canceled  += dialog.QueueFree;
+        AddChild(dialog);
+        dialog.PopupCentered();
+    }
+
+    private void FrageNach(string titel, string text, Action beiZustimmung)
+    {
+        var dialog = new ConfirmationDialog
+        {
+            Title = titel,
+            DialogText = text,
+            OkButtonText = "Trotzdem spielen",
+            CancelButtonText = "Abbrechen",
+            Exclusive = true,
+        };
+        dialog.Confirmed += () => { dialog.QueueFree(); beiZustimmung(); };
+        dialog.Canceled  += dialog.QueueFree;
+        AddChild(dialog);
+        dialog.PopupCentered();
     }
 
     private async void OnPollTimeout()
