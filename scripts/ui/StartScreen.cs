@@ -2,6 +2,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using FMDesktop.Api;
 using FMDesktop.Models;
@@ -10,12 +11,18 @@ namespace FMDesktop.UI;
 
 public partial class StartScreen : Control
 {
-    private enum Zustand { Start, DbAuswahl, Laden, Auswahl }
+    private enum Zustand { Start, DbAuswahl, SpielstandAuswahl, Laden, Auswahl }
 
-    private Control      _startPanel      = null!;
-    private Control      _dbAuswahlPanel  = null!;
-    private Control      _ladenPanel      = null!;
-    private Control      _auswahlPanel    = null!;
+    private Control      _startPanel        = null!;
+    private Control      _dbAuswahlPanel    = null!;
+    private Control      _spielstandPanel   = null!;
+    private Control      _ladenPanel        = null!;
+    private Control      _auswahlPanel      = null!;
+
+    private Button        _btnFortsetzen        = null!;
+    private Button        _btnLaden             = null!;
+    private Label         _spielstandHinweis    = null!;
+    private VBoxContainer _spielstandContainer  = null!;
     private ProgressBar  _progressBar     = null!;
     private Label        _progressLabel   = null!;
     private HBoxContainer _vereineContainer = null!;
@@ -64,6 +71,10 @@ public partial class StartScreen : Control
         _dbAuswahlPanel = BuildDbAuswahlPanel();
         _dbAuswahlPanel.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         stack.AddChild(_dbAuswahlPanel);
+
+        _spielstandPanel = BuildSpielstandPanel();
+        _spielstandPanel.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        stack.AddChild(_spielstandPanel);
 
         _ladenPanel = BuildLadenPanel();
         _ladenPanel.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -123,15 +134,14 @@ public partial class StartScreen : Control
         btnNeuesSpiel.Pressed += OnSpielStarten;
         vbox.AddChild(btnNeuesSpiel);
 
-        var btnFortsetzen = MakeMenuButton("↩   Spiel fortsetzen", FmTheme.BgPanel);
-        btnFortsetzen.Disabled = true;
-        btnFortsetzen.TooltipText = "Noch nicht verfügbar";
-        vbox.AddChild(btnFortsetzen);
+        _btnFortsetzen = MakeMenuButton("↩   Spiel fortsetzen", FmTheme.BgPanel);
+        _btnFortsetzen.TooltipText = "Zuletzt angelegtes Spiel fortsetzen";
+        _btnFortsetzen.Pressed += OnSpielFortsetzen;
+        vbox.AddChild(_btnFortsetzen);
 
-        var btnLaden = MakeMenuButton("📂   Spiel laden", FmTheme.BgPanel);
-        btnLaden.Disabled = true;
-        btnLaden.TooltipText = "Noch nicht verfügbar";
-        vbox.AddChild(btnLaden);
+        _btnLaden = MakeMenuButton("📂   Spiel laden", FmTheme.BgPanel);
+        _btnLaden.Pressed += OnSpielLaden;
+        vbox.AddChild(_btnLaden);
 
         var btnEinstellungen = MakeMenuButton("⚙   Einstellungen", FmTheme.BgPanel);
         btnEinstellungen.Disabled = true;
@@ -245,6 +255,107 @@ public partial class StartScreen : Control
         return center;
     }
 
+    private Control BuildSpielstandPanel()
+    {
+        var center = new CenterContainer();
+
+        var panel = new PanelContainer();
+        panel.CustomMinimumSize = new Vector2(560, 0);
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+        center.AddChild(panel);
+
+        var margin = new MarginContainer();
+        FmTheme.SetMargin(margin, 32);
+        panel.AddChild(margin);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 14);
+        margin.AddChild(vbox);
+
+        vbox.AddChild(FmTheme.MakeLabel("Spiel laden", 20, FmTheme.TextPrimary));
+
+        _spielstandHinweis = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
+        vbox.AddChild(_spielstandHinweis);
+
+        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(0, 300) };
+        vbox.AddChild(scroll);
+
+        _spielstandContainer = new VBoxContainer();
+        _spielstandContainer.AddThemeConstantOverride("separation", 6);
+        _spielstandContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        scroll.AddChild(_spielstandContainer);
+
+        var zurueck = new Button { Text = "←   Zurück", CustomMinimumSize = new Vector2(140, 40) };
+        FmTheme.ApplyButton(zurueck, FmTheme.BgPanel);
+        zurueck.Pressed += () => ZeigePanel(Zustand.Start);
+        vbox.AddChild(zurueck);
+
+        return center;
+    }
+
+    private async void OnSpielLaden()
+    {
+        ZeigePanel(Zustand.SpielstandAuswahl);
+        _spielstandHinweis.Text = "Lade Spielstände …";
+
+        foreach (Node child in _spielstandContainer.GetChildren())
+            child.QueueFree();
+
+        var staende = await ApiClient.GetAsync<List<SpielstandInfo>>("schemas/saves/uebersicht");
+        if (staende == null || staende.Count == 0)
+        {
+            _spielstandHinweis.Text = "Keine gespeicherten Spiele vorhanden. "
+                                    + "Starte zunächst ein neues Spiel.";
+            return;
+        }
+
+        _spielstandHinweis.Text = $"{staende.Count} gespeicherte(s) Spiel(e) – neueste zuerst";
+        foreach (var stand in staende)
+            _spielstandContainer.AddChild(BaueSpielstandZeile(stand));
+    }
+
+    private Control BaueSpielstandZeile(SpielstandInfo stand)
+    {
+        var btn = new Button
+        {
+            CustomMinimumSize = new Vector2(0, 56),
+            Alignment = HorizontalAlignment.Left,
+            Disabled = !stand.Ladbar,
+            TooltipText = stand.Ladbar ? stand.Schema : "Diesem Spielstand fehlt die Vereinszuordnung.",
+        };
+        FmTheme.ApplyButton(btn, stand.Ladbar ? FmTheme.BgPanel : FmTheme.BgDark);
+        btn.Text = $"{stand.Titel}\n{stand.Untertitel}";
+        btn.AddThemeColorOverride("font_color",
+            stand.Ladbar ? FmTheme.TextPrimary : FmTheme.TextSecondary);
+
+        if (stand.Ladbar)
+            btn.Pressed += () => SpielstandLaden(stand);
+
+        return btn;
+    }
+
+    private void SpielstandLaden(SpielstandInfo stand)
+    {
+        GameState.Instance.SetSchema(stand.Schema);
+        GameState.Instance.SetVerein(
+            stand.VereinId!.Value, stand.VereinName ?? "",
+            stand.LigaId ?? 0, stand.LigaName ?? "");
+        GetTree().ChangeSceneToFile("res://scenes/GameMain.tscn");
+    }
+
+    /// <summary>Setzt den zuletzt angelegten Spielstand fort.</summary>
+    private async void OnSpielFortsetzen()
+    {
+        var staende = await ApiClient.GetAsync<List<SpielstandInfo>>("schemas/saves/uebersicht");
+        var neuester = staende?.FirstOrDefault(s => s.Ladbar);
+        if (neuester == null)
+        {
+            OS.Alert("Es gibt kein fortsetzbares Spiel.", "Spiel fortsetzen");
+            return;
+        }
+        SpielstandLaden(neuester);
+    }
+
     private Control BuildAuswahlPanel()
     {
         var vbox = new VBoxContainer();
@@ -317,10 +428,11 @@ public partial class StartScreen : Control
 
     private void ZeigePanel(Zustand z)
     {
-        _startPanel.Visible     = z == Zustand.Start;
-        _dbAuswahlPanel.Visible = z == Zustand.DbAuswahl;
-        _ladenPanel.Visible     = z == Zustand.Laden;
-        _auswahlPanel.Visible   = z == Zustand.Auswahl;
+        _startPanel.Visible      = z == Zustand.Start;
+        _dbAuswahlPanel.Visible  = z == Zustand.DbAuswahl;
+        _spielstandPanel.Visible = z == Zustand.SpielstandAuswahl;
+        _ladenPanel.Visible      = z == Zustand.Laden;
+        _auswahlPanel.Visible    = z == Zustand.Auswahl;
     }
 
     private async void OnSpielStarten()
@@ -328,10 +440,9 @@ public partial class StartScreen : Control
         var schemas = await ApiClient.GetAsync<List<string>>("schemas");
         if (schemas == null || schemas.Count <= 1)
         {
-            GameState.Instance.SetSchema("db_default");
+            // Nur eine Editor-Datenbank vorhanden - Auswahl überspringen.
             ZeigePanel(Zustand.Laden);
-            _progressLabel.Text = "Lade Vereine …";
-            _progressBar.Value  = 0;
+            if (!await LegeSpielstandAn(schemas?.FirstOrDefault() ?? "db_default")) return;
             await LadeAngebote();
             return;
         }
@@ -365,11 +476,35 @@ public partial class StartScreen : Control
 
     private async void OnDbAuswahlBestaetigt()
     {
-        GameState.Instance.SetSchema(_gewaehlteSchema);
         ZeigePanel(Zustand.Laden);
-        _progressLabel.Text = "Lade Vereine …";
-        _progressBar.Value  = 0;
+        if (!await LegeSpielstandAn(_gewaehlteSchema)) return;
         await LadeAngebote();
+    }
+
+    /// <summary>
+    /// Legt einen frischen Spielstand als Kopie der gewählten Editor-Datenbank an und spielt
+    /// darin weiter. So bleibt die Vorlage unberührt und jedes neue Spiel beginnt bei Spieltag 1.
+    /// </summary>
+    private async Task<bool> LegeSpielstandAn(string vorlage)
+    {
+        _progressLabel.Text = "Neues Spiel wird angelegt …";
+        _progressBar.Value  = 0;
+
+        var name = $"spiel_{System.DateTime.Now:yyyyMMdd_HHmmss}";
+        var antwort = await ApiClient.PostAsync<object, Dictionary<string, string>>(
+            "schemas/saves", new { name, basedOn = vorlage });
+
+        if (antwort == null || !antwort.TryGetValue("schema", out var schema))
+        {
+            OS.Alert($"Der Spielstand konnte nicht angelegt werden.\nVorlage: {vorlage}", "Fehler");
+            ZeigePanel(Zustand.Start);
+            return false;
+        }
+
+        GameState.Instance.SetSchema(schema);
+        _progressBar.Value = 50;
+        _progressLabel.Text = "Lade Vereine …";
+        return true;
     }
 
     private async Task LadeAngebote()
@@ -391,11 +526,16 @@ public partial class StartScreen : Control
         ZeigePanel(Zustand.Auswahl);
     }
 
-    private void VereinWaehlen(Verein verein)
+    private async void VereinWaehlen(Verein verein)
     {
         GameState.Instance.SetVerein(
             verein.Id, verein.Name,
             verein.Liga?.Id ?? 0, verein.Liga?.Name ?? "");
+
+        // Im Spielstand hinterlegen, damit das Spiel später fortgesetzt werden kann.
+        await ApiClient.PostAsync<object, SpielstandInfo>(
+            "spielstand", new { vereinId = verein.Id });
+
         GetTree().ChangeSceneToFile("res://scenes/GameMain.tscn");
     }
 }
