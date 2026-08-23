@@ -19,5 +19,13 @@ public class SpielBericht
 
     public List<SpielEreignis> Ereignisse { get; set; } = new();
 
+    /// <summary>Aufstellung der Heimmannschaft, Startelf zuerst.</summary>
+    public List<AufstellungsSpieler> HeimAufstellung { get; set; } = new();
+    public List<AufstellungsSpieler> GastAufstellung { get; set; } = new();
+
+    /// <summary>Durchschnittliche Stärke der Startelf.</summary>
+    public double HeimStaerke { get; set; }
+    public double GastStaerke { get; set; }
+
     public string Ergebnis => Gespielt ? $"{HeimTore} : {GastTore}" : "– : –";
 }

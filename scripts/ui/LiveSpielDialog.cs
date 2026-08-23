@@ -1,6 +1,8 @@
 #nullable enable
 using Godot;
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using FMDesktop.Models;
 
 namespace FMDesktop.UI;
@@ -32,6 +34,9 @@ public partial class LiveSpielDialog : Control
     private ScrollContainer _logScroll = null!;
     private Button _aktionButton = null!;
     private Timer _timer = null!;
+
+    private List<SpielerZeile> _heimZeilen = new();
+    private List<SpielerZeile> _gastZeilen = new();
 
     private int _minute;
     private int _naechstesEreignis;
@@ -100,9 +105,114 @@ public partial class LiveSpielDialog : Control
 
     // ── Aufbau ───────────────────────────────────────────────────────────────
 
+    /// <summary>Eine Mannschaftsspalte mit Stärke und Spielern samt Frische-Balken.</summary>
+    private Control BuildTeamSpalte(List<AufstellungsSpieler> aufstellung, string verein,
+                                    double staerke, bool eigener, out List<SpielerZeile> zeilen)
+    {
+        zeilen = new List<SpielerZeile>();
+
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(250, 0) };
+        var style = new StyleBoxFlat { BgColor = FmTheme.BgToolbar };
+        style.SetBorderWidthAll(1);
+        style.SetContentMarginAll(0);
+        panel.AddThemeStyleboxOverride("panel", style);
+
+        var margin = new MarginContainer();
+        FmTheme.SetMargin(margin, 10, 8);
+        panel.AddChild(margin);
+
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 3);
+        margin.AddChild(vbox);
+
+        vbox.AddChild(FmTheme.MakeLabel(verein, 14,
+            eigener ? FmTheme.Accent : FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeLabel(
+            $"Stärke {staerke.ToString("0.0", CultureInfo.GetCultureInfo("de-DE"))}",
+            12, FmTheme.TextSecondary));
+
+        var sep = new HSeparator();
+        sep.AddThemeColorOverride("color", FmTheme.Border);
+        vbox.AddChild(sep);
+
+        foreach (var spieler in aufstellung)
+        {
+            var zeile = new SpielerZeile(spieler);
+            zeilen.Add(zeile);
+            vbox.AddChild(zeile.Wurzel);
+        }
+
+        return panel;
+    }
+
+    /// <summary>Eine Zeile in der Mannschaftsspalte; der Frische-Balken läuft mit der Uhr mit.</summary>
+    private sealed class SpielerZeile
+    {
+        public readonly AufstellungsSpieler Spieler;
+        public readonly Control Wurzel;
+        private readonly ProgressBar _frische;
+        private readonly Label _name;
+
+        public SpielerZeile(AufstellungsSpieler spieler)
+        {
+            Spieler = spieler;
+
+            var zeile = new HBoxContainer();
+            zeile.AddThemeConstantOverride("separation", 6);
+
+            var slot = FmTheme.MakeLabel(spieler.Slot, 11, FmTheme.TextSecondary);
+            slot.CustomMinimumSize = new Vector2(42, 0);
+            zeile.AddChild(slot);
+
+            _name = FmTheme.MakeLabel(spieler.Name, 11, FmTheme.TextPrimary);
+            _name.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            zeile.AddChild(_name);
+
+            var staerke = FmTheme.MakeLabel(spieler.Staerke.ToString(), 11, FmTheme.TextSecondary,
+                HorizontalAlignment.Right);
+            staerke.CustomMinimumSize = new Vector2(24, 0);
+            zeile.AddChild(staerke);
+
+            _frische = new ProgressBar
+            {
+                MinValue = 0,
+                MaxValue = 100,
+                Value = 100,
+                ShowPercentage = false,
+                CustomMinimumSize = new Vector2(46, 8),
+            };
+            zeile.AddChild(_frische);
+
+            Wurzel = zeile;
+            Aktualisiere(0);
+        }
+
+        public void Aktualisiere(int minute)
+        {
+            bool aufDemPlatz = Spieler.StehtAufDemPlatz(minute);
+            double frische = Spieler.FrischeBei(minute);
+
+            _frische.Value = aufDemPlatz ? frische : 0;
+            _frische.AddThemeStyleboxOverride("fill", Balken(FrischeFarbe(frische)));
+            _frische.AddThemeStyleboxOverride("background", Balken(FmTheme.BgDark));
+
+            // Wer noch nicht oder nicht mehr spielt, tritt zurück.
+            _name.AddThemeColorOverride("font_color",
+                aufDemPlatz ? FmTheme.TextPrimary : FmTheme.TextSecondary);
+        }
+
+        private static Color FrischeFarbe(double frische) => frische switch
+        {
+            >= 85 => FmTheme.Success,
+            >= 70 => FmTheme.Gold,
+            _     => FmTheme.Danger,
+        };
+    }
+
     private Control BuildCard()
     {
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(640, 0) };
+        // Breit genug für Heim-Spalte, Verlauf und Gast-Spalte nebeneinander.
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(920, 0) };
         panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(10));
 
         var margin = new MarginContainer();
@@ -174,18 +284,30 @@ public partial class LiveSpielDialog : Control
         sep.AddThemeColorOverride("color", FmTheme.Border);
         root.AddChild(sep);
 
-        // Ereignisprotokoll
+        // Links Heim, in der Mitte der Verlauf, rechts Gast.
+        var mitte = new HBoxContainer();
+        mitte.AddThemeConstantOverride("separation", 10);
+        mitte.SizeFlagsVertical = SizeFlags.ExpandFill;
+        root.AddChild(mitte);
+
+        mitte.AddChild(BuildTeamSpalte(_bericht.HeimAufstellung, _bericht.HeimVerein ?? "",
+            _bericht.HeimStaerke, IstEigener(_bericht.HeimVereinId), out _heimZeilen));
+
         _logScroll = new ScrollContainer
         {
-            CustomMinimumSize = new Vector2(0, 260),
+            CustomMinimumSize = new Vector2(340, 320),
             SizeFlagsVertical = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        root.AddChild(_logScroll);
+        mitte.AddChild(_logScroll);
 
         _log = new VBoxContainer();
         _log.AddThemeConstantOverride("separation", 5);
         _log.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _logScroll.AddChild(_log);
+
+        mitte.AddChild(BuildTeamSpalte(_bericht.GastAufstellung, _bericht.GastVerein ?? "",
+            _bericht.GastStaerke, IstEigener(_bericht.GastVereinId), out _gastZeilen));
 
         // Aktionsleiste
         var leiste = new HBoxContainer();
@@ -231,6 +353,10 @@ public partial class LiveSpielDialog : Control
         _minute = Math.Min(minute, Spielminuten);
         _minuteLabel.Text = $"{_minute}'";
         _uhr.Value = _minute;
+
+        // Frische beider Mannschaften mitlaufen lassen.
+        foreach (var zeile in _heimZeilen) zeile.Aktualisiere(_minute);
+        foreach (var zeile in _gastZeilen) zeile.Aktualisiere(_minute);
 
         while (_naechstesEreignis < _bericht.Ereignisse.Count
                && _bericht.Ereignisse[_naechstesEreignis].Minute <= _minute)
