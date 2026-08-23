@@ -13,11 +13,25 @@ namespace FMDesktop.UI.Taktik;
 // ---------------------------------------------------------------------------
 public partial class PlayerRow : PanelContainer
 {
+    private const string NichtAufgestellt = "–";
+
     public Spieler Spieler { get; private set; } = null!;
+
+    private Label _slotLabel = null!;
+
+    /// <summary>Zeigt an, auf welchem Platz der Spieler gerade steht (Feld-Slot oder Bank).</summary>
+    public void SetzeAufstellungsSlot(string? slot)
+    {
+        bool aufgestellt = !string.IsNullOrEmpty(slot);
+        _slotLabel.Text = aufgestellt ? slot : NichtAufgestellt;
+        _slotLabel.AddThemeColorOverride("font_color",
+            aufgestellt ? FmTheme.Accent : FmTheme.TextSecondary);
+    }
 
     /// <summary>Spaltenbreiten - identisch mit dem Kopf der Liste.</summary>
     internal static readonly (string Titel, int Breite, bool Expand, HorizontalAlignment Ausrichtung)[] Spalten =
     {
+        ("Aufst.",   58, false, HorizontalAlignment.Center),
         ("Name",    140, true,  HorizontalAlignment.Left),
         ("Pos",      42, false, HorizontalAlignment.Left),
         ("Stärken", 150, true,  HorizontalAlignment.Left),
@@ -40,7 +54,7 @@ public partial class PlayerRow : PanelContainer
         row.AddChild(hbox);
 
         int spalte = 0;
-        void AddCell(string text, Color? farbe = null)
+        Label AddCell(string text, Color? farbe = null)
         {
             var (_, breite, expand, ausrichtung) = Spalten[spalte++];
             var m = new MarginContainer();
@@ -60,8 +74,10 @@ public partial class PlayerRow : PanelContainer
             lbl.AddThemeFontSizeOverride("font_size", 12);
             m.AddChild(lbl);
             hbox.AddChild(m);
+            return lbl;
         }
 
+        row._slotLabel = AddCell(NichtAufgestellt);
         AddCell(s.Name);
         AddCell(s.HauptPosition, FmTheme.TextFuerGruppe(s.Gruppe));
         AddCell(s.Top3PositionenText);
@@ -282,6 +298,7 @@ public partial class AufstellungView : Control
     private Label         _bankLabel     = null!;
     private GridContainer _bankContainer = null!;
     private readonly List<PositionSlot> _bankSlots = new();
+    private readonly Dictionary<long, PlayerRow> _playerRows = new();
 
     private string _currentFormation = "4-4-2";
     private readonly Dictionary<string, PositionSlot> _slots = new();
@@ -345,10 +362,8 @@ public partial class AufstellungView : Control
         _autoBtn.Pressed += async () => await AutomatischAufstellen();
         hbox.AddChild(_autoBtn);
 
-        var saveBtn = new Button { Text = "💾  Speichern" };
-        FmTheme.ApplyButton(saveBtn, FmTheme.Accent);
-        saveBtn.Pressed += async () => await Speichern();
-        hbox.AddChild(saveBtn);
+        // Kein Speichern-Knopf: Jede Änderung wird sofort übernommen, gespielt wird immer
+        // mit der aktuellen Aufstellung.
 
         _statusLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
         hbox.AddChild(_statusLabel);
@@ -619,6 +634,8 @@ public partial class AufstellungView : Control
         {
             WendeBankAn(aufstellung.Ersatzbank);
         }
+        // Erst jetzt eintragen: Die Liste entsteht, bevor die Aufstellung geladen ist.
+        AktualisiereListenPositionen();
         AktualisiereWarnung(aufstellung);
 
         _statusLabel.Text = $"{_alleSpieler.Count} Spieler";
@@ -641,12 +658,40 @@ public partial class AufstellungView : Control
         // Abwechselnde Helligkeit innerhalb einer Gruppe, damit Zeilen trennbar bleiben.
         Positionsgruppe? letzte = null;
         bool abgesetzt = false;
+        _playerRows.Clear();
         foreach (var s in sichtbar)
         {
             if (letzte != s.Gruppe) { abgesetzt = false; letzte = s.Gruppe; }
-            _playerVBox.AddChild(PlayerRow.Create(s, abgesetzt));
+            var zeile = PlayerRow.Create(s, abgesetzt);
+            _playerRows[s.Id] = zeile;
+            _playerVBox.AddChild(zeile);
             abgesetzt = !abgesetzt;
         }
+
+        AktualisiereListenPositionen();
+    }
+
+    /// <summary>
+    /// Traegt in die Liste ein, wer gerade wo steht. Wird nach jeder Aenderung aufgerufen,
+    /// statt die Liste neu aufzubauen - so bleibt die Scrollposition erhalten.
+    /// </summary>
+    private void AktualisiereListenPositionen()
+    {
+        var belegung = new Dictionary<long, string>();
+
+        foreach (var (slotName, slot) in _slots)
+        {
+            if (slot.SpielerId.HasValue)
+                belegung[slot.SpielerId.Value] = slotName;
+        }
+        foreach (var slot in _bankSlots)
+        {
+            if (slot.SpielerId.HasValue)
+                belegung[slot.SpielerId.Value] = slot.SlotName;
+        }
+
+        foreach (var (spielerId, zeile) in _playerRows)
+            zeile.SetzeAufstellungsSlot(belegung.GetValueOrDefault(spielerId));
     }
 
     /// <summary>Lässt den Server die stärkste Elf und die Ersatzbank bestimmen.</summary>
@@ -688,6 +733,7 @@ public partial class AufstellungView : Control
 
         WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken);
         WendeBankAn(aufstellung.Ersatzbank);
+        AktualisiereListenPositionen();
         AktualisiereWarnung(aufstellung);
         AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
     }
@@ -742,6 +788,10 @@ public partial class AufstellungView : Control
                 slot.Assign(spielerId, name, staerke);
         }
 
+        AktualisiereListenPositionen();
+        // Auch der Formationswechsel muss uebernommen werden - vorher ging das nur
+        // ueber den inzwischen entfallenen Speichern-Knopf.
+        _ = UebernehmeAenderung();
         _statusLabel.Text = $"Formation: {_currentFormation}";
     }
 
@@ -767,10 +817,11 @@ public partial class AufstellungView : Control
         }
 
         targetSlot.Assign(spielerId, spielerName);
+        AktualisiereListenPositionen();
         _statusLabel.Text = $"{spielerName} → {targetSlot.SlotName}";
 
         // Auto-Speichern nach Zuweisung
-        _ = Speichern(silent: true);
+        _ = UebernehmeAenderung();
     }
 
     private void OnSlotPressed(PositionSlot slot)
@@ -779,11 +830,13 @@ public partial class AufstellungView : Control
         if (slot.SpielerId.HasValue)
         {
             slot.Clear();
-            _ = Speichern(silent: true);
+            AktualisiereListenPositionen();
+            _ = UebernehmeAenderung();
         }
     }
 
-    private async System.Threading.Tasks.Task Speichern(bool silent = false)
+    /// <summary>Überträgt die aktuelle Aufstellung sofort zum Server.</summary>
+    private async System.Threading.Tasks.Task UebernehmeAenderung()
     {
         var vereinId = GameState.Instance.VereinId;
         var dto = new AufstellungModel
@@ -813,15 +866,18 @@ public partial class AufstellungView : Control
                     slot.UpdateStaerke(staerke);
             }
         }
-
-        if (!silent)
-            _statusLabel.Text = result != null ? "Gespeichert ✓" : "Fehler beim Speichern";
+        else
+        {
+            _statusLabel.Text = "Änderung konnte nicht übernommen werden";
+        }
     }
 
-    private void AktualisiereSaerkeLabel(int gesamtstaerke)
+    private void AktualisiereSaerkeLabel(double gesamtstaerke)
     {
+        // Durchschnitt über alle Positionen der Formation - Kultur-unabhängig mit Punkt-Trennung
+        // wäre irritierend, deshalb bewusst die deutsche Schreibweise.
         _staerkeLabel.Text = gesamtstaerke > 0
-            ? $"Gesamtstärke: {gesamtstaerke}"
+            ? $"Gesamtstärke: {gesamtstaerke.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("de-DE"))}"
             : "Gesamtstärke: –";
     }
 

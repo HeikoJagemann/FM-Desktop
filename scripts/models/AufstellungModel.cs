@@ -8,7 +8,10 @@ public class AufstellungModel
     public long VereinId { get; set; }
     public string Formation { get; set; } = "4-4-2";
     public Dictionary<string, long> Positionen { get; set; } = new();
-    public int Gesamtstaerke { get; set; }
+    /// <summary>
+    /// Durchschnittliche Stärke über alle Positionen der Formation – unbesetzte zählen 0.
+    /// </summary>
+    public double Gesamtstaerke { get; set; }
 
     /// <summary>Ersatzbank in Reihenfolge (Spieler-IDs).</summary>
     public List<long> Ersatzbank { get; set; } = new();
