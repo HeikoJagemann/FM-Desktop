@@ -15,12 +15,23 @@ public partial class PlayerRow : PanelContainer
 {
     public Spieler Spieler { get; private set; } = null!;
 
-    public static PlayerRow Create(Spieler s, Color rowBg)
+    /// <summary>Spaltenbreiten - identisch mit dem Kopf der Liste.</summary>
+    internal static readonly (string Titel, int Breite, bool Expand, HorizontalAlignment Ausrichtung)[] Spalten =
+    {
+        ("Name",    140, true,  HorizontalAlignment.Left),
+        ("Pos",      42, false, HorizontalAlignment.Left),
+        ("Stärken", 150, true,  HorizontalAlignment.Left),
+        ("Talent",   80, false, HorizontalAlignment.Left),
+        ("Alter",    44, false, HorizontalAlignment.Center),
+        ("Kader",    72, false, HorizontalAlignment.Left),
+    };
+
+    public static PlayerRow Create(Spieler s, bool abgesetzt)
     {
         var row = new PlayerRow { Spieler = s };
         row.CustomMinimumSize = new Vector2(0, 30);
 
-        var style = new StyleBoxFlat { BgColor = rowBg };
+        var style = new StyleBoxFlat { BgColor = FmTheme.FuerGruppe(s.Gruppe, abgesetzt) };
         style.SetContentMarginAll(0);
         row.AddThemeStyleboxOverride("panel", style);
 
@@ -28,39 +39,55 @@ public partial class PlayerRow : PanelContainer
         hbox.AddThemeConstantOverride("separation", 0);
         row.AddChild(hbox);
 
-        void AddCell(string text, int minW, bool expand = false, HorizontalAlignment align = HorizontalAlignment.Left)
+        int spalte = 0;
+        void AddCell(string text, Color? farbe = null)
         {
+            var (_, breite, expand, ausrichtung) = Spalten[spalte++];
             var m = new MarginContainer();
             m.AddThemeConstantOverride("margin_left", 6);
             m.AddThemeConstantOverride("margin_right", 6);
-            m.AddThemeConstantOverride("margin_top", 0);
-            m.AddThemeConstantOverride("margin_bottom", 0);
-            m.CustomMinimumSize = new Vector2(minW, 0);
+            m.CustomMinimumSize = new Vector2(breite, 0);
             if (expand) m.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 
             var lbl = new Label
             {
                 Text = text,
-                HorizontalAlignment = align,
+                HorizontalAlignment = ausrichtung,
                 VerticalAlignment = VerticalAlignment.Center,
                 AutowrapMode = TextServer.AutowrapMode.Off,
             };
-            lbl.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+            lbl.AddThemeColorOverride("font_color", farbe ?? FmTheme.TextPrimary);
             lbl.AddThemeFontSizeOverride("font_size", 12);
             m.AddChild(lbl);
             hbox.AddChild(m);
         }
 
-        AddCell(s.Position, 42);
-        AddCell(s.Name, 140, expand: true);
-        AddCell(s.Alter.ToString(), 38, align: HorizontalAlignment.Center);
-        AddCell(s.BestPositionStaerke.ToString(), 42, align: HorizontalAlignment.Center);
-        AddCell(s.Talent.ToString(), 42, align: HorizontalAlignment.Center);
-        AddCell(s.SpieleInSaison.ToString(), 44, align: HorizontalAlignment.Center);
+        AddCell(s.Name);
+        AddCell(s.HauptPosition, FmTheme.TextFuerGruppe(s.Gruppe));
+        AddCell(s.Top3PositionenText);
+        AddCell(TalentSterne(s.Talent), TalentFarbe(s.Talent));
+        AddCell(s.Alter.ToString());
+        AddCell(s.Kader, s.Kader == "Profi" ? FmTheme.TextPrimary : FmTheme.TextSecondary);
 
         row.MouseDefaultCursorShape = CursorShape.Drag;
         return row;
     }
+
+    private static string TalentSterne(int talent)
+    {
+        int sterne = talent switch
+        {
+            >= 80 => 5, >= 65 => 4, >= 50 => 3, >= 35 => 2, _ => 1,
+        };
+        return new string('★', sterne) + new string('☆', 5 - sterne);
+    }
+
+    private static Color TalentFarbe(int talent) => talent switch
+    {
+        >= 80 => FmTheme.Gold,
+        >= 65 => FmTheme.Success,
+        _     => FmTheme.TextSecondary,
+    };
 
     public override Variant _GetDragData(Vector2 atPosition)
     {
@@ -248,6 +275,7 @@ public partial class AufstellungView : Control
     private Label         _statusLabel = null!;
     private Label         _staerkeLabel = null!;
     private Label         _warnungLabel = null!;
+    private Button        _autoBtn = null!;
 
     private const int BankSpalten = 5;
 
@@ -308,6 +336,14 @@ public partial class AufstellungView : Control
         _formationBtn.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
         _formationBtn.ItemSelected += OnFormationChanged;
         hbox.AddChild(_formationBtn);
+
+        _autoBtn = new Button { Text = "⚡  Automatisch aufstellen" };
+        FmTheme.ApplyButton(_autoBtn, FmTheme.BgPanel);
+        _autoBtn.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        _autoBtn.TooltipText = "Besetzt jede Position mit dem stärksten verfügbaren Spieler "
+                             + "und füllt die Ersatzbank.";
+        _autoBtn.Pressed += async () => await AutomatischAufstellen();
+        hbox.AddChild(_autoBtn);
 
         var saveBtn = new Button { Text = "💾  Speichern" };
         FmTheme.ApplyButton(saveBtn, FmTheme.Accent);
@@ -532,26 +568,18 @@ public partial class AufstellungView : Control
         panel.AddThemeStyleboxOverride("panel", headerStyle);
         panel.AddChild(hbox);
 
-        void AddHeader(string text, int minW, bool expand = false)
+        foreach (var (titel, breite, expand, ausrichtung) in PlayerRow.Spalten)
         {
             var m = new MarginContainer();
             m.AddThemeConstantOverride("margin_left", 6);
             m.AddThemeConstantOverride("margin_right", 6);
             m.AddThemeConstantOverride("margin_top", 4);
             m.AddThemeConstantOverride("margin_bottom", 4);
-            m.CustomMinimumSize = new Vector2(minW, 0);
+            m.CustomMinimumSize = new Vector2(breite, 0);
             if (expand) m.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            var lbl = FmTheme.MakeLabel(text, 12, FmTheme.TextSecondary);
-            m.AddChild(lbl);
+            m.AddChild(FmTheme.MakeLabel(titel, 12, FmTheme.TextSecondary, ausrichtung));
             hbox.AddChild(m);
         }
-
-        AddHeader("Pos",     42);
-        AddHeader("Name",    140, expand: true);
-        AddHeader("Alter",   38);
-        AddHeader("Stärke",  42);
-        AddHeader("Talent",  42);
-        AddHeader("Spiele",  44);
 
         return panel;
     }
@@ -601,15 +629,67 @@ public partial class AufstellungView : Control
         foreach (Node child in _playerVBox.GetChildren())
             child.QueueFree();
 
-        bool alt = false;
-        foreach (var s in spieler
+        // Nur Profi- und Amateurkader; Jugendspieler stehen hier nicht zur Wahl.
+        // Sortiert nach Positionsgruppe (TW, Abwehr, Mittelfeld, Sturm), darin die stärkeren zuerst.
+        var sichtbar = spieler
             .Where(s => s.Kader == "Profi" || s.Kader == "Amateur")
-            .OrderBy(PositionsPrioritaet))
+            .OrderBy(s => s.Sortierung.Item1)
+            .ThenBy(s => s.Sortierung.Item2)
+            .ThenBy(s => s.Name)
+            .ToList();
+
+        // Abwechselnde Helligkeit innerhalb einer Gruppe, damit Zeilen trennbar bleiben.
+        Positionsgruppe? letzte = null;
+        bool abgesetzt = false;
+        foreach (var s in sichtbar)
         {
-            var bg = alt ? FmTheme.RowAlt : FmTheme.BgPanel;
-            _playerVBox.AddChild(PlayerRow.Create(s, bg));
-            alt = !alt;
+            if (letzte != s.Gruppe) { abgesetzt = false; letzte = s.Gruppe; }
+            _playerVBox.AddChild(PlayerRow.Create(s, abgesetzt));
+            abgesetzt = !abgesetzt;
         }
+    }
+
+    /// <summary>Lässt den Server die stärkste Elf und die Ersatzbank bestimmen.</summary>
+    private async System.Threading.Tasks.Task AutomatischAufstellen()
+    {
+        _autoBtn.Disabled = true;
+        _statusLabel.Text = "Stelle auf …";
+
+        var vereinId = GameState.Instance.VereinId;
+        var ergebnis = await ApiClient.PostAsync<object, AufstellungModel>(
+            $"aufstellung/{vereinId}/automatisch?formation={_currentFormation}", new { });
+
+        _autoBtn.Disabled = false;
+
+        if (ergebnis == null)
+        {
+            _statusLabel.Text = "Automatische Aufstellung fehlgeschlagen";
+            return;
+        }
+
+        WendeAufstellungAn(ergebnis);
+        _statusLabel.Text = "Automatisch aufgestellt ✓";
+    }
+
+    /// <summary>Überträgt eine komplette Aufstellung vom Server auf die Oberfläche.</summary>
+    private void WendeAufstellungAn(AufstellungModel aufstellung)
+    {
+        if (aufstellung.Formation != null && Formations.ContainsKey(aufstellung.Formation))
+        {
+            _currentFormation = aufstellung.Formation;
+            int idx = Array.IndexOf(FormationNames, _currentFormation);
+            if (idx >= 0) _formationBtn.Selected = idx;
+        }
+
+        // Neu aufbauen, damit alte Zuweisungen nicht stehen bleiben.
+        BuildSlots(_currentFormation);
+        foreach (var slot in _bankSlots)
+            slot.Clear();
+
+        WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken);
+        WendeBankAn(aufstellung.Ersatzbank);
+        AktualisiereWarnung(aufstellung);
+        AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
     }
 
     private void WendeBankAn(List<long>? ersatzbank)
@@ -745,12 +825,4 @@ public partial class AufstellungView : Control
             : "Gesamtstärke: –";
     }
 
-    private static int PositionsPrioritaet(Spieler s) => s.Position switch
-    {
-        "TW"                                       => 0,
-        "IV" or "LV" or "RV"                      => 1,
-        "DM" or "ZM" or "LM" or "RM" or "OM"     => 2,
-        "LA" or "RA" or "HS" or "ST"              => 3,
-        _                                           => 9,
-    };
 }
