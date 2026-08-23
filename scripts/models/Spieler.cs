@@ -61,6 +61,29 @@ public class Spieler
     public int BestPositionStaerke =>
         Top3Positionen?.Count > 0 ? Top3Positionen[0].Staerke : Staerke;
 
+    /// <summary>
+    /// Nominal wird nur zwischen Torwart und Feldspieler unterschieden – die tatsächliche
+    /// Position eines Feldspielers ergibt sich aus seinen Einzelfähigkeiten.
+    /// </summary>
+    public bool IstTorwart => Position == "TW";
+
+    /// <summary>Stärkste Position laut Fähigkeiten; für Torhüter immer TW.</summary>
+    public string HauptPosition => IstTorwart
+        ? "TW"
+        : (Top3Positionen?.Count > 0 ? Top3Positionen[0].Position : Position);
+
+    public Positionsgruppe Gruppe => IstTorwart
+        ? Positionsgruppe.Tor
+        : HauptPosition switch
+        {
+            "IV" or "LV" or "RV"                 => Positionsgruppe.Abwehr,
+            "DM" or "ZM" or "LM" or "RM" or "OM" => Positionsgruppe.Mittelfeld,
+            _                                    => Positionsgruppe.Sturm,
+        };
+
+    /// <summary>Sortierschlüssel: Gruppe, darin die stärkeren Spieler zuerst.</summary>
+    public (int, int) Sortierung => ((int)Gruppe, -BestPositionStaerke);
+
     public string Top3PositionenText =>
         Top3Positionen?.Count > 0
             ? string.Join(" / ", Top3Positionen.Select(p => $"{p.Position} {p.Staerke}"))

@@ -127,17 +127,37 @@ public partial class KaderView : Control
         tree.Clear();
         var root = tree.CreateItem();
 
-        foreach (var s in spieler.OrderBy(x => PositionsPrioritaet(x.Position)))
+        // Nach Positionsgruppe sortiert, darin die stärkeren Spieler zuerst.
+        var sortiert = spieler
+            .OrderBy(x => x.Sortierung.Item1)
+            .ThenBy(x => x.Sortierung.Item2)
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        Positionsgruppe? letzte = null;
+        bool abgesetzt = false;
+
+        foreach (var s in sortiert)
         {
+            if (letzte != s.Gruppe) { abgesetzt = false; letzte = s.Gruppe; }
+
             var item = tree.CreateItem(root);
             item.SetMetadata(0, s.Id);
             item.SetText(0, s.Name);
-            item.SetText(1, s.Position);
+            // Nominal zählt nur Torwart oder Feldspieler - angezeigt wird die aus den
+            // Fähigkeiten abgeleitete stärkste Position.
+            item.SetText(1, s.HauptPosition);
             item.SetText(2, s.Top3PositionenText);
             item.SetText(3, TalentSterne(s.Talent));
             item.SetText(4, s.Alter.ToString());
             item.SetText(5, $"{s.Wert:N0}");
             item.SetText(6, s.Nationalitaet);
+
+            var zeilenfarbe = FmTheme.FuerGruppe(s.Gruppe, abgesetzt);
+            for (int spalte = 0; spalte < Spalten.Length; spalte++)
+                item.SetCustomBgColor(spalte, zeilenfarbe);
+
+            item.SetCustomColor(1, FmTheme.TextFuerGruppe(s.Gruppe));
 
             var bestStaerke = s.BestPositionStaerke;
             var staerkeFarbe = bestStaerke >= 70 ? FmTheme.Success
@@ -149,15 +169,8 @@ public partial class KaderView : Control
                             : s.Talent >= 65 ? FmTheme.Success
                             : FmTheme.TextSecondary;
             item.SetCustomColor(3, talentFarbe);
+
+            abgesetzt = !abgesetzt;
         }
     }
-
-    private static int PositionsPrioritaet(string pos) => pos switch
-    {
-        "TW"                         => 0,
-        "IV" or "LV" or "RV"        => 1,
-        "DM" or "ZM" or "LM" or "RM" or "OM" => 2,
-        "LA" or "RA" or "HS" or "ST" => 3,
-        _                             => 9,
-    };
 }

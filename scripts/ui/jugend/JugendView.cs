@@ -117,32 +117,40 @@ public partial class JugendView : Control
     {
         tree.Clear();
         var root = tree.CreateItem();
-        foreach (var s in spieler
-            .OrderBy(x => PositionsPrioritaet(x.Position))
-            .ThenByDescending(x => x.Talent))
+        var sortiert = spieler
+            .OrderBy(x => x.Sortierung.Item1)
+            .ThenByDescending(x => x.Talent)
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        Positionsgruppe? letzte = null;
+        bool abgesetzt = false;
+
+        foreach (var s in sortiert)
         {
+            if (letzte != s.Gruppe) { abgesetzt = false; letzte = s.Gruppe; }
+
             var item = tree.CreateItem(root);
             item.SetMetadata(0, s.Id);
             item.SetText(0, s.Name);
-            item.SetText(1, s.Position);
+            item.SetText(1, s.HauptPosition);
             item.SetText(2, s.Staerke.ToString());
             item.SetText(3, TalentSterne(s.Talent));
             item.SetText(4, s.Alter.ToString());
             item.SetText(5, s.Nationalitaet);
 
+            var zeilenfarbe = FmTheme.FuerGruppe(s.Gruppe, abgesetzt);
+            for (int spalte = 0; spalte < Spalten.Length; spalte++)
+                item.SetCustomBgColor(spalte, zeilenfarbe);
+
+            item.SetCustomColor(1, FmTheme.TextFuerGruppe(s.Gruppe));
+
             var talentFarbe = s.Talent >= 80 ? FmTheme.Gold
                             : s.Talent >= 65 ? FmTheme.Success
                             : FmTheme.TextSecondary;
             item.SetCustomColor(3, talentFarbe);
+
+            abgesetzt = !abgesetzt;
         }
     }
-
-    private static int PositionsPrioritaet(string pos) => pos switch
-    {
-        "TW"                                    => 0,
-        "IV" or "LV" or "RV"                   => 1,
-        "DM" or "ZM" or "LM" or "RM" or "OM"  => 2,
-        "LA" or "RA" or "HS" or "ST"           => 3,
-        _                                       => 9,
-    };
 }

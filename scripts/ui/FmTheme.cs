@@ -19,6 +19,36 @@ public static class FmTheme
     public static readonly Color Gold        = new(1.00f, 0.85f, 0.10f);
     public static readonly Color RowAlt      = new(0.10f, 0.13f, 0.17f);
 
+    // ── Positionsgruppen ──────────────────────────────────────
+    // Dezent gehalten: Die Zeile soll erkennbar eingefärbt sein, ohne dass der Text leidet.
+    public static readonly Color GruppeTor        = new(0.24f, 0.20f, 0.09f);
+    public static readonly Color GruppeAbwehr     = new(0.11f, 0.17f, 0.26f);
+    public static readonly Color GruppeMittelfeld = new(0.10f, 0.21f, 0.15f);
+    public static readonly Color GruppeSturm      = new(0.24f, 0.13f, 0.13f);
+
+    /// <summary>Hintergrundfarbe einer Spielerzeile nach Positionsgruppe.</summary>
+    public static Color FuerGruppe(Models.Positionsgruppe gruppe, bool abgesetzt = false)
+    {
+        var farbe = gruppe switch
+        {
+            Models.Positionsgruppe.Tor        => GruppeTor,
+            Models.Positionsgruppe.Abwehr     => GruppeAbwehr,
+            Models.Positionsgruppe.Mittelfeld => GruppeMittelfeld,
+            _                                 => GruppeSturm,
+        };
+        // Jede zweite Zeile leicht aufgehellt, damit Zeilen unterscheidbar bleiben.
+        return abgesetzt ? farbe.Lightened(0.06f) : farbe;
+    }
+
+    /// <summary>Textfarbe für die Positionsspalte - kräftiger als der Zeilenhintergrund.</summary>
+    public static Color TextFuerGruppe(Models.Positionsgruppe gruppe) => gruppe switch
+    {
+        Models.Positionsgruppe.Tor        => Gold,
+        Models.Positionsgruppe.Abwehr     => new Color(0.45f, 0.68f, 0.95f),
+        Models.Positionsgruppe.Mittelfeld => new Color(0.40f, 0.85f, 0.55f),
+        _                                 => new Color(0.95f, 0.50f, 0.45f),
+    };
+
     // ── StyleBoxen ────────────────────────────────────────────
     public static StyleBoxFlat PanelStyle(int radius = 6)
     {
