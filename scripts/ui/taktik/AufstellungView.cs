@@ -248,6 +248,12 @@ public partial class AufstellungView : Control
     private Label         _statusLabel = null!;
     private Label         _staerkeLabel = null!;
 
+    private const int BankSpalten = 5;
+
+    private Label         _bankLabel     = null!;
+    private GridContainer _bankContainer = null!;
+    private readonly List<PositionSlot> _bankSlots = new();
+
     private string _currentFormation = "4-4-2";
     private readonly Dictionary<string, PositionSlot> _slots = new();
     private readonly Dictionary<long, string>         _playerNames = new();
@@ -325,9 +331,26 @@ public partial class AufstellungView : Control
         FmTheme.SetMargin(margin, 12);
         panel.AddChild(margin);
 
+        var spalte = new VBoxContainer();
+        spalte.AddThemeConstantOverride("separation", 10);
+        margin.AddChild(spalte);
+
         _fieldControl = new Control();
         _fieldControl.CustomMinimumSize = new Vector2(FieldW, FieldH);
-        margin.AddChild(_fieldControl);
+        spalte.AddChild(_fieldControl);
+
+        var bankTrenner = new HSeparator();
+        bankTrenner.AddThemeColorOverride("color", FmTheme.Border);
+        spalte.AddChild(bankTrenner);
+
+        _bankLabel = FmTheme.MakeLabel("Ersatzbank", 12, FmTheme.TextSecondary);
+        spalte.AddChild(_bankLabel);
+
+        // Die Anzahl der Plaetze kommt vom Server (pro Wettbewerb), daher erst beim Laden gefuellt.
+        _bankContainer = new GridContainer { Columns = BankSpalten };
+        _bankContainer.AddThemeConstantOverride("h_separation", 4);
+        _bankContainer.AddThemeConstantOverride("v_separation", 4);
+        spalte.AddChild(_bankContainer);
 
         DrawFieldBackground();
         BuildSlots(_currentFormation);
@@ -411,6 +434,31 @@ public partial class AufstellungView : Control
 
         if (_staerkeLabel?.GetParent() == _fieldControl)
             _fieldControl.MoveChild(_staerkeLabel, _fieldControl.GetChildCount() - 1);
+    }
+
+    /// <summary>Legt so viele Bankplätze an, wie der Wettbewerb zulässt.</summary>
+    private void BaueBank(int plaetze)
+    {
+        foreach (var slot in _bankSlots)
+            slot.QueueFree();
+        _bankSlots.Clear();
+
+        foreach (Node child in _bankContainer.GetChildren())
+            child.QueueFree();
+
+        _bankLabel.Text = plaetze > 0
+            ? $"Ersatzbank ({plaetze} Plätze)"
+            : "Ersatzbank – in diesem Wettbewerb nicht vorgesehen";
+
+        for (int i = 0; i < plaetze; i++)
+        {
+            var slot = PositionSlot.Create($"B{i + 1}");
+            slot.CustomMinimumSize = new Vector2(SlotW, 44);
+            slot.PlayerDropped += OnPlayerDropped;
+            slot.Pressed       += () => OnSlotPressed(slot);
+            _bankSlots.Add(slot);
+            _bankContainer.AddChild(slot);
+        }
     }
 
     private Control BuildPlayerList()
@@ -499,6 +547,10 @@ public partial class AufstellungView : Control
         FuelleSpielerListe(_alleSpieler);
 
         var aufstellung = await aufstellungTask;
+
+        // Auch ohne gespeicherte Aufstellung liefert der Server die Bankgröße des Wettbewerbs.
+        BaueBank(aufstellung?.MaxErsatzbank ?? 0);
+
         if (aufstellung?.Formation != null && Formations.ContainsKey(aufstellung.Formation))
         {
             _currentFormation = aufstellung.Formation;
@@ -507,6 +559,10 @@ public partial class AufstellungView : Control
             BuildSlots(_currentFormation);
             WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken);
             AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
+        }
+        if (aufstellung != null)
+        {
+            WendeBankAn(aufstellung.Ersatzbank);
         }
 
         _statusLabel.Text = $"{_alleSpieler.Count} Spieler";
@@ -525,6 +581,18 @@ public partial class AufstellungView : Control
             var bg = alt ? FmTheme.RowAlt : FmTheme.BgPanel;
             _playerVBox.AddChild(PlayerRow.Create(s, bg));
             alt = !alt;
+        }
+    }
+
+    private void WendeBankAn(List<long>? ersatzbank)
+    {
+        if (ersatzbank == null) return;
+        for (int i = 0; i < _bankSlots.Count && i < ersatzbank.Count; i++)
+        {
+            if (_playerNames.TryGetValue(ersatzbank[i], out var name))
+            {
+                _bankSlots[i].Assign(ersatzbank[i], name);
+            }
         }
     }
 
@@ -571,8 +639,14 @@ public partial class AufstellungView : Control
 
     private void OnPlayerDropped(PositionSlot targetSlot, long spielerId, string spielerName)
     {
-        // Prüfen ob Spieler bereits auf einem anderen Slot ist -> dort entfernen
+        // Prüfen ob Spieler bereits auf einem anderen Slot ist -> dort entfernen.
+        // Gilt auch für die Bank: Niemand steht gleichzeitig im Feld und auf der Bank.
         foreach (var slot in _slots.Values)
+        {
+            if (slot != targetSlot && slot.SpielerId == spielerId)
+                slot.Clear();
+        }
+        foreach (var slot in _bankSlots)
         {
             if (slot != targetSlot && slot.SpielerId == spielerId)
                 slot.Clear();
@@ -611,6 +685,11 @@ public partial class AufstellungView : Control
             Positionen = _slots
                 .Where(kv => kv.Value.SpielerId.HasValue)
                 .ToDictionary(kv => kv.Key, kv => kv.Value.SpielerId!.Value),
+            // Reihenfolge der Bankplätze bleibt erhalten; leere Plätze fallen heraus.
+            Ersatzbank = _bankSlots
+                .Where(s => s.SpielerId.HasValue)
+                .Select(s => s.SpielerId!.Value)
+                .ToList(),
         };
 
         var result = await ApiClient.PostAsync<AufstellungModel, AufstellungModel>(

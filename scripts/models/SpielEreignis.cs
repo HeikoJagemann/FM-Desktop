@@ -19,6 +19,7 @@ public class SpielEreignis
         "GELBE_KARTE"     => "🟨",
         "GELB_ROTE_KARTE" => "🟨🟥",
         "ROTE_KARTE"      => "🟥",
+        "WECHSEL"         => "🔄",
         _                 => "•",
     };
 
