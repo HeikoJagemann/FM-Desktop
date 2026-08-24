@@ -1,5 +1,9 @@
 #nullable enable
 using Godot;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using FMDesktop.Api;
 using FMDesktop.Models;
 
 namespace FMDesktop.UI;
@@ -9,7 +13,13 @@ public partial class SpielerDetailOverlay : Control
 {
     private static SpielerDetailOverlay? _aktuelleInstanz;
 
+    /// Über wie viele Spieltage die Veränderung neben den Fähigkeiten zusammengefasst wird.
+    private const int Spieltagsfenster = 10;
+
     private Spieler _s = null!;
+
+    /// Entwicklung der letzten Spieltage; wird vor dem Aufbau der Karte nachgeladen.
+    private SpielerVerlauf? _verlauf;
 
     public static void Zeige(Node caller, Spieler spieler)
     {
@@ -30,7 +40,7 @@ public partial class SpielerDetailOverlay : Control
         if (_aktuelleInstanz == this) _aktuelleInstanz = null;
     }
 
-    public override void _Ready()
+    public override async void _Ready()
     {
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         MouseFilter = MouseFilterEnum.Stop;
@@ -46,6 +56,12 @@ public partial class SpielerDetailOverlay : Control
         center.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(center);
 
+        // Der Verlauf wird nachgeladen, bevor die Karte entsteht - der abgedunkelte Hintergrund
+        // steht dabei schon, das Fenster erscheint also nicht spuerbar spaeter.
+        _verlauf = await ApiClient.GetAsync<SpielerVerlauf>(
+            $"training/spieler/{_s.Id}/verlauf?spieltage={Spieltagsfenster}");
+
+        if (!IsInstanceValid(this) || !IsInstanceValid(center)) return;
         center.AddChild(BuildCard());
     }
 
@@ -150,38 +166,48 @@ public partial class SpielerDetailOverlay : Control
     private Control BuildStatistikenCard() => BaueCard("📊  Statistiken", new VBoxContainer().Also(v =>
     {
         v.AddThemeConstantOverride("separation", 6);
-        v.AddChild(AttributZeile("Gesamtstärke", _s.BestPositionStaerke));
+        v.AddChild(AttributZeile("Gesamtstärke", _s.BestPositionStaerke,
+                                 differenz: _verlauf?.StaerkeDifferenz ?? 0));
         v.AddChild(AttributZeile("Talent", _s.Talent));
+        // Das Potenzial wird bewusst nur als Spanne gezeigt - den exakten Wert liefert das
+        // Backend nicht aus, kein Manager kennt das Maximum eines Spielers auf den Punkt.
+        v.AddChild(InfoZeile("Potenzial (geschätzt)", $"{_s.PotenzialText}   {_s.PotenzialSterneText}"));
+        v.AddChild(AttributZeile("Frische", _s.Frische));
         v.AddChild(InfoZeile("Spiele in dieser Saison", _s.SpieleInSaison.ToString()));
+        if (_verlauf != null && _verlauf.BisSpieltag > 0)
+        {
+            v.AddChild(InfoZeile("Pfeile zeigen",
+                $"Veränderung ab Spieltag {_verlauf.VonSpieltag}"));
+        }
     }));
 
     private Control BuildFaehigkeitenCard() => BaueCard("⚙️  Fähigkeiten", new VBoxContainer().Also(v =>
     {
         v.AddThemeConstantOverride("separation", 6);
-        v.AddChild(AttributZeile("Pass", _s.Pass));
-        v.AddChild(AttributZeile("Ballkontrolle", _s.Ballkontrolle));
-        v.AddChild(AttributZeile("Schusstechnik", _s.Schusstechnik));
-        v.AddChild(AttributZeile("Schussstärke", _s.Schussstaerke));
-        v.AddChild(AttributZeile("Dribbling", _s.Dribbling));
-        v.AddChild(AttributZeile("Kopfball", _s.Kopfball));
-        v.AddChild(AttributZeile("Zweikampf", _s.Zweikampf));
-        v.AddChild(AttributZeile("Stellungsspiel", _s.Stellungsspiel));
-        v.AddChild(AttributZeile("Entscheidungen", _s.Entscheidungen));
-        v.AddChild(AttributZeile("Führungsqualität", _s.Fuehrungsqualitaet));
-        v.AddChild(AttributZeile("Disziplin", _s.Disziplin));
+        v.AddChild(AttributZeile("Pass", _s.Pass, differenz: Diff("PASS")));
+        v.AddChild(AttributZeile("Ballkontrolle", _s.Ballkontrolle, differenz: Diff("BALLKONTROLLE")));
+        v.AddChild(AttributZeile("Schusstechnik", _s.Schusstechnik, differenz: Diff("SCHUSSTECHNIK")));
+        v.AddChild(AttributZeile("Schussstärke", _s.Schussstaerke, differenz: Diff("SCHUSSSTAERKE")));
+        v.AddChild(AttributZeile("Dribbling", _s.Dribbling, differenz: Diff("DRIBBLING")));
+        v.AddChild(AttributZeile("Kopfball", _s.Kopfball, differenz: Diff("KOPFBALL")));
+        v.AddChild(AttributZeile("Zweikampf", _s.Zweikampf, differenz: Diff("ZWEIKAMPF")));
+        v.AddChild(AttributZeile("Stellungsspiel", _s.Stellungsspiel, differenz: Diff("STELLUNGSSPIEL")));
+        v.AddChild(AttributZeile("Entscheidungen", _s.Entscheidungen, differenz: Diff("ENTSCHEIDUNGEN")));
+        v.AddChild(AttributZeile("Führungsqualität", _s.Fuehrungsqualitaet, differenz: Diff("FUEHRUNGSQUALITAET")));
+        v.AddChild(AttributZeile("Disziplin", _s.Disziplin, differenz: Diff("DISZIPLIN")));
         v.AddChild(AttributZeile("Linker Fuß", _s.LinkerFuss));
         v.AddChild(AttributZeile("Rechter Fuß", _s.RechterFuss));
-        v.AddChild(AttributZeile("Schnelligkeit", _s.Schnelligkeit));
-        v.AddChild(AttributZeile("Ausdauer", _s.Ausdauer));
+        v.AddChild(AttributZeile("Schnelligkeit", _s.Schnelligkeit, differenz: Diff("SCHNELLIGKEIT")));
+        v.AddChild(AttributZeile("Ausdauer", _s.Ausdauer, differenz: Diff("AUSDAUER")));
     }));
 
     private Control BuildTorwartCard() => BaueCard("🧤  Torwart", new VBoxContainer().Also(v =>
     {
         v.AddThemeConstantOverride("separation", 6);
         v.AddChild(AttributZeile("Talent (TW)", _s.TalentTW));
-        v.AddChild(AttributZeile("Strafraumbeherrschung", _s.Strafraumbeherrschung));
-        v.AddChild(AttributZeile("Fangsicherheit", _s.Fangsicherheit));
-        v.AddChild(AttributZeile("Reflexe", _s.Reflexe));
+        v.AddChild(AttributZeile("Strafraumbeherrschung", _s.Strafraumbeherrschung, differenz: Diff("STRAFRAUMBEHERRSCHUNG")));
+        v.AddChild(AttributZeile("Fangsicherheit", _s.Fangsicherheit, differenz: Diff("FANGSICHERHEIT")));
+        v.AddChild(AttributZeile("Reflexe", _s.Reflexe, differenz: Diff("REFLEXE")));
     }));
 
     private static Control BaueCard(string titel, Control inhalt)
@@ -216,7 +242,14 @@ public partial class SpielerDetailOverlay : Control
         return row;
     }
 
-    private static Control AttributZeile(string label, int wert, int max = 100)
+    /// <summary>Veränderung einer Fähigkeit über das Auswertungsfenster, oder 0.</summary>
+    private int Diff(string attribut) => _verlauf?.DifferenzFuer(attribut) ?? 0;
+
+    /// <param name="differenz">
+    /// Veränderung über die letzten Spieltage. Ungleich 0 setzt Pfeil und Betrag hinter den Wert -
+    /// so ist auf einen Blick erkennbar, woran der Spieler zuletzt gewachsen ist.
+    /// </param>
+    private static Control AttributZeile(string label, int wert, int max = 100, int differenz = 0)
     {
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 10);
@@ -242,6 +275,16 @@ public partial class SpielerDetailOverlay : Control
         var wertLabel = FmTheme.MakeLabel(wert.ToString(), 13, FmTheme.TextPrimary, HorizontalAlignment.Right);
         wertLabel.CustomMinimumSize = new Vector2(32, 0);
         row.AddChild(wertLabel);
+
+        // Die Spalte bleibt auch ohne Veränderung stehen, damit die Werte darüber und darunter
+        // nicht springen.
+        var trend = FmTheme.MakeLabel(
+            differenz == 0 ? "" : $"{(differenz > 0 ? "▲" : "▼")}{System.Math.Abs(differenz)}",
+            12,
+            differenz > 0 ? FmTheme.Success : differenz < 0 ? FmTheme.Danger : FmTheme.TextSecondary,
+            HorizontalAlignment.Right);
+        trend.CustomMinimumSize = new Vector2(34, 0);
+        row.AddChild(trend);
 
         return row;
     }

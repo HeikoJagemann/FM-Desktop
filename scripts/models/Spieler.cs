@@ -56,7 +56,25 @@ public class Spieler
     public int    Fangsicherheit        { get; set; }
     public int    Reflexe               { get; set; }
     public int    SpieleInSaison        { get; set; }
+
+    // Training
+    /// <summary>Frische zwischen den Spielen (0-100); Startwert der Kondition im nächsten Spiel.</summary>
+    public int    Frische               { get; set; }
+    /// <summary>Untere Grenze der Potenzialschätzung. Den exakten Wert liefert das Backend nie.</summary>
+    public int    PotenzialVon          { get; set; }
+    /// <summary>Obere Grenze der Potenzialschätzung.</summary>
+    public int    PotenzialBis          { get; set; }
+    public int    PotenzialSterne       { get; set; }
+    /// <summary>Persönlicher Trainingsschwerpunkt; null, wenn nur im Team trainiert wird.</summary>
+    public string? IndividualFokus      { get; set; }
+
     public List<PositionsStaerke>? Top3Positionen { get; set; }
+
+    /// <summary>Potenzial als Spanne - bewusst unscharf, kein Manager kennt den Endwert exakt.</summary>
+    public string PotenzialText => PotenzialBis > 0 ? $"{PotenzialVon}-{PotenzialBis}" : "?";
+
+    public string PotenzialSterneText =>
+        new string('★', PotenzialSterne) + new string('☆', 5 - PotenzialSterne);
 
     public int BestPositionStaerke =>
         Top3Positionen?.Count > 0 ? Top3Positionen[0].Staerke : Staerke;

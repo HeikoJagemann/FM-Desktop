@@ -25,6 +25,13 @@ public static class ApiClient
         PropertyNameCaseInsensitive = true
     };
 
+    /// Für ausgehende Bodies: Das Backend bindet mit Jackson und damit auf die camelCase-Namen
+    /// seiner Java-Felder. Ohne diese Richtlinie schickt System.Text.Json PascalCase.
+    private static readonly JsonSerializerOptions SendeOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     public static async Task<T?> GetAsync<T>(string path)
     {
         try
@@ -60,6 +67,26 @@ public static class ApiClient
         }
     }
 
+    public static async Task<TResult?> PutAsync<TBody, TResult>(string path, TBody body)
+    {
+        try
+        {
+            var request = new System.Net.Http.HttpRequestMessage(
+                System.Net.Http.HttpMethod.Put, path);
+            request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
+            request.Content = JsonContent.Create(body, options: SendeOpts);
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return default;
+            if (response.Content.Headers.ContentLength is null or 0) return default;
+            return await response.Content.ReadFromJsonAsync<TResult>(JsonOpts);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[ApiClient] PUT {path} fehlgeschlagen: {e.Message}");
+            return default;
+        }
+    }
+
     public static async Task<TResult?> PostAsync<TBody, TResult>(string path, TBody body)
     {
         try
@@ -67,7 +94,7 @@ public static class ApiClient
             var request = new System.Net.Http.HttpRequestMessage(
                 System.Net.Http.HttpMethod.Post, path);
             request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
-            request.Content = JsonContent.Create(body);
+            request.Content = JsonContent.Create(body, options: SendeOpts);
             var response = await Http.SendAsync(request);
             if (!response.IsSuccessStatusCode) return default;
             return await response.Content.ReadFromJsonAsync<TResult>(JsonOpts);

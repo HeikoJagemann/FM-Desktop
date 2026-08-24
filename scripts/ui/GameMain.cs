@@ -25,6 +25,7 @@ public partial class GameMain : Control
     private const string SceneSpielplan   = "res://scenes/liga/SpielplanView.tscn";
     private const string SceneStatistiken = "res://scenes/liga/StatistikenView.tscn";
     private const string SceneAufstellung = "res://scenes/taktik/AufstellungView.tscn";
+    private const string SceneTraining     = "res://scenes/training/TrainingView.tscn";
 
     public override async void _Ready()
     {
@@ -110,7 +111,7 @@ public partial class GameMain : Control
 
         // Einfache Menüpunkte
         foreach (var (label, scene) in new (string, string)[] {
-            ("💪  Training", ""),
+            ("💪  Training", SceneTraining),
             ("💶  Finanzen", ""),
             ("🏟  Umfeld",   ""),
             ("👦  Jugend",   SceneJugend),
