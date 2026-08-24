@@ -184,30 +184,32 @@ public partial class SpielerDetailOverlay : Control
     private Control BuildFaehigkeitenCard() => BaueCard("⚙️  Fähigkeiten", new VBoxContainer().Also(v =>
     {
         v.AddThemeConstantOverride("separation", 6);
-        v.AddChild(AttributZeile("Pass", _s.Pass, differenz: Diff("PASS")));
-        v.AddChild(AttributZeile("Ballkontrolle", _s.Ballkontrolle, differenz: Diff("BALLKONTROLLE")));
-        v.AddChild(AttributZeile("Schusstechnik", _s.Schusstechnik, differenz: Diff("SCHUSSTECHNIK")));
-        v.AddChild(AttributZeile("Schussstärke", _s.Schussstaerke, differenz: Diff("SCHUSSSTAERKE")));
-        v.AddChild(AttributZeile("Dribbling", _s.Dribbling, differenz: Diff("DRIBBLING")));
-        v.AddChild(AttributZeile("Kopfball", _s.Kopfball, differenz: Diff("KOPFBALL")));
-        v.AddChild(AttributZeile("Zweikampf", _s.Zweikampf, differenz: Diff("ZWEIKAMPF")));
-        v.AddChild(AttributZeile("Stellungsspiel", _s.Stellungsspiel, differenz: Diff("STELLUNGSSPIEL")));
-        v.AddChild(AttributZeile("Entscheidungen", _s.Entscheidungen, differenz: Diff("ENTSCHEIDUNGEN")));
-        v.AddChild(AttributZeile("Führungsqualität", _s.Fuehrungsqualitaet, differenz: Diff("FUEHRUNGSQUALITAET")));
-        v.AddChild(AttributZeile("Disziplin", _s.Disziplin, differenz: Diff("DISZIPLIN")));
+        v.AddChild(FmTheme.MakeLabel(
+            $"●  primär für {_s.HauptPosition}      ○  sekundär", 11, FmTheme.TextSecondary));
+        v.AddChild(AttributZeile("Pass", _s.Pass, differenz: Diff("PASS"), rolle: _s.RolleVon("Pass")));
+        v.AddChild(AttributZeile("Ballkontrolle", _s.Ballkontrolle, differenz: Diff("BALLKONTROLLE"), rolle: _s.RolleVon("Ballkontrolle")));
+        v.AddChild(AttributZeile("Schusstechnik", _s.Schusstechnik, differenz: Diff("SCHUSSTECHNIK"), rolle: _s.RolleVon("Schusstechnik")));
+        v.AddChild(AttributZeile("Schussstärke", _s.Schussstaerke, differenz: Diff("SCHUSSSTAERKE"), rolle: _s.RolleVon("Schussstärke")));
+        v.AddChild(AttributZeile("Dribbling", _s.Dribbling, differenz: Diff("DRIBBLING"), rolle: _s.RolleVon("Dribbling")));
+        v.AddChild(AttributZeile("Kopfball", _s.Kopfball, differenz: Diff("KOPFBALL"), rolle: _s.RolleVon("Kopfball")));
+        v.AddChild(AttributZeile("Zweikampf", _s.Zweikampf, differenz: Diff("ZWEIKAMPF"), rolle: _s.RolleVon("Zweikampf")));
+        v.AddChild(AttributZeile("Stellungsspiel", _s.Stellungsspiel, differenz: Diff("STELLUNGSSPIEL"), rolle: _s.RolleVon("Stellungsspiel")));
+        v.AddChild(AttributZeile("Entscheidungen", _s.Entscheidungen, differenz: Diff("ENTSCHEIDUNGEN"), rolle: _s.RolleVon("Entscheidungen")));
+        v.AddChild(AttributZeile("Führungsqualität", _s.Fuehrungsqualitaet, differenz: Diff("FUEHRUNGSQUALITAET"), rolle: _s.RolleVon("Führungsqualität")));
+        v.AddChild(AttributZeile("Disziplin", _s.Disziplin, differenz: Diff("DISZIPLIN"), rolle: _s.RolleVon("Disziplin")));
         v.AddChild(AttributZeile("Linker Fuß", _s.LinkerFuss));
         v.AddChild(AttributZeile("Rechter Fuß", _s.RechterFuss));
-        v.AddChild(AttributZeile("Schnelligkeit", _s.Schnelligkeit, differenz: Diff("SCHNELLIGKEIT")));
-        v.AddChild(AttributZeile("Ausdauer", _s.Ausdauer, differenz: Diff("AUSDAUER")));
+        v.AddChild(AttributZeile("Schnelligkeit", _s.Schnelligkeit, differenz: Diff("SCHNELLIGKEIT"), rolle: _s.RolleVon("Schnelligkeit")));
+        v.AddChild(AttributZeile("Ausdauer", _s.Ausdauer, differenz: Diff("AUSDAUER"), rolle: _s.RolleVon("Ausdauer")));
     }));
 
     private Control BuildTorwartCard() => BaueCard("🧤  Torwart", new VBoxContainer().Also(v =>
     {
         v.AddThemeConstantOverride("separation", 6);
         v.AddChild(AttributZeile("Talent (TW)", _s.TalentTW));
-        v.AddChild(AttributZeile("Strafraumbeherrschung", _s.Strafraumbeherrschung, differenz: Diff("STRAFRAUMBEHERRSCHUNG")));
-        v.AddChild(AttributZeile("Fangsicherheit", _s.Fangsicherheit, differenz: Diff("FANGSICHERHEIT")));
-        v.AddChild(AttributZeile("Reflexe", _s.Reflexe, differenz: Diff("REFLEXE")));
+        v.AddChild(AttributZeile("Strafraumbeherrschung", _s.Strafraumbeherrschung, differenz: Diff("STRAFRAUMBEHERRSCHUNG"), rolle: _s.RolleVon("Strafraumbeherrschung")));
+        v.AddChild(AttributZeile("Fangsicherheit", _s.Fangsicherheit, differenz: Diff("FANGSICHERHEIT"), rolle: _s.RolleVon("Fangsicherheit")));
+        v.AddChild(AttributZeile("Reflexe", _s.Reflexe, differenz: Diff("REFLEXE"), rolle: _s.RolleVon("Reflexe")));
     }));
 
     private static Control BaueCard(string titel, Control inhalt)
@@ -249,12 +251,15 @@ public partial class SpielerDetailOverlay : Control
     /// Veränderung über die letzten Spieltage. Ungleich 0 setzt Pfeil und Betrag hinter den Wert -
     /// so ist auf einen Blick erkennbar, woran der Spieler zuletzt gewachsen ist.
     /// </param>
-    private static Control AttributZeile(string label, int wert, int max = 100, int differenz = 0)
+    private static Control AttributZeile(string label, int wert, int max = 100, int differenz = 0,
+                                         Attributrolle rolle = Attributrolle.Nebensaechlich)
     {
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 10);
 
-        var l = FmTheme.MakeLabel(label, 13, FmTheme.TextSecondary);
+        // Primäre Fähigkeiten hervorheben, nebensächliche zurücknehmen: So ist auf einen Blick zu
+        // sehen, worauf es bei diesem Spieler ankommt.
+        var l = FmTheme.MakeLabel($"{RollenZeichen(rolle)} {label}", 13, RollenFarbe(rolle));
         l.CustomMinimumSize = new Vector2(150, 0);
         row.AddChild(l);
 
@@ -288,6 +293,21 @@ public partial class SpielerDetailOverlay : Control
 
         return row;
     }
+
+    /// <summary>● primär, ○ sekundär, nichts bei nebensächlich.</summary>
+    private static string RollenZeichen(Attributrolle rolle) => rolle switch
+    {
+        Attributrolle.Primaer   => "●",
+        Attributrolle.Sekundaer => "○",
+        _                       => "  ",
+    };
+
+    private static Color RollenFarbe(Attributrolle rolle) => rolle switch
+    {
+        Attributrolle.Primaer   => FmTheme.TextPrimary,
+        Attributrolle.Sekundaer => FmTheme.TextSecondary,
+        _                       => FmTheme.Border,
+    };
 
     private static Color FarbeFuerWert(int wert) => wert switch
     {

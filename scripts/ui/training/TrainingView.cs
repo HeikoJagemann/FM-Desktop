@@ -230,6 +230,12 @@ public partial class TrainingView : Control
             item.SetText(7, FokusAnzeige(s.IndividualFokus));
             item.SetText(8, WochenText(woche));
 
+            // Mouseover auf jeder Spalte: Welche Fähigkeiten für diesen Spieler zählen. Godot
+            // zeigt den Tooltip je Zelle, nicht je Zeile - deshalb überall derselbe Text.
+            string hinweis = $"{s.Name} ({s.HauptPosition})\n{s.AttributrollenText}";
+            for (int spalte = 0; spalte < Spalten.Length; spalte++)
+                item.SetTooltipText(spalte, hinweis);
+
             var farbe = FmTheme.FuerGruppe(s.Gruppe, abgesetzt);
             for (int spalte = 0; spalte < Spalten.Length; spalte++)
                 item.SetCustomBgColor(spalte, farbe);

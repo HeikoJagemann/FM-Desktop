@@ -7,6 +7,9 @@ using FMDesktop;
 
 namespace FMDesktop.Models;
 
+/// <summary>Wie stark eine Fähigkeit für die Position eines Spielers zählt.</summary>
+public enum Attributrolle { Primaer, Sekundaer, Nebensaechlich }
+
 public class PositionsStaerke
 {
     public string Position { get; set; } = "";
@@ -81,6 +84,23 @@ public class Spieler
     public string? IndividualFokus      { get; set; }
 
     public List<PositionsStaerke>? Top3Positionen { get; set; }
+
+    /// <summary>Fähigkeiten, auf die es auf seiner Position vor allem ankommt.</summary>
+    public List<string> PrimaerAttribute   { get; set; } = new();
+
+    /// <summary>Fähigkeiten, die mitspielen, aber nicht den Ausschlag geben.</summary>
+    public List<string> SekundaerAttribute { get; set; } = new();
+
+    /// <summary>Einstufung einer Fähigkeit für diesen Spieler.</summary>
+    public Attributrolle RolleVon(string anzeigename) =>
+        PrimaerAttribute.Contains(anzeigename)   ? Attributrolle.Primaer
+      : SekundaerAttribute.Contains(anzeigename) ? Attributrolle.Sekundaer
+      : Attributrolle.Nebensaechlich;
+
+    /// <summary>Kurztext für Mouseover: was der Spieler auf seiner Position braucht.</summary>
+    public string AttributrollenText =>
+        $"Primär: {string.Join(", ", PrimaerAttribute)}\n"
+      + $"Sekundär: {string.Join(", ", SekundaerAttribute)}";
 
     /// <summary>Potenzial als Spanne - bewusst unscharf, kein Manager kennt den Endwert exakt.</summary>
     public string PotenzialText => PotenzialBis > 0 ? $"{PotenzialVon}-{PotenzialBis}" : "?";

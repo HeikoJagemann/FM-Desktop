@@ -84,10 +84,19 @@ public partial class StartScreen : Control
         _auswahlPanel.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         stack.AddChild(_auswahlPanel);
 
-        // Version-Label
-        var version = FmTheme.MakeLabel($"v0.0.1", 11, FmTheme.TextSecondary);
+        // Version aus den Projekteinstellungen, nicht fest verdrahtet: Sonst zeigt der Startbildschirm
+        // eine Version an, die mit dem tatsächlich laufenden Stand nichts zu tun hat.
+        var version = FmTheme.MakeLabel($"v{Projektversion()}", 11, FmTheme.TextSecondary);
         version.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(version);
+    }
+
+    /// <summary>Version aus project.godot (config/version).</summary>
+    private static string Projektversion()
+    {
+        var wert = ProjectSettings.GetSetting("application/config/version");
+        var text = wert.AsString();
+        return string.IsNullOrEmpty(text) ? "?" : text;
     }
 
     private Control BuildHero()
