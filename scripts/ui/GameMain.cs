@@ -189,6 +189,25 @@ public partial class GameMain : Control
         _fortschrittLabel.Text = "Starte …";
 
         long vereinId = GameState.Instance.VereinId;
+
+        // Zuerst versuchen, das eigene Spiel live zu spielen - dort kann selbst gewechselt werden.
+        var live = await ApiClient.PostAsync<object, LiveSpiel>(
+            $"spiel/live/start?vereinId={vereinId}", new { });
+
+        if (live != null && live.SpielId > 0)
+        {
+            _fortschrittLabel.Text = "";
+            LiveSpielDialog.Zeige(this, live, async () =>
+            {
+                _simulierenButton.Disabled = false;
+                await AktualisiereSaisonStand();
+                LadeScene(_aktuelleScene);
+            });
+            return;
+        }
+
+        // Spielfrei: der Spieltag wird ohne eigene Beteiligung durchgerechnet.
+        _fortschrittLabel.Text = "Spielfrei – Spieltag wird berechnet …";
         bool gestartet = await ApiClient.PostAsync($"spiel/spieltag/simulieren?vereinId={vereinId}");
         if (!gestartet)
         {
@@ -245,21 +264,7 @@ public partial class GameMain : Control
         _simulierenButton.Disabled = false;
 
         await AktualisiereSaisonStand();
-
-        // Eigenes Spiel live nachspielen. Die Ansicht wird erst beim Schließen aktualisiert,
-        // damit das Ergebnis nicht schon im Hintergrund verraten wird.
-        var bericht = await ApiClient.GetAsync<SpielBericht>(
-            $"spiel/verein/{GameState.Instance.VereinId}/letztes");
-
-        if (bericht is { Gespielt: true })
-        {
-            LiveSpielDialog.Zeige(this, bericht, () => LadeScene(_aktuelleScene));
-        }
-        else
-        {
-            // Spielfrei oder Bericht nicht abrufbar - dann direkt aktualisieren.
-            LadeScene(_aktuelleScene);
-        }
+        LadeScene(_aktuelleScene);
     }
 
     private async System.Threading.Tasks.Task AktualisiereSaisonStand()

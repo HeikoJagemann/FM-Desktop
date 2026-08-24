@@ -1,3 +1,4 @@
+#nullable enable
 namespace FMDesktop.Models;
 
 /// <summary>
@@ -10,4 +11,16 @@ public enum Positionsgruppe
     Abwehr,
     Mittelfeld,
     Sturm,
+}
+
+public static class PositionsgruppeHelfer
+{
+    /// <summary>Gruppe zu einem Positionskürzel wie "IV" oder "ST".</summary>
+    public static Positionsgruppe Von(string? position) => position switch
+    {
+        "TW"                                 => Positionsgruppe.Tor,
+        "IV" or "LV" or "RV"                 => Positionsgruppe.Abwehr,
+        "DM" or "ZM" or "LM" or "RM" or "OM" => Positionsgruppe.Mittelfeld,
+        _                                    => Positionsgruppe.Sturm,
+    };
 }

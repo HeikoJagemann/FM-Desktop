@@ -3,62 +3,55 @@ using Godot;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using FMDesktop.Api;
 using FMDesktop.Models;
 
 namespace FMDesktop.UI;
 
 /// <summary>
-/// Spielt eine bereits berechnete Partie Minute für Minute nach: Uhr von 0 bis 90,
-/// mitlaufender Spielstand und Ereignisse als Textprotokoll.
+/// Bildschirmsimulation der eigenen Partie: Die Uhr läuft von 0 bis 90, der Spieler kann
+/// jederzeit auswechseln.
 ///
-/// <para>Das Backend rechnet das Spiel in einem Zug durch; hier wird der gespeicherte
-/// Minutenverlauf lediglich abgespielt. Dadurch ist die Anzeige jederzeit konsistent mit
-/// Tabelle und Statistik.</para>
+/// <para>Anders als früher wird hier kein fertiges Protokoll abgespielt – der Server rechnet
+/// minutenweise weiter, sobald dieser Dialog es anfordert. Nur so kann ein Wechsel den weiteren
+/// Verlauf tatsächlich beeinflussen.</para>
 /// </summary>
 public partial class LiveSpielDialog : Control
 {
-    /// Sekunden pro Spielminute – 90 Minuten dauern damit gut eine Viertelminute.
-    private const double SekundenProMinute = 0.18;
+    /// Sekunden pro Spielminute.
+    private const double SekundenProMinute = 0.20;
     private const int Spielminuten = 90;
-    private const int Halbzeit = 45;
 
     private static LiveSpielDialog? _instanz;
 
-    private SpielBericht _bericht = null!;
+    private LiveSpiel _spiel = null!;
     private Action? _beimSchliessen;
 
     private Label _ergebnisLabel = null!;
     private Label _minuteLabel = null!;
+    private Label _wechselLabel = null!;
     private ProgressBar _uhr = null!;
     private VBoxContainer _log = null!;
     private ScrollContainer _logScroll = null!;
+    private Button _wechselButton = null!;
     private Button _aktionButton = null!;
     private Timer _timer = null!;
 
-    private List<SpielerZeile> _heimZeilen = new();
-    private List<SpielerZeile> _gastZeilen = new();
+    private VBoxContainer _heimSpalte = null!;
+    private VBoxContainer _gastSpalte = null!;
 
-    private int _minute;
-    private int _naechstesEreignis;
-    private int _heimTore;
-    private int _gastTore;
+    private int _gezeigteEreignisse;
     private bool _abgepfiffen;
     private bool _halbzeitGezeigt;
+    private bool _wartetAufServer;
+    private bool _spieltagLaeuft;
 
-    public static void Zeige(Node caller, SpielBericht bericht, Action? beimSchliessen = null)
+    public static void Zeige(Node caller, LiveSpiel spiel, Action? beimSchliessen = null)
     {
-        if (_instanz != null && IsInstanceValid(_instanz))
-        {
-            _instanz.QueueFree();
-        }
+        if (_instanz != null && IsInstanceValid(_instanz)) _instanz.QueueFree();
 
-        var dialog = new LiveSpielDialog
-        {
-            _bericht = bericht,
-            _beimSchliessen = beimSchliessen,
-        };
+        var dialog = new LiveSpielDialog { _spiel = spiel, _beimSchliessen = beimSchliessen };
         _instanz = dialog;
-
         var scene = caller.GetTree().CurrentScene ?? caller.GetTree().Root;
         scene.AddChild(dialog);
     }
@@ -75,8 +68,6 @@ public partial class LiveSpielDialog : Control
 
         var bg = new ColorRect { Color = new Color(0, 0, 0, 0.65f) };
         bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        // Bewusst kein Schliessen per Klick daneben - waehrend des laufenden Spiels waere das
-        // zu leicht versehentlich ausgeloest.
         bg.MouseFilter = MouseFilterEnum.Stop;
         AddChild(bg);
 
@@ -87,6 +78,7 @@ public partial class LiveSpielDialog : Control
         center.AddChild(BuildCard());
 
         SchreibeZeile(0, "Anpfiff", FmTheme.TextSecondary);
+        Aktualisiere(_spiel);
 
         _timer = new Timer { WaitTime = SekundenProMinute, OneShot = false };
         _timer.Timeout += OnTick;
@@ -94,24 +86,122 @@ public partial class LiveSpielDialog : Control
         _timer.Start();
     }
 
-    public override void _Input(InputEvent @event)
-    {
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
-        {
-            Schliessen();
-            GetViewport().SetInputAsHandled();
-        }
-    }
-
     // ── Aufbau ───────────────────────────────────────────────────────────────
 
-    /// <summary>Eine Mannschaftsspalte mit Stärke und Spielern samt Frische-Balken.</summary>
-    private Control BuildTeamSpalte(List<AufstellungsSpieler> aufstellung, string verein,
-                                    double staerke, bool eigener, out List<SpielerZeile> zeilen)
+    private Control BuildCard()
     {
-        zeilen = new List<SpielerZeile>();
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(940, 0) };
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(10));
 
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(250, 0) };
+        var margin = new MarginContainer();
+        FmTheme.SetMargin(margin, 24);
+        panel.AddChild(margin);
+
+        var root = new VBoxContainer();
+        root.AddThemeConstantOverride("separation", 12);
+        margin.AddChild(root);
+
+        // Kopfzeile
+        var kopf = new HBoxContainer();
+        var titel = FmTheme.MakeLabel("⚽  Bildschirmsimulation", 14, FmTheme.TextSecondary);
+        titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        kopf.AddChild(titel);
+        var close = new Button { Text = "✕", CustomMinimumSize = new Vector2(32, 32) };
+        FmTheme.ApplyButton(close, FmTheme.BgPanel);
+        close.Pressed += Schliessen;
+        kopf.AddChild(close);
+        root.AddChild(kopf);
+
+        // Spielstand
+        var stand = new HBoxContainer();
+        stand.AddThemeConstantOverride("separation", 12);
+
+        var heim = FmTheme.MakeLabel(_spiel.HeimVerein ?? "", 17,
+            _spiel.EigenesHeimspiel ? FmTheme.Accent : FmTheme.TextPrimary, HorizontalAlignment.Right);
+        heim.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        stand.AddChild(heim);
+
+        _ergebnisLabel = FmTheme.MakeLabel("0 : 0", 26, FmTheme.TextPrimary, HorizontalAlignment.Center);
+        _ergebnisLabel.CustomMinimumSize = new Vector2(110, 0);
+        stand.AddChild(_ergebnisLabel);
+
+        var gast = FmTheme.MakeLabel(_spiel.GastVerein ?? "", 17,
+            !_spiel.EigenesHeimspiel ? FmTheme.Accent : FmTheme.TextPrimary);
+        gast.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        stand.AddChild(gast);
+        root.AddChild(stand);
+
+        // Uhr
+        var uhrZeile = new HBoxContainer();
+        uhrZeile.AddThemeConstantOverride("separation", 10);
+        _uhr = new ProgressBar
+        {
+            MinValue = 0, MaxValue = Spielminuten, Value = 0, ShowPercentage = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(0, 12),
+        };
+        _uhr.AddThemeStyleboxOverride("fill", Balken(FmTheme.Success));
+        _uhr.AddThemeStyleboxOverride("background", Balken(FmTheme.BgToolbar));
+        uhrZeile.AddChild(_uhr);
+        _minuteLabel = FmTheme.MakeLabel("0'", 15, FmTheme.TextPrimary, HorizontalAlignment.Right);
+        _minuteLabel.CustomMinimumSize = new Vector2(48, 0);
+        uhrZeile.AddChild(_minuteLabel);
+        root.AddChild(uhrZeile);
+
+        var sep = new HSeparator();
+        sep.AddThemeColorOverride("color", FmTheme.Border);
+        root.AddChild(sep);
+
+        // Aufstellungen links/rechts, Verlauf in der Mitte
+        var mitte = new HBoxContainer();
+        mitte.AddThemeConstantOverride("separation", 10);
+        mitte.SizeFlagsVertical = SizeFlags.ExpandFill;
+        root.AddChild(mitte);
+
+        mitte.AddChild(BuildTeamSpalte(_spiel.HeimVerein ?? "", _spiel.HeimStaerke,
+            _spiel.EigenesHeimspiel, out _heimSpalte));
+
+        _logScroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(330, 320),
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        mitte.AddChild(_logScroll);
+        _log = new VBoxContainer();
+        _log.AddThemeConstantOverride("separation", 5);
+        _log.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _logScroll.AddChild(_log);
+
+        mitte.AddChild(BuildTeamSpalte(_spiel.GastVerein ?? "", _spiel.GastStaerke,
+            !_spiel.EigenesHeimspiel, out _gastSpalte));
+
+        // Aktionsleiste
+        var leiste = new HBoxContainer();
+        leiste.AddThemeConstantOverride("separation", 8);
+
+        _wechselLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        _wechselLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        leiste.AddChild(_wechselLabel);
+
+        _wechselButton = new Button { Text = "🔄  Wechseln", CustomMinimumSize = new Vector2(150, 38) };
+        FmTheme.ApplyButton(_wechselButton, FmTheme.BgPanel);
+        _wechselButton.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        _wechselButton.Pressed += OnWechselnPressed;
+        leiste.AddChild(_wechselButton);
+
+        _aktionButton = new Button { Text = "⏩  Überspringen", CustomMinimumSize = new Vector2(170, 38) };
+        FmTheme.ApplyButton(_aktionButton, FmTheme.BgPanel);
+        _aktionButton.Pressed += OnAktionPressed;
+        leiste.AddChild(_aktionButton);
+
+        root.AddChild(leiste);
+        return panel;
+    }
+
+    private Control BuildTeamSpalte(string verein, double staerke, bool eigener,
+                                    out VBoxContainer spielerBox)
+    {
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(255, 0) };
         var style = new StyleBoxFlat { BgColor = FmTheme.BgToolbar };
         style.SetBorderWidthAll(1);
         style.SetContentMarginAll(0);
@@ -125,8 +215,7 @@ public partial class LiveSpielDialog : Control
         vbox.AddThemeConstantOverride("separation", 3);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel(verein, 14,
-            eigener ? FmTheme.Accent : FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeLabel(verein, 14, eigener ? FmTheme.Accent : FmTheme.TextPrimary));
         vbox.AddChild(FmTheme.MakeLabel(
             $"Stärke {staerke.ToString("0.0", CultureInfo.GetCultureInfo("de-DE"))}",
             12, FmTheme.TextSecondary));
@@ -135,264 +224,193 @@ public partial class LiveSpielDialog : Control
         sep.AddThemeColorOverride("color", FmTheme.Border);
         vbox.AddChild(sep);
 
-        foreach (var spieler in aufstellung)
-        {
-            var zeile = new SpielerZeile(spieler);
-            zeilen.Add(zeile);
-            vbox.AddChild(zeile.Wurzel);
-        }
+        spielerBox = new VBoxContainer();
+        spielerBox.AddThemeConstantOverride("separation", 2);
+        vbox.AddChild(spielerBox);
 
         return panel;
     }
 
-    /// <summary>Eine Zeile in der Mannschaftsspalte; der Frische-Balken läuft mit der Uhr mit.</summary>
-    private sealed class SpielerZeile
+    private static StyleBoxFlat Balken(Color farbe) => new()
     {
-        public readonly AufstellungsSpieler Spieler;
-        public readonly Control Wurzel;
-        private readonly ProgressBar _frische;
-        private readonly Label _name;
+        BgColor = farbe,
+        CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3,
+        CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
+    };
 
-        public SpielerZeile(AufstellungsSpieler spieler)
+    // ── Ablauf ───────────────────────────────────────────────────────────────
+
+    private async void OnTick()
+    {
+        // Läuft noch eine Anfrage, diesen Tick auslassen - sonst überholen sich die Minuten.
+        if (_wartetAufServer || _abgepfiffen) return;
+
+        _wartetAufServer = true;
+        var naechste = Math.Min(_spiel.Minute + 1, Spielminuten);
+        var zustand = await ApiClient.PostAsync<object, LiveSpiel>(
+            $"spiel/live/bis/{naechste}", new { });
+        _wartetAufServer = false;
+
+        if (zustand == null)
         {
-            Spieler = spieler;
+            _timer.Stop();
+            SchreibeZeile(_spiel.Minute, "Verbindung zum Spiel verloren.", FmTheme.Danger);
+            _aktionButton.Text = "Schließen";
+            _abgepfiffen = true;
+            return;
+        }
 
+        Aktualisiere(zustand);
+        if (zustand.Minute >= Spielminuten) await Abpfiff();
+    }
+
+    private void Aktualisiere(LiveSpiel zustand)
+    {
+        _spiel = zustand;
+
+        _minuteLabel.Text = $"{zustand.Minute}'";
+        _uhr.Value = zustand.Minute;
+        _ergebnisLabel.Text = $"{zustand.HeimTore} : {zustand.GastTore}";
+        _wechselLabel.Text = zustand.WechselHinweis;
+        _wechselButton.Disabled = !zustand.DarfWechseln || _abgepfiffen;
+
+        FuelleSpalte(_heimSpalte, zustand.HeimAufstellung);
+        FuelleSpalte(_gastSpalte, zustand.GastAufstellung);
+
+        // Nur die neu hinzugekommenen Ereignisse anhängen.
+        for (int i = _gezeigteEreignisse; i < zustand.Ereignisse.Count; i++)
+        {
+            var e = zustand.Ereignisse[i];
+            bool eigenes = e.VereinId == zustand.EigenerVereinId;
+            var farbe = e.IstTor ? (eigenes ? FmTheme.Success : FmTheme.Danger) : FmTheme.TextSecondary;
+            SchreibeZeile(e.Minute, $"{e.Symbol}  {e.Beschreibung}", farbe);
+        }
+        _gezeigteEreignisse = zustand.Ereignisse.Count;
+
+        if (!_halbzeitGezeigt && zustand.Minute >= 45)
+        {
+            _halbzeitGezeigt = true;
+            SchreibeZeile(45, $"Halbzeit  –  {zustand.HeimTore} : {zustand.GastTore}",
+                FmTheme.TextSecondary);
+        }
+    }
+
+    private void FuelleSpalte(VBoxContainer box, List<LiveSpieler> spieler)
+    {
+        foreach (Node kind in box.GetChildren()) kind.QueueFree();
+
+        foreach (var s in spieler)
+        {
             var zeile = new HBoxContainer();
             zeile.AddThemeConstantOverride("separation", 6);
 
-            var slot = FmTheme.MakeLabel(spieler.Slot, 11, FmTheme.TextSecondary);
+            var slot = FmTheme.MakeLabel(s.Slot, 11, FmTheme.TextSecondary);
             slot.CustomMinimumSize = new Vector2(42, 0);
             zeile.AddChild(slot);
 
-            _name = FmTheme.MakeLabel(spieler.Name, 11, FmTheme.TextPrimary);
-            _name.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-            zeile.AddChild(_name);
+            var name = FmTheme.MakeLabel(s.Name, 11,
+                s.AufDemPlatz ? FmTheme.TextPrimary : FmTheme.TextSecondary);
+            name.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            zeile.AddChild(name);
 
-            var staerke = FmTheme.MakeLabel(spieler.Staerke.ToString(), 11, FmTheme.TextSecondary,
+            var staerke = FmTheme.MakeLabel(s.Staerke.ToString(), 11, FmTheme.TextSecondary,
                 HorizontalAlignment.Right);
             staerke.CustomMinimumSize = new Vector2(24, 0);
             zeile.AddChild(staerke);
 
-            _frische = new ProgressBar
+            var frische = new ProgressBar
             {
-                MinValue = 0,
-                MaxValue = 100,
-                Value = 100,
+                MinValue = 0, MaxValue = 100,
+                Value = s.AufDemPlatz ? s.Kondition : 0,
                 ShowPercentage = false,
                 CustomMinimumSize = new Vector2(46, 8),
             };
-            zeile.AddChild(_frische);
+            frische.AddThemeStyleboxOverride("fill", Balken(FrischeFarbe(s.Kondition)));
+            frische.AddThemeStyleboxOverride("background", Balken(FmTheme.BgDark));
+            zeile.AddChild(frische);
 
-            Wurzel = zeile;
-            Aktualisiere(0);
+            box.AddChild(zeile);
         }
-
-        public void Aktualisiere(int minute)
-        {
-            bool aufDemPlatz = Spieler.StehtAufDemPlatz(minute);
-            double frische = Spieler.FrischeBei(minute);
-
-            _frische.Value = aufDemPlatz ? frische : 0;
-            _frische.AddThemeStyleboxOverride("fill", Balken(FrischeFarbe(frische)));
-            _frische.AddThemeStyleboxOverride("background", Balken(FmTheme.BgDark));
-
-            // Wer noch nicht oder nicht mehr spielt, tritt zurück.
-            _name.AddThemeColorOverride("font_color",
-                aufDemPlatz ? FmTheme.TextPrimary : FmTheme.TextSecondary);
-        }
-
-        private static Color FrischeFarbe(double frische) => frische switch
-        {
-            >= 85 => FmTheme.Success,
-            >= 70 => FmTheme.Gold,
-            _     => FmTheme.Danger,
-        };
     }
 
-    private Control BuildCard()
+    private static Color FrischeFarbe(double frische) => frische switch
     {
-        // Breit genug für Heim-Spalte, Verlauf und Gast-Spalte nebeneinander.
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(920, 0) };
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(10));
+        >= 85 => FmTheme.Success,
+        >= 70 => FmTheme.Gold,
+        _     => FmTheme.Danger,
+    };
 
-        var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 24);
-        panel.AddChild(margin);
+    // ── Auswechseln ──────────────────────────────────────────────────────────
 
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
+    private void OnWechselnPressed()
+    {
+        if (_abgepfiffen) return;
 
-        // Kopfzeile
-        var kopf = new HBoxContainer();
-        var titel = FmTheme.MakeLabel($"⚽  Spieltag {_bericht.Spieltag}", 14, FmTheme.TextSecondary);
-        titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        kopf.AddChild(titel);
-
-        var close = new Button { Text = "✕", CustomMinimumSize = new Vector2(32, 32) };
-        FmTheme.ApplyButton(close, FmTheme.BgPanel);
-        close.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
-        close.Pressed += Schliessen;
-        kopf.AddChild(close);
-        root.AddChild(kopf);
-
-        // Spielstand
-        var stand = new HBoxContainer();
-        stand.AddThemeConstantOverride("separation", 12);
-
-        var heim = FmTheme.MakeLabel(_bericht.HeimVerein ?? "", 17,
-            IstEigener(_bericht.HeimVereinId) ? FmTheme.Accent : FmTheme.TextPrimary,
-            HorizontalAlignment.Right);
-        heim.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        stand.AddChild(heim);
-
-        _ergebnisLabel = FmTheme.MakeLabel("0 : 0", 26, FmTheme.TextPrimary, HorizontalAlignment.Center);
-        _ergebnisLabel.CustomMinimumSize = new Vector2(110, 0);
-        stand.AddChild(_ergebnisLabel);
-
-        var gast = FmTheme.MakeLabel(_bericht.GastVerein ?? "", 17,
-            IstEigener(_bericht.GastVereinId) ? FmTheme.Accent : FmTheme.TextPrimary);
-        gast.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        stand.AddChild(gast);
-
-        root.AddChild(stand);
-
-        // Spieluhr
-        var uhrZeile = new HBoxContainer();
-        uhrZeile.AddThemeConstantOverride("separation", 10);
-
-        _uhr = new ProgressBar
-        {
-            MinValue = 0,
-            MaxValue = Spielminuten,
-            Value = 0,
-            ShowPercentage = false,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0, 12),
-        };
-        _uhr.AddThemeStyleboxOverride("fill", Balken(FmTheme.Success));
-        _uhr.AddThemeStyleboxOverride("background", Balken(FmTheme.BgToolbar));
-        uhrZeile.AddChild(_uhr);
-
-        _minuteLabel = FmTheme.MakeLabel("0'", 15, FmTheme.TextPrimary, HorizontalAlignment.Right);
-        _minuteLabel.CustomMinimumSize = new Vector2(48, 0);
-        uhrZeile.AddChild(_minuteLabel);
-
-        root.AddChild(uhrZeile);
-
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        root.AddChild(sep);
-
-        // Links Heim, in der Mitte der Verlauf, rechts Gast.
-        var mitte = new HBoxContainer();
-        mitte.AddThemeConstantOverride("separation", 10);
-        mitte.SizeFlagsVertical = SizeFlags.ExpandFill;
-        root.AddChild(mitte);
-
-        mitte.AddChild(BuildTeamSpalte(_bericht.HeimAufstellung, _bericht.HeimVerein ?? "",
-            _bericht.HeimStaerke, IstEigener(_bericht.HeimVereinId), out _heimZeilen));
-
-        _logScroll = new ScrollContainer
-        {
-            CustomMinimumSize = new Vector2(340, 320),
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        mitte.AddChild(_logScroll);
-
-        _log = new VBoxContainer();
-        _log.AddThemeConstantOverride("separation", 5);
-        _log.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _logScroll.AddChild(_log);
-
-        mitte.AddChild(BuildTeamSpalte(_bericht.GastAufstellung, _bericht.GastVerein ?? "",
-            _bericht.GastStaerke, IstEigener(_bericht.GastVereinId), out _gastZeilen));
-
-        // Aktionsleiste
-        var leiste = new HBoxContainer();
-        leiste.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-
-        _aktionButton = new Button { Text = "⏩  Überspringen" };
-        FmTheme.ApplyButton(_aktionButton, FmTheme.BgPanel);
-        _aktionButton.Pressed += OnAktionPressed;
-        leiste.AddChild(_aktionButton);
-
-        root.AddChild(leiste);
-
-        return panel;
+        _timer.Stop(); // Uhr steht, solange gewählt wird
+        WechselDialog.Zeige(this, _spiel,
+            beiBestaetigung: async paare => await FuehreWechselAus(paare),
+            beiAbbruch: () => { if (!_abgepfiffen) _timer.Start(); });
     }
 
-    private static StyleBoxFlat Balken(Color farbe)
+    /// <summary>
+    /// Führt alle geplanten Wechsel nacheinander aus. Da die Uhr steht, geschieht das in
+    /// derselben Spielminute und zählt damit als ein Wechselfenster.
+    /// </summary>
+    private async System.Threading.Tasks.Task FuehreWechselAus(List<(long Raus, long Rein)> paare)
     {
-        return new StyleBoxFlat
+        LiveSpiel? zustand = null;
+        foreach (var (raus, rein) in paare)
         {
-            BgColor = farbe,
-            CornerRadiusTopLeft = 3,
-            CornerRadiusTopRight = 3,
-            CornerRadiusBottomLeft = 3,
-            CornerRadiusBottomRight = 3,
-        };
+            zustand = await ApiClient.PostAsync<object, LiveSpiel>(
+                $"spiel/live/wechsel?raus={raus}&rein={rein}", new { });
+            if (zustand == null) break;
+        }
+        if (zustand != null) Aktualisiere(zustand);
+        if (!_abgepfiffen) _timer.Start();
     }
 
-    // ── Ablauf ───────────────────────────────────────────────────────────────
+    // ── Abpfiff ──────────────────────────────────────────────────────────────
 
-    private void OnTick()
+    private async System.Threading.Tasks.Task Abpfiff()
     {
-        _minute++;
-        SpuleBisMinute(_minute);
+        if (_abgepfiffen) return;
+        _abgepfiffen = true;
+        _timer.Stop();
+        _wechselButton.Disabled = true;
 
-        if (_minute >= Spielminuten)
+        var zustand = await ApiClient.PostAsync<object, LiveSpiel>("spiel/live/abpfiff", new { });
+        if (zustand != null)
         {
-            Abpfiff();
+            _gezeigteEreignisse = Math.Min(_gezeigteEreignisse, zustand.Ereignisse.Count);
+            Aktualisiere(zustand);
+        }
+
+        SchreibeZeile(Spielminuten,
+            $"Abpfiff  –  Endstand {_spiel.HeimTore} : {_spiel.GastTore}", FmTheme.TextPrimary);
+        _uhr.AddThemeStyleboxOverride("fill", Balken(FmTheme.Accent));
+
+        // Der restliche Spieltag läuft im Hintergrund - erst danach sind Tabelle und
+        // Statistiken stimmig, deshalb wird bis dahin gewartet.
+        _spieltagLaeuft = true;
+        _aktionButton.Disabled = true;
+        _aktionButton.Text = "Restlicher Spieltag …";
+        await WarteAufSpieltag();
+        _spieltagLaeuft = false;
+        _aktionButton.Disabled = false;
+        _aktionButton.Text = "Schließen";
+    }
+
+    private async System.Threading.Tasks.Task WarteAufSpieltag()
+    {
+        for (int i = 0; i < 120; i++)
+        {
+            var stand = await ApiClient.GetAsync<Fortschritt>("spiel/spieltag/fortschritt");
+            if (stand is { Fertig: true }) return;
+            await ToSignal(GetTree().CreateTimer(0.5), SceneTreeTimer.SignalName.Timeout);
         }
     }
 
-    private void SpuleBisMinute(int minute)
-    {
-        _minute = Math.Min(minute, Spielminuten);
-        _minuteLabel.Text = $"{_minute}'";
-        _uhr.Value = _minute;
-
-        // Frische beider Mannschaften mitlaufen lassen.
-        foreach (var zeile in _heimZeilen) zeile.Aktualisiere(_minute);
-        foreach (var zeile in _gastZeilen) zeile.Aktualisiere(_minute);
-
-        while (_naechstesEreignis < _bericht.Ereignisse.Count
-               && _bericht.Ereignisse[_naechstesEreignis].Minute <= _minute)
-        {
-            ZeigeEreignis(_bericht.Ereignisse[_naechstesEreignis]);
-            _naechstesEreignis++;
-        }
-
-        if (!_halbzeitGezeigt && _minute >= Halbzeit)
-        {
-            _halbzeitGezeigt = true;
-            SchreibeZeile(Halbzeit, $"Halbzeit  –  {_heimTore} : {_gastTore}", FmTheme.TextSecondary);
-        }
-    }
-
-    private void ZeigeEreignis(SpielEreignis ereignis)
-    {
-        if (ereignis.IstTor)
-        {
-            if (ereignis.VereinId == _bericht.HeimVereinId) _heimTore++;
-            else _gastTore++;
-            AktualisiereErgebnis();
-        }
-
-        var farbe = ereignis.IstTor
-            ? (IstEigener(ereignis.VereinId) ? FmTheme.Success : FmTheme.Danger)
-            : FmTheme.TextSecondary;
-
-        var verein = ereignis.VereinId == _bericht.HeimVereinId
-            ? _bericht.HeimVerein
-            : _bericht.GastVerein;
-
-        SchreibeZeile(ereignis.Minute,
-            $"{ereignis.Symbol}  {ereignis.Beschreibung}   ({verein})",
-            farbe);
-    }
+    // ── Protokoll ────────────────────────────────────────────────────────────
 
     private void SchreibeZeile(int minute, string text, Color farbe)
     {
@@ -414,52 +432,48 @@ public partial class LiveSpielDialog : Control
     private void ScrolleAnsEnde()
     {
         var leiste = _logScroll.GetVScrollBar();
-        if (leiste != null)
-        {
-            _logScroll.ScrollVertical = (int)leiste.MaxValue;
-        }
+        if (leiste != null) _logScroll.ScrollVertical = (int)leiste.MaxValue;
     }
 
-    private void AktualisiereErgebnis()
+    // ── Steuerung ────────────────────────────────────────────────────────────
+
+    private async void OnAktionPressed()
     {
-        _ergebnisLabel.Text = $"{_heimTore} : {_gastTore}";
-    }
+        if (_spieltagLaeuft) return;
 
-    private void Abpfiff()
-    {
-        if (_abgepfiffen) return;
-        _abgepfiffen = true;
-
-        _timer.Stop();
-        SpuleBisMinute(Spielminuten);
-        SchreibeZeile(Spielminuten, $"Abpfiff  –  Endstand {_heimTore} : {_gastTore}", FmTheme.TextPrimary);
-
-        _uhr.AddThemeStyleboxOverride("fill", Balken(FmTheme.Accent));
-        _aktionButton.Text = "Schließen";
-    }
-
-    private void OnAktionPressed()
-    {
         if (_abgepfiffen)
         {
             Schliessen();
+            return;
         }
-        else
+
+        // Überspringen: in einem Zug bis zum Ende rechnen lassen.
+        _timer.Stop();
+        _aktionButton.Disabled = true;
+        _wartetAufServer = true;
+        var zustand = await ApiClient.PostAsync<object, LiveSpiel>(
+            $"spiel/live/bis/{Spielminuten}", new { });
+        _wartetAufServer = false;
+        if (zustand != null) Aktualisiere(zustand);
+        _aktionButton.Disabled = false;
+        await Abpfiff();
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape } && _abgepfiffen && !_spieltagLaeuft)
         {
-            Abpfiff();
+            Schliessen();
+            GetViewport().SetInputAsHandled();
         }
     }
 
     private void Schliessen()
     {
         _timer?.Stop();
-        _beimSchliessen?.Invoke();
+        var beimSchliessen = _beimSchliessen;
         _beimSchliessen = null;
         QueueFree();
-    }
-
-    private static bool IstEigener(long? vereinId)
-    {
-        return vereinId.HasValue && vereinId.Value == GameState.Instance.VereinId;
+        beimSchliessen?.Invoke();
     }
 }
