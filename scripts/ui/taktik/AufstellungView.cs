@@ -37,7 +37,23 @@ public partial class PlayerRow : PanelContainer
         ("Stärken", 150, true,  HorizontalAlignment.Left),
         ("Talent",   80, false, HorizontalAlignment.Left),
         ("Alter",    44, false, HorizontalAlignment.Center),
+        ("Frische",  62, false, HorizontalAlignment.Center),
         ("Kader",    72, false, HorizontalAlignment.Left),
+    };
+
+    /// <summary>
+    /// Frische in Prozent. Ein Wert von 0 heißt "nie gesetzt" - solche Spieler stammen aus
+    /// Spielständen von vor dem Training und gehen mit voller Frische ins Spiel; eine "0 %" wäre
+    /// hier schlicht falsch.
+    /// </summary>
+    private static string FrischeText(int frische) => frische > 0 ? $"{frische} %" : "–";
+
+    private static Color FrischeFarbe(int frische) => frische switch
+    {
+        >= 85 => FmTheme.Success,
+        >= 70 => FmTheme.TextPrimary,
+        > 0   => FmTheme.Danger,
+        _     => FmTheme.TextSecondary,
     };
 
     public static PlayerRow Create(Spieler s, bool abgesetzt)
@@ -83,6 +99,7 @@ public partial class PlayerRow : PanelContainer
         AddCell(s.Top3PositionenText);
         AddCell(TalentSterne(s.Talent), TalentFarbe(s.Talent));
         AddCell(s.Alter.ToString());
+        AddCell(FrischeText(s.Frische), FrischeFarbe(s.Frische));
         AddCell(s.Kader, s.Kader == "Profi" ? FmTheme.TextPrimary : FmTheme.TextSecondary);
 
         row.MouseDefaultCursorShape = CursorShape.Drag;
@@ -138,15 +155,20 @@ public partial class PlayerRow : PanelContainer
 // ---------------------------------------------------------------------------
 public partial class PositionSlot : Button
 {
+    /// <summary>Technischer Schlüssel der Aufstellung, etwa "ZM_1".</summary>
     public string SlotName { get; private set; } = "";
+
+    /// <summary>Was auf dem Platz steht, etwa "LZM" - der Schlüssel bleibt unverändert.</summary>
+    public string Anzeige { get; private set; } = "";
+
     public long?  SpielerId { get; private set; }
     public string SpielerName { get; private set; } = "";
     public int?   Staerke { get; private set; }
 
     public event Action<PositionSlot, long, string>? PlayerDropped;
-    public static PositionSlot Create(string slotName)
+    public static PositionSlot Create(string slotName, string anzeige)
     {
-        var slot = new PositionSlot { SlotName = slotName };
+        var slot = new PositionSlot { SlotName = slotName, Anzeige = anzeige };
         slot.CustomMinimumSize = new Vector2(64, 52);
         slot.Refresh();
         return slot;
@@ -196,16 +218,17 @@ public partial class PositionSlot : Button
         AddThemeColorOverride("font_color", FmTheme.TextPrimary);
         AddThemeFontSizeOverride("font_size", 11);
 
+        // Auf dem Platz steht die Positionsbezeichnung, nicht der technische Schlüssel.
         if (occupied)
         {
             if (Staerke.HasValue)
-                Text = $"{SlotName}\n{TruncateName(SpielerName)}\n{Staerke.Value}";
+                Text = $"{Anzeige}\n{TruncateName(SpielerName)}\n{Staerke.Value}";
             else
-                Text = $"{SlotName}\n{TruncateName(SpielerName)}";
+                Text = $"{Anzeige}\n{TruncateName(SpielerName)}";
         }
         else
         {
-            Text = SlotName;
+            Text = Anzeige;
         }
     }
 
@@ -496,9 +519,10 @@ public partial class AufstellungView : Control
             slot.QueueFree();
         _slots.Clear();
 
+        var alleSlots = Formations[formation].Select(f => f.Item1).ToList();
         foreach (var (slotName, xRatio, yRatio) in Formations[formation])
         {
-            var slot = PositionSlot.Create(slotName);
+            var slot = PositionSlot.Create(slotName, SlotBezeichnung.Fuer(slotName, alleSlots));
             slot.Position = new Vector2(
                 FieldW * xRatio - SlotW * 0.5f,
                 FieldH * yRatio - SlotH * 0.5f);
@@ -530,7 +554,7 @@ public partial class AufstellungView : Control
 
         for (int i = 0; i < plaetze; i++)
         {
-            var slot = PositionSlot.Create($"B{i + 1}");
+            var slot = PositionSlot.Create($"B{i + 1}", $"B{i + 1}");
             slot.CustomMinimumSize = new Vector2(SlotW, 44);
             slot.PlayerDropped += OnPlayerDropped;
             slot.Pressed       += () => OnSlotPressed(slot);
@@ -679,15 +703,15 @@ public partial class AufstellungView : Control
     {
         var belegung = new Dictionary<long, string>();
 
-        foreach (var (slotName, slot) in _slots)
+        foreach (var (_, slot) in _slots)
         {
             if (slot.SpielerId.HasValue)
-                belegung[slot.SpielerId.Value] = slotName;
+                belegung[slot.SpielerId.Value] = slot.Anzeige;
         }
         foreach (var slot in _bankSlots)
         {
             if (slot.SpielerId.HasValue)
-                belegung[slot.SpielerId.Value] = slot.SlotName;
+                belegung[slot.SpielerId.Value] = slot.Anzeige;
         }
 
         foreach (var (spielerId, zeile) in _playerRows)
@@ -818,7 +842,7 @@ public partial class AufstellungView : Control
 
         targetSlot.Assign(spielerId, spielerName);
         AktualisiereListenPositionen();
-        _statusLabel.Text = $"{spielerName} → {targetSlot.SlotName}";
+        _statusLabel.Text = $"{spielerName} → {targetSlot.Anzeige}";
 
         // Auto-Speichern nach Zuweisung
         _ = UebernehmeAenderung();

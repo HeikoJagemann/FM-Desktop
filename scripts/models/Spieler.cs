@@ -11,6 +11,12 @@ public class PositionsStaerke
 {
     public string Position { get; set; } = "";
     public int    Staerke  { get; set; }
+
+    /// <summary>0 bis 100. Darunter fällt die Stärke; bei 0 bleibt dem Spieler die Hälfte.</summary>
+    public int    Eingespieltheit { get; set; }
+
+    /// <summary>Kurzzeichen für die Vertrautheit: voll, angelernt, fremd.</summary>
+    public string Zeichen => Eingespieltheit >= 90 ? "" : Eingespieltheit >= 40 ? "~" : "?";
 }
 
 
@@ -108,8 +114,12 @@ public class Spieler
     /// <summary>Sortierschlüssel: Gruppe, darin die stärkeren Spieler zuerst.</summary>
     public (int, int) Sortierung => ((int)Gruppe, -BestPositionStaerke);
 
+    /// <summary>
+    /// Beste Positionen mit Stärke. Ein "~" oder "?" hinter der Position zeigt an, dass sie dem
+    /// Spieler nur teilweise oder gar nicht vertraut ist - dort bringt er weniger auf den Platz.
+    /// </summary>
     public string Top3PositionenText =>
         Top3Positionen?.Count > 0
-            ? string.Join(" / ", Top3Positionen.Select(p => $"{p.Position} {p.Staerke}"))
+            ? string.Join(" / ", Top3Positionen.Select(p => $"{p.Position}{p.Zeichen} {p.Staerke}"))
             : Staerke.ToString();
 }
