@@ -31,7 +31,7 @@ public partial class SpielplanView : Control
 
         _tree = new Tree
         {
-            Columns             = 4,
+            Columns             = 5,
             ColumnTitlesVisible = true,
             HideRoot            = true,
             SizeFlagsVertical   = SizeFlags.ExpandFill,
@@ -39,14 +39,17 @@ public partial class SpielplanView : Control
             AllowRmbSelect      = true,
         };
         _tree.ItemMouseSelected += (position, mouseButtonIndex) => OnItemMouseSelected(mouseButtonIndex);
-        _tree.SetColumnTitle(0, "Heim");
-        _tree.SetColumnTitle(1, "Ergebnis");
-        _tree.SetColumnTitle(2, "Gast");
-        _tree.SetColumnTitle(3, "Status");
-        _tree.SetColumnExpand(0, true);
-        _tree.SetColumnExpand(2, true);
-        _tree.SetColumnExpand(1, false);
-        _tree.SetColumnExpand(3, false);
+        _tree.SetColumnTitle(0, "Termin");
+        _tree.SetColumnTitle(1, "Heim");
+        _tree.SetColumnTitle(2, "Ergebnis");
+        _tree.SetColumnTitle(3, "Gast");
+        _tree.SetColumnTitle(4, "Status");
+        _tree.SetColumnCustomMinimumWidth(0, 130);
+        _tree.SetColumnExpand(0, false);
+        _tree.SetColumnExpand(1, true);
+        _tree.SetColumnExpand(2, false);
+        _tree.SetColumnExpand(3, true);
+        _tree.SetColumnExpand(4, false);
         vbox.AddChild(_tree);
     }
 
@@ -97,10 +100,7 @@ public partial class SpielplanView : Control
             var header = _tree.CreateItem(root);
             header.SetText(0, $"  Spieltag {gruppe.Key}");
             header.SetCustomColor(0, FmTheme.TextSecondary);
-            header.SetSelectable(0, false);
-            header.SetSelectable(1, false);
-            header.SetSelectable(2, false);
-            header.SetSelectable(3, false);
+            for (int spalte = 0; spalte < 5; spalte++) header.SetSelectable(spalte, false);
             header.Collapsed = gruppe.Key != offenerSpieltag;
 
             foreach (var spiel in gruppe)
@@ -108,19 +108,22 @@ public partial class SpielplanView : Control
                 var item = _tree.CreateItem(header);
                 item.SetMetadata(0, spiel.Id);
                 item.SetMetadata(1, spiel.Gespielt);
-                item.SetText(0, spiel.HeimVerein?.Name ?? "");
-                item.SetText(1, spiel.Ergebnis);
-                item.SetText(2, spiel.GastVerein?.Name ?? "");
-                item.SetText(3, spiel.Gespielt ? "✓" : "–");
+                item.SetText(0, spiel.TerminText);
+                item.SetText(1, spiel.HeimVerein?.Name ?? "");
+                item.SetText(2, spiel.Ergebnis);
+                item.SetText(3, spiel.GastVerein?.Name ?? "");
+                item.SetText(4, spiel.Gespielt ? "✓" : "–");
+                item.SetCustomColor(0, FmTheme.TextSecondary);
 
                 // Eigene Spiele hervorheben
                 bool eigenes = spiel.HeimVerein?.Id == GameState.Instance.VereinId
                             || spiel.GastVerein?.Id  == GameState.Instance.VereinId;
                 if (eigenes)
                 {
-                    item.SetCustomColor(0, FmTheme.Accent);
+                    // Der Termin bleibt gedaempft - hervorgehoben werden die Namen.
                     item.SetCustomColor(1, FmTheme.Accent);
                     item.SetCustomColor(2, FmTheme.Accent);
+                    item.SetCustomColor(3, FmTheme.Accent);
                 }
             }
         }

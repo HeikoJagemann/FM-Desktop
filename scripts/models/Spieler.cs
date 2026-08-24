@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using FMDesktop;
+
 namespace FMDesktop.Models;
 
 public class PositionsStaerke
@@ -19,11 +21,15 @@ public class Spieler
     public DateOnly Geburtsdatum   { get; set; }
     public string   Nationalitaet  { get; set; } = "";
 
+    /// <summary>
+    /// Alter zum aktuellen Spieldatum, nicht zum heutigen Kalendertag: Ein Spieler altert mit den
+    /// Saisons der Spielwelt.
+    /// </summary>
     public int Alter
     {
         get
         {
-            var heute = DateOnly.FromDateTime(DateTime.Today);
+            var heute = GameState.Instance?.Spieldatum ?? DateOnly.FromDateTime(DateTime.Today);
             int alter = heute.Year - Geburtsdatum.Year;
             if (Geburtsdatum.AddYears(alter) > heute) alter--;
             return alter;

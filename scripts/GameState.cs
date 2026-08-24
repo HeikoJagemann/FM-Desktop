@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using FMDesktop.Api;
 
 namespace FMDesktop;
@@ -13,6 +14,14 @@ public partial class GameState : Node
     public long   LigaId        { get; private set; }
     public string LigaName      { get; private set; } = "";
     public string CurrentSchema { get; private set; } = "db_default";
+
+    /// <summary>
+    /// Das "Heute" der Spielwelt. Das Alter eines Spielers zählt danach, nicht nach der Uhr des
+    /// Rechners - sonst altert ein Spieler über den Saisonwechsel hinweg nicht.
+    /// </summary>
+    public DateOnly Spieldatum { get; private set; } = DateOnly.FromDateTime(DateTime.Today);
+
+    public void SetSpieldatum(DateOnly datum) => Spieldatum = datum;
 
     public override void _Ready()
     {
