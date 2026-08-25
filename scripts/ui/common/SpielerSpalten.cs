@@ -81,14 +81,17 @@ public static class SpielerSpalten
         Sortierung = s => -s.Staerke,
     };
 
+    /// <summary>Sterne zum <em>Talent</em> - siehe auch <see cref="PotenzialSterne"/>.</summary>
     public static GridSpalte<Spieler> Talent => new()
     {
-        Titel = "Talent", Breite = 88,
+        Titel = "Talent ★", Breite = 88,
         Text       = s => s.TalentSterneText,
         Farbe      = s => s.Talent >= 80 ? FmTheme.Gold
                         : s.Talent >= 65 ? FmTheme.Success
                         : FmTheme.TextSecondary,
-        Tooltip    = s => $"Talent {s.Talent} von 100 - wie viel Luft nach oben noch da ist.",
+        Tooltip    = s => $"Talent {s.Talent} von 100 ({s.TalentSterne} von 5 Sternen).\n"
+                        + "Die Skala gilt für alle Ligen: Fünf Sterne hat, wer auch international "
+                        + "herausragt.",
         Sortierung = s => -s.Talent,
     };
 
@@ -142,15 +145,23 @@ public static class SpielerSpalten
     public static GridSpalte<Spieler> Potenzial => new()
     {
         Titel = "Potenzial", Breite = 80,
-        Text    = s => s.PotenzialText,
-        Tooltip = _ => "Geschätzte Spanne - den genauen Endwert kennt kein Manager.",
+        Text       = s => s.PotenzialText,
+        Tooltip    = s => $"Geschätzte Spanne {s.PotenzialText} - wo der Spieler einmal landen "
+                        + "kann.\nDen genauen Endwert kennt kein Manager.",
+        Sortierung = s => -s.PotenzialVon,
     };
 
+    /// <summary>
+    /// Sterne zum <em>Potenzial</em>. Der Titel nennt es ausdrücklich, weil die Talentspalte
+    /// ebenfalls Sterne zeigt - gleiche Optik, andere Bedeutung.
+    /// </summary>
     public static GridSpalte<Spieler> PotenzialSterne => new()
     {
-        Titel = "Sterne", Breite = 84,
+        Titel = "Potenzial ★", Breite = 84,
         Text       = s => s.PotenzialSterneText,
         Farbe      = s => s.PotenzialSterne >= 4 ? FmTheme.Gold : FmTheme.TextSecondary,
+        Tooltip    = s => $"Potenzial {s.PotenzialText} als Sterne - nicht zu verwechseln mit "
+                        + $"dem Talent ({s.Talent}).",
         Sortierung = s => -s.PotenzialSterne,
     };
 
