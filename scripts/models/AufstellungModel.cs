@@ -50,4 +50,17 @@ public class AufstellungModel
         }
     }
     public Dictionary<string, int> SlotStaerken { get; set; } = new();
+    /// <summary>Reines Können je Slot, ohne Eingespieltheit - für die Stärke-Aufschlüsselung.</summary>
+    public Dictionary<string, int> SlotGrundstaerken { get; set; } = new();
+    /// <summary>Eingespieltheit (0-100) je Slot - für die Stärke-Aufschlüsselung.</summary>
+    public Dictionary<string, int> SlotEingespieltheit { get; set; } = new();
+
+    /// <summary>Mouseover-Text: wie sich die Stärke auf diesem Slot zusammensetzt.</summary>
+    public string SlotErklaerung(string slot, string position)
+    {
+        if (!SlotStaerken.TryGetValue(slot, out int staerke)) return "";
+        SlotGrundstaerken.TryGetValue(slot, out int grundstaerke);
+        SlotEingespieltheit.TryGetValue(slot, out int eingespieltheit);
+        return StaerkeErklaerung.Basis(position, grundstaerke, eingespieltheit, staerke);
+    }
 }

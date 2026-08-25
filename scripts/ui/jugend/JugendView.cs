@@ -135,6 +135,8 @@ public partial class JugendView : Control
             item.SetText(0, s.Name);
             item.SetText(1, s.HauptPosition);
             item.SetText(2, s.Staerke.ToString());
+            item.SetTooltipText(2,
+                "Rohe Stärke ohne Positionsbezug - Grundlage der Talenteinschätzung im Jugendbereich.");
             item.SetText(3, TalentSterne(s.Talent));
             item.SetText(4, s.Alter.ToString());
             item.SetText(5, s.Nationalitaet);

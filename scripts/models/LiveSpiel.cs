@@ -11,12 +11,26 @@ public class LiveSpieler
     public string  Name        { get; set; } = "";
     public string  Slot        { get; set; } = "";
     public string  Position    { get; set; } = "";
-    public int     Staerke     { get; set; }
+    /// <summary>Reines Können auf dem Slot, ohne Eingespieltheit und ohne Ermüdung.</summary>
+    public int     Grundstaerke     { get; set; }
+    /// <summary>0 bis 100 - wie vertraut ihm dieser Platz ist.</summary>
+    public int     Eingespieltheit  { get; set; }
+    /// <summary>Positionsstärke ohne Ermüdung - der Ausgangswert bei Anpfiff.</summary>
+    public int     Staerke          { get; set; }
+    /// <summary>Dieselbe Stärke mit der aktuellen Kondition verrechnet - macht die Ermüdung sichtbar.</summary>
+    public int     EffektiveStaerke { get; set; }
     public double  Kondition   { get; set; }
     public bool    AufDemPlatz { get; set; }
+
+    /// <summary>Wieviel die Ermüdung gerade kostet; 0 bei voller Kondition oder auf der Bank.</summary>
+    public int StaerkeVerlust => System.Math.Max(0, Staerke - EffektiveStaerke);
     public int     Tore        { get; set; }
     public int     GelbeKarten { get; set; }
     public int     RoteKarten  { get; set; }
+
+    /// <summary>Mouseover-Text: Grundstärke + Eingespieltheit + Frische = Spielstärke.</summary>
+    public string Erklaerung =>
+        StaerkeErklaerung.MitFrische(Position, Grundstaerke, Eingespieltheit, Staerke, Kondition, EffektiveStaerke);
 }
 
 /// <summary>Zustand der laufenden Partie (GET/POST spiel/live/...).</summary>
@@ -32,8 +46,14 @@ public class LiveSpiel
     public string? GastVerein      { get; set; }
     public int     HeimTore        { get; set; }
     public int     GastTore        { get; set; }
+    /// <summary>Elf-Stärke bei Anpfiff - fester Vergleichswert für die ganze Partie.</summary>
     public double  HeimStaerke     { get; set; }
     public double  GastStaerke     { get; set; }
+
+    /// <summary>Elf-Stärke gerade jetzt: nur wer auf dem Platz steht, mit Kondition verrechnet.
+    /// Sinkt mit der Ermüdung, springt bei Wechseln und Platzverweisen.</summary>
+    public double  HeimStaerkeAktuell { get; set; }
+    public double  GastStaerkeAktuell { get; set; }
 
     public List<LiveSpieler> HeimAufstellung { get; set; } = new();
     public List<LiveSpieler> GastAufstellung { get; set; } = new();

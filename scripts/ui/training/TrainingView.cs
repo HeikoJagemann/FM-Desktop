@@ -224,6 +224,7 @@ public partial class TrainingView : Control
             item.SetText(1, s.HauptPosition);
             item.SetText(2, s.Alter.ToString());
             item.SetText(3, StaerkeText(s, woche));
+            item.SetTooltipText(3, s.BestPositionErklaerung);
             item.SetText(4, s.PotenzialText);
             item.SetText(5, s.PotenzialSterneText);
             item.SetText(6, $"{s.Frische} %");

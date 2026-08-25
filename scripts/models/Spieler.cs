@@ -12,14 +12,18 @@ public enum Attributrolle { Primaer, Sekundaer, Nebensaechlich }
 
 public class PositionsStaerke
 {
-    public string Position { get; set; } = "";
-    public int    Staerke  { get; set; }
+    public string Position     { get; set; } = "";
+    public int    Grundstaerke { get; set; }
+    public int    Staerke      { get; set; }
 
     /// <summary>0 bis 100. Darunter fällt die Stärke; bei 0 bleibt dem Spieler die Hälfte.</summary>
     public int    Eingespieltheit { get; set; }
 
     /// <summary>Kurzzeichen für die Vertrautheit: voll, angelernt, fremd.</summary>
     public string Zeichen => Eingespieltheit >= 90 ? "" : Eingespieltheit >= 40 ? "~" : "?";
+
+    /// <summary>Mouseover-Text: wie sich die Stärke auf dieser Position zusammensetzt.</summary>
+    public string Erklaerung => StaerkeErklaerung.Basis(Position, Grundstaerke, Eingespieltheit, Staerke);
 }
 
 
@@ -111,6 +115,10 @@ public class Spieler
     public int BestPositionStaerke =>
         Top3Positionen?.Count > 0 ? Top3Positionen[0].Staerke : Staerke;
 
+    /// <summary>Mouseover-Text: wie sich <see cref="BestPositionStaerke"/> zusammensetzt.</summary>
+    public string BestPositionErklaerung =>
+        Top3Positionen?.Count > 0 ? Top3Positionen[0].Erklaerung : "";
+
     /// <summary>
     /// Nominal wird nur zwischen Torwart und Feldspieler unterschieden – die tatsächliche
     /// Position eines Feldspielers ergibt sich aus seinen Einzelfähigkeiten.
@@ -142,4 +150,10 @@ public class Spieler
         Top3Positionen?.Count > 0
             ? string.Join(" / ", Top3Positionen.Select(p => $"{p.Position}{p.Zeichen} {p.Staerke}"))
             : Staerke.ToString();
+
+    /// <summary>Mouseover-Text: wie sich die Stärke auf jeder der Top-Positionen zusammensetzt.</summary>
+    public string Top3PositionenErklaerung =>
+        Top3Positionen?.Count > 0
+            ? string.Join("\n\n", Top3Positionen.Select(p => p.Erklaerung))
+            : "";
 }

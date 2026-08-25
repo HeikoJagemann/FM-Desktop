@@ -39,6 +39,8 @@ public partial class LiveSpielDialog : Control
 
     private VBoxContainer _heimSpalte = null!;
     private VBoxContainer _gastSpalte = null!;
+    private Label _heimStaerkeLabel = null!;
+    private Label _gastStaerkeLabel = null!;
 
     private int _gezeigteEreignisse;
     private bool _abgepfiffen;
@@ -158,7 +160,7 @@ public partial class LiveSpielDialog : Control
         root.AddChild(mitte);
 
         mitte.AddChild(BuildTeamSpalte(_spiel.HeimVerein ?? "", _spiel.HeimStaerke,
-            _spiel.EigenesHeimspiel, out _heimSpalte));
+            _spiel.EigenesHeimspiel, out _heimSpalte, out _heimStaerkeLabel));
 
         _logScroll = new ScrollContainer
         {
@@ -173,7 +175,7 @@ public partial class LiveSpielDialog : Control
         _logScroll.AddChild(_log);
 
         mitte.AddChild(BuildTeamSpalte(_spiel.GastVerein ?? "", _spiel.GastStaerke,
-            !_spiel.EigenesHeimspiel, out _gastSpalte));
+            !_spiel.EigenesHeimspiel, out _gastSpalte, out _gastStaerkeLabel));
 
         // Aktionsleiste
         var leiste = new HBoxContainer();
@@ -199,7 +201,7 @@ public partial class LiveSpielDialog : Control
     }
 
     private Control BuildTeamSpalte(string verein, double staerke, bool eigener,
-                                    out VBoxContainer spielerBox)
+                                    out VBoxContainer spielerBox, out Label staerkeLabel)
     {
         var panel = new PanelContainer { CustomMinimumSize = new Vector2(255, 0) };
         var style = new StyleBoxFlat { BgColor = FmTheme.BgToolbar };
@@ -216,9 +218,11 @@ public partial class LiveSpielDialog : Control
         margin.AddChild(vbox);
 
         vbox.AddChild(FmTheme.MakeLabel(verein, 14, eigener ? FmTheme.Accent : FmTheme.TextPrimary));
-        vbox.AddChild(FmTheme.MakeLabel(
-            $"Stärke {staerke.ToString("0.0", CultureInfo.GetCultureInfo("de-DE"))}",
-            12, FmTheme.TextSecondary));
+
+        staerkeLabel = FmTheme.MakeLabel(StaerkeHeaderText(staerke, staerke), 12, FmTheme.TextSecondary);
+        staerkeLabel.TooltipText = "Elf-Stärke bei Anpfiff gegen die aktuelle Stärke auf dem Platz - "
+            + "sinkt mit der Ermüdung, springt bei Wechseln und Platzverweisen.";
+        vbox.AddChild(staerkeLabel);
 
         var sep = new HSeparator();
         sep.AddThemeColorOverride("color", FmTheme.Border);
@@ -274,6 +278,15 @@ public partial class LiveSpielDialog : Control
         _wechselLabel.Text = zustand.WechselHinweis;
         _wechselButton.Disabled = !zustand.DarfWechseln || _abgepfiffen;
 
+        // Anders als früher wird die Elf-Stärke jetzt bei jedem Tick neu gesetzt - vorher stand
+        // hier für die ganze Partie unverändert der Wert vom Anpfiff.
+        _heimStaerkeLabel.Text = StaerkeHeaderText(zustand.HeimStaerke, zustand.HeimStaerkeAktuell);
+        _heimStaerkeLabel.AddThemeColorOverride("font_color",
+            StaerkeFarbe(zustand.HeimStaerke, zustand.HeimStaerkeAktuell));
+        _gastStaerkeLabel.Text = StaerkeHeaderText(zustand.GastStaerke, zustand.GastStaerkeAktuell);
+        _gastStaerkeLabel.AddThemeColorOverride("font_color",
+            StaerkeFarbe(zustand.GastStaerke, zustand.GastStaerkeAktuell));
+
         FuelleSpalte(_heimSpalte, zustand.HeimAufstellung);
         FuelleSpalte(_gastSpalte, zustand.GastAufstellung);
 
@@ -313,10 +326,24 @@ public partial class LiveSpielDialog : Control
             name.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             zeile.AddChild(name);
 
-            var staerke = FmTheme.MakeLabel(s.Staerke.ToString(), 11, FmTheme.TextSecondary,
+            // Zeigt die aktuelle, um die Ermüdung verringerte Stärke - nicht den festen
+            // Ausgangswert. Ein spürbarer Verlust bekommt zusätzlich einen kleinen Pfeil, damit
+            // die Ermüdung nicht erst im Kopfrechnen aus zwei Zahlen auffällt.
+            var staerke = FmTheme.MakeLabel(s.EffektiveStaerke.ToString(), 11,
+                s.AufDemPlatz ? StaerkeFarbeSpieler(s.Staerke, s.EffektiveStaerke) : FmTheme.TextSecondary,
                 HorizontalAlignment.Right);
             staerke.CustomMinimumSize = new Vector2(24, 0);
+            staerke.TooltipText = s.AufDemPlatz
+                ? s.Erklaerung
+                : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.Staerke);
             zeile.AddChild(staerke);
+
+            if (s.AufDemPlatz && s.StaerkeVerlust >= 3)
+            {
+                var verlust = FmTheme.MakeLabel($"▼{s.StaerkeVerlust}", 10, FmTheme.Danger);
+                verlust.CustomMinimumSize = new Vector2(22, 0);
+                zeile.AddChild(verlust);
+            }
 
             var frische = new ProgressBar
             {
@@ -339,6 +366,41 @@ public partial class LiveSpielDialog : Control
         >= 70 => FmTheme.Gold,
         _     => FmTheme.Danger,
     };
+
+    /// <summary>Farbe der Stärke-Zahl eines Spielers, nach Anteil des ermüdungsbedingten Verlusts.</summary>
+    private static Color StaerkeFarbeSpieler(int basis, int effektiv)
+    {
+        if (basis <= 0) return FmTheme.TextPrimary;
+        double anteil = (double)effektiv / basis;
+        return anteil switch
+        {
+            >= 0.95 => FmTheme.TextPrimary,
+            >= 0.85 => FmTheme.Gold,
+            _       => FmTheme.Danger,
+        };
+    }
+
+    private static string StaerkeHeaderText(double kickoff, double aktuell)
+    {
+        string de(double w) => w.ToString("0.0", CultureInfo.GetCultureInfo("de-DE"));
+        double delta = aktuell - kickoff;
+        if (Math.Abs(delta) < 0.1) return $"Stärke {de(kickoff)}";
+        string vorzeichen = delta > 0 ? "+" : "−";
+        return $"Stärke {de(aktuell)}  ({vorzeichen}{de(Math.Abs(delta))})";
+    }
+
+    /// <summary>Farbe der Elf-Stärke-Zeile im Kopf, nach Abstand zum Wert bei Anpfiff.</summary>
+    private static Color StaerkeFarbe(double kickoff, double aktuell)
+    {
+        if (kickoff <= 0) return FmTheme.TextSecondary;
+        double anteil = aktuell / kickoff;
+        return anteil switch
+        {
+            >= 0.95 => FmTheme.TextSecondary,
+            >= 0.85 => FmTheme.Gold,
+            _       => FmTheme.Danger,
+        };
+    }
 
     // ── Auswechseln ──────────────────────────────────────────────────────────
 

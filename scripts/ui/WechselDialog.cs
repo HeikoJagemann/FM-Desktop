@@ -361,6 +361,9 @@ public partial class WechselDialog : Control
             HorizontalAlignment.Right);
         staerke.CustomMinimumSize = new Vector2(26, 0);
         staerke.VerticalAlignment = VerticalAlignment.Center;
+        staerke.TooltipText = aufDemPlatz
+            ? s.Erklaerung
+            : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.Staerke);
         inhalt.AddChild(staerke);
 
         if (aufDemPlatz)

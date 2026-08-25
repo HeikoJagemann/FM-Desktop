@@ -166,8 +166,11 @@ public partial class SpielerDetailOverlay : Control
     private Control BuildStatistikenCard() => BaueCard("📊  Statistiken", new VBoxContainer().Also(v =>
     {
         v.AddThemeConstantOverride("separation", 6);
+        // Frische steht unten als eigene Zeile - sie zählt hier bewusst nicht mit, das ist die
+        // statische Stärke außerhalb eines laufenden Spiels.
         v.AddChild(AttributZeile("Gesamtstärke", _s.BestPositionStaerke,
-                                 differenz: _verlauf?.StaerkeDifferenz ?? 0));
+                                 differenz: _verlauf?.StaerkeDifferenz ?? 0,
+                                 tooltip: _s.BestPositionErklaerung));
         v.AddChild(AttributZeile("Talent", _s.Talent));
         // Das Potenzial wird bewusst nur als Spanne gezeigt - den exakten Wert liefert das
         // Backend nicht aus, kein Manager kennt das Maximum eines Spielers auf den Punkt.
@@ -252,10 +255,12 @@ public partial class SpielerDetailOverlay : Control
     /// so ist auf einen Blick erkennbar, woran der Spieler zuletzt gewachsen ist.
     /// </param>
     private static Control AttributZeile(string label, int wert, int max = 100, int differenz = 0,
-                                         Attributrolle rolle = Attributrolle.Nebensaechlich)
+                                         Attributrolle rolle = Attributrolle.Nebensaechlich,
+                                         string tooltip = "")
     {
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 10);
+        if (tooltip != "") row.TooltipText = tooltip;
 
         // Primäre Fähigkeiten hervorheben, nebensächliche zurücknehmen: So ist auf einen Blick zu
         // sehen, worauf es bei diesem Spieler ankommt.

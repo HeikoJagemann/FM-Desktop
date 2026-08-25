@@ -148,6 +148,7 @@ public partial class KaderView : Control
             // Fähigkeiten abgeleitete stärkste Position.
             item.SetText(1, s.HauptPosition);
             item.SetText(2, s.Top3PositionenText);
+            item.SetTooltipText(2, s.Top3PositionenErklaerung);
             item.SetText(3, TalentSterne(s.Talent));
             item.SetText(4, s.Alter.ToString());
             item.SetText(5, $"{s.Wert:N0}");

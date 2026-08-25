@@ -96,7 +96,7 @@ public partial class PlayerRow : PanelContainer
         row._slotLabel = AddCell(NichtAufgestellt);
         AddCell(s.Name);
         AddCell(s.HauptPosition, FmTheme.TextFuerGruppe(s.Gruppe));
-        AddCell(s.Top3PositionenText);
+        AddCell(s.Top3PositionenText).TooltipText = s.Top3PositionenErklaerung;
         AddCell(TalentSterne(s.Talent), TalentFarbe(s.Talent));
         AddCell(s.Alter.ToString());
         AddCell(FrischeText(s.Frische), FrischeFarbe(s.Frische));
@@ -164,6 +164,8 @@ public partial class PositionSlot : Button
     public long?  SpielerId { get; private set; }
     public string SpielerName { get; private set; } = "";
     public int?   Staerke { get; private set; }
+    public int?   Grundstaerke { get; private set; }
+    public int?   Eingespieltheit { get; private set; }
 
     public event Action<PositionSlot, long, string>? PlayerDropped;
     public static PositionSlot Create(string slotName, string anzeige)
@@ -174,25 +176,32 @@ public partial class PositionSlot : Button
         return slot;
     }
 
-    public void Assign(long spielerId, string spielerName, int? staerke = null)
+    public void Assign(long spielerId, string spielerName, int? staerke = null,
+        int? grundstaerke = null, int? eingespieltheit = null)
     {
-        SpielerId   = spielerId;
-        SpielerName = spielerName;
-        Staerke     = staerke;
+        SpielerId       = spielerId;
+        SpielerName     = spielerName;
+        Staerke         = staerke;
+        Grundstaerke    = grundstaerke;
+        Eingespieltheit = eingespieltheit;
         Refresh();
     }
 
-    public void UpdateStaerke(int staerke)
+    public void UpdateStaerke(int staerke, int? grundstaerke = null, int? eingespieltheit = null)
     {
-        Staerke = staerke;
+        Staerke         = staerke;
+        Grundstaerke    = grundstaerke;
+        Eingespieltheit = eingespieltheit;
         Refresh();
     }
 
     public void Clear()
     {
-        SpielerId   = null;
-        SpielerName = "";
-        Staerke     = null;
+        SpielerId       = null;
+        SpielerName     = "";
+        Staerke         = null;
+        Grundstaerke    = null;
+        Eingespieltheit = null;
         Refresh();
     }
 
@@ -225,10 +234,15 @@ public partial class PositionSlot : Button
                 Text = $"{Anzeige}\n{TruncateName(SpielerName)}\n{Staerke.Value}";
             else
                 Text = $"{Anzeige}\n{TruncateName(SpielerName)}";
+
+            TooltipText = Staerke.HasValue && Grundstaerke.HasValue && Eingespieltheit.HasValue
+                ? StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value)
+                : "";
         }
         else
         {
             Text = Anzeige;
+            TooltipText = "";
         }
     }
 
@@ -463,6 +477,11 @@ public partial class AufstellungView : Control
         _staerkeLabel.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.85f));
         _staerkeLabel.AddThemeConstantOverride("shadow_offset_x", 1);
         _staerkeLabel.AddThemeConstantOverride("shadow_offset_y", 1);
+        _staerkeLabel.TooltipText =
+            "Durchschnitt der Stärke über alle Positionen der Formation.\n"
+          + "Unbesetzte Positionen zählen dabei mit 0 - sonst wäre eine Elf mit neun\n"
+          + "starken Spielern rechnerisch besser als eine vollständige mit denselben\n"
+          + "neun plus zwei schwächeren.";
         _fieldControl.AddChild(_staerkeLabel);
 
         return panel;
@@ -651,7 +670,8 @@ public partial class AufstellungView : Control
             int idx = Array.IndexOf(FormationNames, _currentFormation);
             if (idx >= 0) _formationBtn.Selected = idx;
             BuildSlots(_currentFormation);
-            WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken);
+            WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
+                aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit);
             AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
         }
         if (aufstellung != null)
@@ -755,7 +775,8 @@ public partial class AufstellungView : Control
         foreach (var slot in _bankSlots)
             slot.Clear();
 
-        WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken);
+        WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
+            aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit);
         WendeBankAn(aufstellung.Ersatzbank);
         AktualisiereListenPositionen();
         AktualisiereWarnung(aufstellung);
@@ -775,7 +796,9 @@ public partial class AufstellungView : Control
     }
 
     private void WendeSpielerZuweisungenAn(Dictionary<string, long>? positionen,
-        Dictionary<string, int>? slotStaerken = null)
+        Dictionary<string, int>? slotStaerken = null,
+        Dictionary<string, int>? slotGrundstaerken = null,
+        Dictionary<string, int>? slotEingespieltheit = null)
     {
         if (positionen == null) return;
         foreach (var (slot, spielerId) in positionen)
@@ -786,7 +809,13 @@ public partial class AufstellungView : Control
                 int? slotStaerke = null;
                 if (slotStaerken != null && slotStaerken.TryGetValue(slot, out var st))
                     slotStaerke = st;
-                slotCtrl.Assign(spielerId, name, slotStaerke);
+                int? grundstaerke = null;
+                if (slotGrundstaerken != null && slotGrundstaerken.TryGetValue(slot, out var g))
+                    grundstaerke = g;
+                int? eingespieltheit = null;
+                if (slotEingespieltheit != null && slotEingespieltheit.TryGetValue(slot, out var e))
+                    eingespieltheit = e;
+                slotCtrl.Assign(spielerId, name, slotStaerke, grundstaerke, eingespieltheit);
             }
         }
     }
@@ -887,7 +916,11 @@ public partial class AufstellungView : Control
             foreach (var (slotName, staerke) in result.SlotStaerken)
             {
                 if (_slots.TryGetValue(slotName, out var slot) && slot.SpielerId.HasValue)
-                    slot.UpdateStaerke(staerke);
+                {
+                    result.SlotGrundstaerken.TryGetValue(slotName, out var grundstaerke);
+                    result.SlotEingespieltheit.TryGetValue(slotName, out var eingespieltheit);
+                    slot.UpdateStaerke(staerke, grundstaerke, eingespieltheit);
+                }
             }
         }
         else
