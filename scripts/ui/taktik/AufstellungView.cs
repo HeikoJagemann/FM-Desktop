@@ -5,150 +5,9 @@ using System.Collections.Generic;
 using System.Linq;
 using FMDesktop.Api;
 using FMDesktop.Models;
+using FMDesktop.UI.Common;
 
 namespace FMDesktop.UI.Taktik;
-
-// ---------------------------------------------------------------------------
-// Draggable player row in the right-hand list
-// ---------------------------------------------------------------------------
-public partial class PlayerRow : PanelContainer
-{
-    private const string NichtAufgestellt = "–";
-
-    public Spieler Spieler { get; private set; } = null!;
-
-    private Label _slotLabel = null!;
-
-    /// <summary>Zeigt an, auf welchem Platz der Spieler gerade steht (Feld-Slot oder Bank).</summary>
-    public void SetzeAufstellungsSlot(string? slot)
-    {
-        bool aufgestellt = !string.IsNullOrEmpty(slot);
-        _slotLabel.Text = aufgestellt ? slot : NichtAufgestellt;
-        _slotLabel.AddThemeColorOverride("font_color",
-            aufgestellt ? FmTheme.Accent : FmTheme.TextSecondary);
-    }
-
-    /// <summary>Spaltenbreiten - identisch mit dem Kopf der Liste.</summary>
-    internal static readonly (string Titel, int Breite, bool Expand, HorizontalAlignment Ausrichtung)[] Spalten =
-    {
-        ("Aufst.",   58, false, HorizontalAlignment.Center),
-        ("Name",    140, true,  HorizontalAlignment.Left),
-        ("Pos",      42, false, HorizontalAlignment.Left),
-        ("Stärken", 150, true,  HorizontalAlignment.Left),
-        ("Talent",   80, false, HorizontalAlignment.Left),
-        ("Alter",    44, false, HorizontalAlignment.Center),
-        ("Frische",  62, false, HorizontalAlignment.Center),
-        ("Kader",    72, false, HorizontalAlignment.Left),
-    };
-
-    /// <summary>
-    /// Frische in Prozent. Ein Wert von 0 heißt "nie gesetzt" - solche Spieler stammen aus
-    /// Spielständen von vor dem Training und gehen mit voller Frische ins Spiel; eine "0 %" wäre
-    /// hier schlicht falsch.
-    /// </summary>
-    private static string FrischeText(int frische) => frische > 0 ? $"{frische} %" : "–";
-
-    private static Color FrischeFarbe(int frische) => frische switch
-    {
-        >= 85 => FmTheme.Success,
-        >= 70 => FmTheme.TextPrimary,
-        > 0   => FmTheme.Danger,
-        _     => FmTheme.TextSecondary,
-    };
-
-    public static PlayerRow Create(Spieler s, bool abgesetzt)
-    {
-        var row = new PlayerRow { Spieler = s };
-        row.CustomMinimumSize = new Vector2(0, 30);
-
-        var style = new StyleBoxFlat { BgColor = FmTheme.FuerGruppe(s.Gruppe, abgesetzt) };
-        style.SetContentMarginAll(0);
-        row.AddThemeStyleboxOverride("panel", style);
-
-        var hbox = new HBoxContainer();
-        hbox.AddThemeConstantOverride("separation", 0);
-        row.AddChild(hbox);
-
-        int spalte = 0;
-        Label AddCell(string text, Color? farbe = null)
-        {
-            var (_, breite, expand, ausrichtung) = Spalten[spalte++];
-            var m = new MarginContainer();
-            m.AddThemeConstantOverride("margin_left", 6);
-            m.AddThemeConstantOverride("margin_right", 6);
-            m.CustomMinimumSize = new Vector2(breite, 0);
-            if (expand) m.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-
-            var lbl = new Label
-            {
-                Text = text,
-                HorizontalAlignment = ausrichtung,
-                VerticalAlignment = VerticalAlignment.Center,
-                AutowrapMode = TextServer.AutowrapMode.Off,
-            };
-            lbl.AddThemeColorOverride("font_color", farbe ?? FmTheme.TextPrimary);
-            lbl.AddThemeFontSizeOverride("font_size", 12);
-            m.AddChild(lbl);
-            hbox.AddChild(m);
-            return lbl;
-        }
-
-        row._slotLabel = AddCell(NichtAufgestellt);
-        AddCell(s.Name);
-        AddCell(s.HauptPosition, FmTheme.TextFuerGruppe(s.Gruppe));
-        AddCell(s.Top3PositionenText).TooltipText = s.Top3PositionenErklaerung;
-        AddCell(TalentSterne(s.Talent), TalentFarbe(s.Talent));
-        AddCell(s.Alter.ToString());
-        AddCell(FrischeText(s.Frische), FrischeFarbe(s.Frische));
-        AddCell(s.Kader, s.Kader == "Profi" ? FmTheme.TextPrimary : FmTheme.TextSecondary);
-
-        row.MouseDefaultCursorShape = CursorShape.Drag;
-        return row;
-    }
-
-    private static string TalentSterne(int talent)
-    {
-        int sterne = talent switch
-        {
-            >= 80 => 5, >= 65 => 4, >= 50 => 3, >= 35 => 2, _ => 1,
-        };
-        return new string('★', sterne) + new string('☆', 5 - sterne);
-    }
-
-    private static Color TalentFarbe(int talent) => talent switch
-    {
-        >= 80 => FmTheme.Gold,
-        >= 65 => FmTheme.Success,
-        _     => FmTheme.TextSecondary,
-    };
-
-    public override Variant _GetDragData(Vector2 atPosition)
-    {
-        var preview = new Label
-        {
-            Text = $"{Spieler.Position}  {Spieler.Name}",
-        };
-        preview.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
-        preview.AddThemeFontSizeOverride("font_size", 13);
-        var bg = new PanelContainer();
-        var style = new StyleBoxFlat { BgColor = FmTheme.BgPanel };
-        style.SetBorderWidthAll(1);
-        bg.AddThemeStyleboxOverride("panel", style);
-        var m = new MarginContainer();
-        FmTheme.SetMargin(m, 8, 4);
-        m.AddChild(preview);
-        bg.AddChild(m);
-        SetDragPreview(bg);
-
-        var data = new Godot.Collections.Dictionary
-        {
-            ["id"]       = Spieler.Id,
-            ["name"]     = Spieler.Name,
-            ["position"] = Spieler.Position,
-        };
-        return data;
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Drop-target slot on the football field
@@ -322,10 +181,10 @@ public partial class AufstellungView : Control
     private const float SlotW  = 64f;
     private const float SlotH  = 52f;
 
-    private OptionButton _formationBtn = null!;
-    private Control      _fieldControl = null!;
-    private VBoxContainer _playerVBox  = null!;
-    private Label         _statusLabel = null!;
+    private OptionButton    _formationBtn = null!;
+    private Control         _fieldControl = null!;
+    private FmGrid<Spieler> _spielerGrid  = null!;
+    private Label           _statusLabel = null!;
     private Label         _staerkeLabel = null!;
     private Label         _warnungLabel = null!;
     private Button        _autoBtn = null!;
@@ -335,7 +194,9 @@ public partial class AufstellungView : Control
     private Label         _bankLabel     = null!;
     private GridContainer _bankContainer = null!;
     private readonly List<PositionSlot> _bankSlots = new();
-    private readonly Dictionary<long, PlayerRow> _playerRows = new();
+
+    /// <summary>Wer gerade wo steht - speist die Spalte "Aufst." der Spielerliste.</summary>
+    private readonly Dictionary<long, string> _belegung = new();
 
     private string _currentFormation = "4-4-2";
     private readonly Dictionary<string, PositionSlot> _slots = new();
@@ -591,56 +452,38 @@ public partial class AufstellungView : Control
         style.SetContentMarginAll(0);
         panel.AddThemeStyleboxOverride("panel", style);
 
-        var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 0);
-        panel.AddChild(vbox);
+        // Spalten, Farben, Mouseover und das Ziehen kommen aus dem gemeinsamen Grid.
+        var spalten = new List<GridSpalte<Spieler>> { AufstellungsSpalte };
+        spalten.AddRange(SpielerSpalten.Aufstellungsliste);
 
-        // Spalten-Header
-        vbox.AddChild(BuildPlayerListHeader());
-
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        vbox.AddChild(sep);
-
-        // Scroll-Bereich
-        var scroll = new ScrollContainer();
-        scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
-        vbox.AddChild(scroll);
-
-        _playerVBox = new VBoxContainer();
-        _playerVBox.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _playerVBox.AddThemeConstantOverride("separation", 1);
-        scroll.AddChild(_playerVBox);
-
-        return panel;
-    }
-
-    private static Control BuildPlayerListHeader()
-    {
-        var hbox = new HBoxContainer();
-        hbox.AddThemeConstantOverride("separation", 0);
-
-        var headerStyle = new StyleBoxFlat { BgColor = FmTheme.BgToolbar };
-        headerStyle.SetContentMarginAll(0);
-        var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", headerStyle);
-        panel.AddChild(hbox);
-
-        foreach (var (titel, breite, expand, ausrichtung) in PlayerRow.Spalten)
+        _spielerGrid = new FmGrid<Spieler>(spalten)
         {
-            var m = new MarginContainer();
-            m.AddThemeConstantOverride("margin_left", 6);
-            m.AddThemeConstantOverride("margin_right", 6);
-            m.AddThemeConstantOverride("margin_top", 4);
-            m.AddThemeConstantOverride("margin_bottom", 4);
-            m.CustomMinimumSize = new Vector2(breite, 0);
-            if (expand) m.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            m.AddChild(FmTheme.MakeLabel(titel, 12, FmTheme.TextSecondary, ausrichtung));
-            hbox.AddChild(m);
-        }
+            SizeFlagsVertical  = SizeFlags.ExpandFill,
+            Zeilenfarbe        = SpielerSpalten.Zeilenfarbe,
+            ZebraNeuBei        = s => s.Gruppe,
+            Standardsortierung = SpielerSpalten.NachAufstellung,
+            ZiehDaten = s => new Godot.Collections.Dictionary
+            {
+                ["id"]       = s.Id,
+                ["name"]     = s.Name,
+                ["position"] = s.Position,
+            },
+        };
+        panel.AddChild(_spielerGrid);
 
         return panel;
     }
+
+    /// <summary>Auf welchem Platz der Spieler gerade steht - Feldposition oder Bank.</summary>
+    private GridSpalte<Spieler> AufstellungsSpalte => new()
+    {
+        Titel = "Aufst.", Breite = 58, Ausrichtung = HorizontalAlignment.Center,
+        Text    = s => _belegung.GetValueOrDefault(s.Id) ?? "–",
+        Farbe   = s => _belegung.ContainsKey(s.Id) ? FmTheme.Accent : FmTheme.TextSecondary,
+        Tooltip = s => _belegung.TryGetValue(s.Id, out var slot)
+            ? $"Steht auf {slot}"
+            : "Nicht aufgestellt - auf eine Position im Feld ziehen.",
+    };
 
     // ── Daten laden ──────────────────────────────────────────────────────────
 
@@ -687,55 +530,31 @@ public partial class AufstellungView : Control
 
     private void FuelleSpielerListe(List<Spieler> spieler)
     {
-        foreach (Node child in _playerVBox.GetChildren())
-            child.QueueFree();
-
         // Nur Profi- und Amateurkader; Jugendspieler stehen hier nicht zur Wahl.
-        // Sortiert nach Positionsgruppe (TW, Abwehr, Mittelfeld, Sturm), darin die stärkeren zuerst.
-        var sichtbar = spieler
-            .Where(s => s.Kader == "Profi" || s.Kader == "Amateur")
-            .OrderBy(s => s.Sortierung.Item1)
-            .ThenBy(s => s.Sortierung.Item2)
-            .ThenBy(s => s.Name)
-            .ToList();
-
-        // Abwechselnde Helligkeit innerhalb einer Gruppe, damit Zeilen trennbar bleiben.
-        Positionsgruppe? letzte = null;
-        bool abgesetzt = false;
-        _playerRows.Clear();
-        foreach (var s in sichtbar)
-        {
-            if (letzte != s.Gruppe) { abgesetzt = false; letzte = s.Gruppe; }
-            var zeile = PlayerRow.Create(s, abgesetzt);
-            _playerRows[s.Id] = zeile;
-            _playerVBox.AddChild(zeile);
-            abgesetzt = !abgesetzt;
-        }
-
+        _spielerGrid.Zeige(spieler.Where(s => s.Kader == "Profi" || s.Kader == "Amateur"));
         AktualisiereListenPositionen();
     }
 
     /// <summary>
-    /// Traegt in die Liste ein, wer gerade wo steht. Wird nach jeder Aenderung aufgerufen,
-    /// statt die Liste neu aufzubauen - so bleibt die Scrollposition erhalten.
+    /// Traegt in die Liste ein, wer gerade wo steht. Aktualisiert nur die Zellen, statt die
+    /// Liste neu aufzubauen - so bleibt die Scrollposition erhalten.
     /// </summary>
     private void AktualisiereListenPositionen()
     {
-        var belegung = new Dictionary<long, string>();
+        _belegung.Clear();
 
         foreach (var (_, slot) in _slots)
         {
             if (slot.SpielerId.HasValue)
-                belegung[slot.SpielerId.Value] = slot.Anzeige;
+                _belegung[slot.SpielerId.Value] = slot.Anzeige;
         }
         foreach (var slot in _bankSlots)
         {
             if (slot.SpielerId.HasValue)
-                belegung[slot.SpielerId.Value] = slot.Anzeige;
+                _belegung[slot.SpielerId.Value] = slot.Anzeige;
         }
 
-        foreach (var (spielerId, zeile) in _playerRows)
-            zeile.SetzeAufstellungsSlot(belegung.GetValueOrDefault(spielerId));
+        _spielerGrid.Aktualisiere();
     }
 
     /// <summary>Lässt den Server die stärkste Elf und die Ersatzbank bestimmen.</summary>

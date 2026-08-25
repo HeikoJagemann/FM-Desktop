@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FMDesktop.Api;
 using FMDesktop.Models;
+using FMDesktop.UI.Common;
 
 namespace FMDesktop.UI.Training;
 
@@ -19,15 +20,11 @@ public partial class TrainingView : Control
 {
     private const string KeinFokus = "–";
 
-    private static readonly string[] Spalten =
-        { "Name", "Pos", "Alter", "Stärke", "Potenzial", "Sterne", "Frische", "Fokus",
-          "Letzte Woche" };
-
-    private OptionButton[] _schwerpunkte = new OptionButton[3];
-    private OptionButton   _intensitaet = null!;
-    private Label          _hinweisLabel = null!;
-    private Label          _statusLabel = null!;
-    private Tree           _kaderTree = null!;
+    private OptionButton[]  _schwerpunkte = new OptionButton[3];
+    private OptionButton    _intensitaet  = null!;
+    private Label           _hinweisLabel = null!;
+    private Label           _statusLabel  = null!;
+    private FmGrid<Spieler> _kaderGrid    = null!;
 
     private TrainingsplanModel? _plan;
     private List<Spieler> _kader = new();
@@ -59,8 +56,8 @@ public partial class TrainingView : Control
         vbox.AddChild(BaueSteuerung());
 
         vbox.AddChild(FmTheme.MakeLabel("Kader", 15, FmTheme.TextPrimary));
-        _kaderTree = BaueKaderTree();
-        vbox.AddChild(_kaderTree);
+        _kaderGrid = BaueKaderGrid();
+        vbox.AddChild(_kaderGrid);
     }
 
     private Control BaueSteuerung()
@@ -110,31 +107,42 @@ public partial class TrainingView : Control
         return panel;
     }
 
-    private Tree BaueKaderTree()
+    /// <summary>
+    /// Spalten aus dem gemeinsamen Katalog. Die Stärke erbt dadurch denselben Mouseover wie in
+    /// allen anderen Ansichten - vorher wurde er hier von einer Schleife über alle Spalten
+    /// überschrieben und war wirkungslos.
+    /// </summary>
+    private FmGrid<Spieler> BaueKaderGrid()
     {
-        var tree = new Tree
+        var fokus = new GridSpalte<Spieler>
         {
-            Columns             = Spalten.Length,
-            ColumnTitlesVisible = true,
-            HideRoot            = true,
-            SelectMode          = Tree.SelectModeEnum.Row,
-            AllowRmbSelect      = true,
-            SizeFlagsVertical   = SizeFlags.ExpandFill,
+            Titel = "Fokus", Breite = 130,
+            Text    = s => FokusAnzeige(s.IndividualFokus),
+            Farbe   = s => s.IndividualFokus == null ? FmTheme.TextSecondary : FmTheme.Accent,
+            Tooltip = _ => "Persönlicher Schwerpunkt - per Rechtsklick zu setzen.",
         };
 
-        int[] breiten  = { 150, 46, 52, 76, 80, 84, 66, 130, 260 };
-        bool[] expand  = { true, false, false, false, false, false, false, false, true };
-
-        for (int i = 0; i < Spalten.Length; i++)
+        var letzteWoche = new GridSpalte<Spieler>
         {
-            tree.SetColumnTitle(i, Spalten[i]);
-            tree.SetColumnCustomMinimumWidth(i, breiten[i]);
-            tree.SetColumnExpand(i, expand[i]);
-        }
-        tree.AddThemeColorOverride("title_button_color", FmTheme.TextSecondary);
-        tree.ItemMouseSelected += (_, taste) => OnKaderRechtsklick(taste);
-        return tree;
+            Titel = "Letzte Woche", Breite = 260, Expand = true,
+            Text  = s => WochenText(WocheVon(s)),
+            Farbe = s => WochenFarbe(WocheVon(s)),
+        };
+
+        var grid = new FmGrid<Spieler>(
+            SpielerSpalten.Trainingsliste(s => WocheVon(s)?.StaerkeDifferenz ?? 0, fokus, letzteWoche))
+        {
+            SizeFlagsVertical  = SizeFlags.ExpandFill,
+            Zeilenfarbe        = SpielerSpalten.Zeilenfarbe,
+            ZebraNeuBei        = s => s.Gruppe,
+            Standardsortierung = SpielerSpalten.NachAufstellung,
+        };
+        grid.Rechtsklick += OnKaderRechtsklick;
+        return grid;
     }
+
+    private SpielerEntwicklung? WocheVon(Spieler s) =>
+        _letzteWoche.TryGetValue(s.Id, out var woche) ? woche : null;
 
     // ── Laden ────────────────────────────────────────────────────────────────
 
@@ -198,69 +206,7 @@ public partial class TrainingView : Control
         _fuellt = false;
     }
 
-    private void FuelleKader()
-    {
-        _kaderTree.Clear();
-        var root = _kaderTree.CreateItem();
-
-        var sortiert = _kader
-            .OrderBy(s => s.Sortierung.Item1)
-            .ThenBy(s => s.Sortierung.Item2)
-            .ThenBy(s => s.Name)
-            .ToList();
-
-        Positionsgruppe? letzte = null;
-        bool abgesetzt = false;
-
-        foreach (var s in sortiert)
-        {
-            if (letzte != s.Gruppe) { abgesetzt = false; letzte = s.Gruppe; }
-
-            _letzteWoche.TryGetValue(s.Id, out var woche);
-
-            var item = _kaderTree.CreateItem(root);
-            item.SetMetadata(0, s.Id);
-            item.SetText(0, s.Name);
-            item.SetText(1, s.HauptPosition);
-            item.SetText(2, s.Alter.ToString());
-            item.SetText(3, StaerkeText(s, woche));
-            item.SetTooltipText(3, s.BestPositionErklaerung);
-            item.SetText(4, s.PotenzialText);
-            item.SetText(5, s.PotenzialSterneText);
-            item.SetText(6, $"{s.Frische} %");
-            item.SetText(7, FokusAnzeige(s.IndividualFokus));
-            item.SetText(8, WochenText(woche));
-
-            // Mouseover auf jeder Spalte: Welche Fähigkeiten für diesen Spieler zählen. Godot
-            // zeigt den Tooltip je Zelle, nicht je Zeile - deshalb überall derselbe Text.
-            string hinweis = $"{s.Name} ({s.HauptPosition})\n{s.AttributrollenText}";
-            for (int spalte = 0; spalte < Spalten.Length; spalte++)
-                item.SetTooltipText(spalte, hinweis);
-
-            var farbe = FmTheme.FuerGruppe(s.Gruppe, abgesetzt);
-            for (int spalte = 0; spalte < Spalten.Length; spalte++)
-                item.SetCustomBgColor(spalte, farbe);
-
-            item.SetCustomColor(1, FmTheme.TextFuerGruppe(s.Gruppe));
-            item.SetCustomColor(3, VeraenderungsFarbe(woche?.StaerkeDifferenz ?? 0));
-            item.SetCustomColor(5, s.PotenzialSterne >= 4 ? FmTheme.Gold : FmTheme.TextSecondary);
-            item.SetCustomColor(6, s.Frische >= 85 ? FmTheme.Success
-                                 : s.Frische >= 70 ? FmTheme.TextPrimary
-                                                   : FmTheme.Danger);
-            item.SetCustomColor(7, s.IndividualFokus == null ? FmTheme.TextSecondary : FmTheme.Accent);
-            item.SetCustomColor(8, WochenFarbe(woche));
-
-            abgesetzt = !abgesetzt;
-        }
-    }
-
-    /// <summary>Gesamtstärke, bei Veränderung mit Pfeil und Betrag: "48 ▲1".</summary>
-    private static string StaerkeText(Spieler s, SpielerEntwicklung? woche)
-    {
-        int differenz = woche?.StaerkeDifferenz ?? 0;
-        if (differenz == 0) return s.BestPositionStaerke.ToString();
-        return $"{s.BestPositionStaerke} {(differenz > 0 ? "▲" : "▼")}{System.Math.Abs(differenz)}";
-    }
+    private void FuelleKader() => _kaderGrid.Zeige(_kader);
 
     /// <summary>Die veränderten Fähigkeiten der letzten Woche, stärkste Veränderung zuerst.</summary>
     private static string WochenText(SpielerEntwicklung? woche)
@@ -329,15 +275,9 @@ public partial class TrainingView : Control
 
     private static string? LeerAlsNull(string wert) => string.IsNullOrEmpty(wert) ? null : wert;
 
-    private void OnKaderRechtsklick(long maustaste)
+    private void OnKaderRechtsklick(Spieler spieler)
     {
-        if (maustaste != (long)MouseButton.Right || _plan == null) return;
-
-        var item = _kaderTree.GetSelected();
-        if (item == null) return;
-        long id = item.GetMetadata(0).AsInt64();
-        var spieler = _kader.FirstOrDefault(s => s.Id == id);
-        if (spieler == null) return;
+        if (_plan == null) return;
 
         var menu = new PopupMenu();
         menu.AddItem($"👤  {spieler.Name}", -1);

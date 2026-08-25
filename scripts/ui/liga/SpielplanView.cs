@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using FMDesktop.Api;
 using FMDesktop.Models;
+using FMDesktop.UI.Common;
 
 namespace FMDesktop.UI.Liga;
 
 public partial class SpielplanView : Control
 {
-    private Tree  _tree        = null!;
-    private Label _statusLabel = null!;
+    private FmGrid<Spiel> _grid        = null!;
+    private Label         _statusLabel = null!;
 
     public override async void _Ready()
     {
@@ -29,45 +30,13 @@ public partial class SpielplanView : Control
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);
 
-        _tree = new Tree
+        _grid = new FmGrid<Spiel>(SpielplanSpalten.Spielplan)
         {
-            Columns             = 5,
-            ColumnTitlesVisible = true,
-            HideRoot            = true,
-            SizeFlagsVertical   = SizeFlags.ExpandFill,
-            SelectMode          = Tree.SelectModeEnum.Row,
-            AllowRmbSelect      = true,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            Gruppieren        = s => $"Spieltag {s.Spieltag}",
         };
-        _tree.ItemMouseSelected += (position, mouseButtonIndex) => OnItemMouseSelected(mouseButtonIndex);
-        _tree.SetColumnTitle(0, "Termin");
-        _tree.SetColumnTitle(1, "Heim");
-        _tree.SetColumnTitle(2, "Ergebnis");
-        _tree.SetColumnTitle(3, "Gast");
-        _tree.SetColumnTitle(4, "Status");
-        _tree.SetColumnCustomMinimumWidth(0, 130);
-        _tree.SetColumnExpand(0, false);
-        _tree.SetColumnExpand(1, true);
-        _tree.SetColumnExpand(2, false);
-        _tree.SetColumnExpand(3, true);
-        _tree.SetColumnExpand(4, false);
-        vbox.AddChild(_tree);
-    }
-
-    private void OnItemMouseSelected(long mouseButtonIndex)
-    {
-        if (mouseButtonIndex != (long)MouseButton.Right) return;
-
-        var item = _tree.GetSelected();
-        if (item == null) return;
-
-        // Spieltag-Überschriften tragen keine Metadaten.
-        var meta = item.GetMetadata(0);
-        if (meta.VariantType == Variant.Type.Nil) return;
-
-        var spielId = meta.AsInt64();
-        if (spielId <= 0) return;
-
-        SpielKontextmenue.Zeige(this, spielId, item.GetMetadata(1).AsBool());
+        _grid.Rechtsklick += spiel => SpielKontextmenue.Zeige(this, spiel.Id, spiel.Gespielt);
+        vbox.AddChild(_grid);
     }
 
     private async System.Threading.Tasks.Task LadeSpielplan()
@@ -81,51 +50,14 @@ public partial class SpielplanView : Control
         _statusLabel.Text = $"{spiele.Count} Spiele · {gespielt} ausgetragen"
                           + "   (Rechtsklick auf ein Spiel öffnet den Spielbericht)";
 
-        _tree.Clear();
-        var root = _tree.CreateItem();
-
-        var nachSpieltag = spiele.GroupBy(s => s.Spieltag).OrderBy(g => g.Key).ToList();
+        _grid.Zeige(spiele.OrderBy(s => s.Spieltag));
 
         // Den zuletzt gespielten Spieltag aufgeklappt lassen - sonst muss der Nutzer nach jedem
         // simulierten Spieltag erst suchen, wo etwas passiert ist.
-        int offenerSpieltag = nachSpieltag
-            .Where(g => g.Any(s => s.Gespielt))
-            .Select(g => g.Key)
-            .DefaultIfEmpty(nachSpieltag.FirstOrDefault()?.Key ?? 0)
-            .Max();
-
-        foreach (var gruppe in nachSpieltag)
-        {
-            // Spieltag-Überschrift
-            var header = _tree.CreateItem(root);
-            header.SetText(0, $"  Spieltag {gruppe.Key}");
-            header.SetCustomColor(0, FmTheme.TextSecondary);
-            for (int spalte = 0; spalte < 5; spalte++) header.SetSelectable(spalte, false);
-            header.Collapsed = gruppe.Key != offenerSpieltag;
-
-            foreach (var spiel in gruppe)
-            {
-                var item = _tree.CreateItem(header);
-                item.SetMetadata(0, spiel.Id);
-                item.SetMetadata(1, spiel.Gespielt);
-                item.SetText(0, spiel.TerminText);
-                item.SetText(1, spiel.HeimVerein?.Name ?? "");
-                item.SetText(2, spiel.Ergebnis);
-                item.SetText(3, spiel.GastVerein?.Name ?? "");
-                item.SetText(4, spiel.Gespielt ? "✓" : "–");
-                item.SetCustomColor(0, FmTheme.TextSecondary);
-
-                // Eigene Spiele hervorheben
-                bool eigenes = spiel.HeimVerein?.Id == GameState.Instance.VereinId
-                            || spiel.GastVerein?.Id  == GameState.Instance.VereinId;
-                if (eigenes)
-                {
-                    // Der Termin bleibt gedaempft - hervorgehoben werden die Namen.
-                    item.SetCustomColor(1, FmTheme.Accent);
-                    item.SetCustomColor(2, FmTheme.Accent);
-                    item.SetCustomColor(3, FmTheme.Accent);
-                }
-            }
-        }
+        int offener = spiele.Where(s => s.Gespielt)
+                            .Select(s => s.Spieltag)
+                            .DefaultIfEmpty(spiele.Min(s => s.Spieltag))
+                            .Max();
+        _grid.NurGruppeOffen($"Spieltag {offener}");
     }
 }

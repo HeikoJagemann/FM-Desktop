@@ -3,16 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using FMDesktop.Api;
 using FMDesktop.Models;
+using FMDesktop.UI.Common;
 
 namespace FMDesktop.UI.Jugend;
 
 public partial class JugendView : Control
 {
-    private TabContainer _tabs = null!;
-    private Label        _statusLabel = null!;
+    private TabContainer  _tabs        = null!;
+    private Label         _statusLabel = null!;
     private List<Spieler> _alleSpieler = new();
 
-    private static readonly string[] Spalten = { "Name", "Pos", "Stärke", "Talent", "Alter", "Nation" };
+    /// <summary>Je Jugendmannschaft ein Grid, geschlüsselt nach Kadertyp ("JugendA").</summary>
+    private readonly Dictionary<string, FmGrid<Spieler>> _grids = new();
 
     public override async void _Ready()
     {
@@ -35,51 +37,27 @@ public partial class JugendView : Control
         _tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         vbox.AddChild(_tabs);
 
-        BaueTree("Jugend A");
-        BaueTree("Jugend B");
-        BaueTree("Jugend C");
+        BaueGrid("Jugend A");
+        BaueGrid("Jugend B");
+        BaueGrid("Jugend C");
     }
 
-    private Tree BaueTree(string tabName)
+    /// <summary>
+    /// Dieselben Spalten wie im Profikader, nur mit der rohen Stärke: In der Jugend zählt der
+    /// positionsunabhängige Wert, weil die Position noch nicht feststeht.
+    /// </summary>
+    private void BaueGrid(string tabName)
     {
-        var tree = new Tree
+        var grid = new FmGrid<Spieler>(SpielerSpalten.Jugendliste)
         {
-            Name                = tabName,
-            Columns             = Spalten.Length,
-            ColumnTitlesVisible = true,
-            HideRoot            = true,
-            SelectMode          = Tree.SelectModeEnum.Row,
-            AllowRmbSelect      = true,
+            Name               = tabName,
+            Zeilenfarbe        = SpielerSpalten.Zeilenfarbe,
+            ZebraNeuBei        = s => s.Gruppe,
+            Standardsortierung = SpielerSpalten.NachTalent,
         };
-        tree.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        int[] minBreiten  = { 120,  48,  64,  90,  52,  90 };
-        bool[] expandiert = { true, false, false, false, false, true };
-        int[] ratios      = {    3,    0,    0,    0,    0,   1 };
-
-        for (int i = 0; i < Spalten.Length; i++)
-        {
-            tree.SetColumnTitle(i, Spalten[i]);
-            tree.SetColumnCustomMinimumWidth(i, minBreiten[i]);
-            tree.SetColumnExpand(i, expandiert[i]);
-            if (expandiert[i])
-                tree.SetColumnExpandRatio(i, ratios[i]);
-        }
-        tree.ItemMouseSelected += (position, mouseButtonIndex) => OnItemMouseSelected(tree, mouseButtonIndex);
-        _tabs.AddChild(tree);
-        return tree;
-    }
-
-    private void OnItemMouseSelected(Tree tree, long mouseButtonIndex)
-    {
-        if (mouseButtonIndex != (long)MouseButton.Right) return;
-
-        var item = tree.GetSelected();
-        if (item == null) return;
-        var id = item.GetMetadata(0).AsInt64();
-        var spieler = _alleSpieler.FirstOrDefault(s => s.Id == id);
-        if (spieler == null) return;
-
-        SpielerKontextmenue.Zeige(this, spieler);
+        grid.Rechtsklick += spieler => SpielerKontextmenue.Zeige(this, spieler);
+        _tabs.AddChild(grid);
+        _grids[tabName.Replace(" ", "")] = grid;
     }
 
     private async System.Threading.Tasks.Task LadeSpieler()
@@ -92,67 +70,9 @@ public partial class JugendView : Control
         _statusLabel.Text = $"{alle.Count(s => s.Kader.StartsWith("Jugend"))} Jugendspieler geladen";
         _alleSpieler = alle;
 
-        foreach (var tab in _tabs.GetChildren())
+        foreach (var (kaderTyp, grid) in _grids)
         {
-            if (tab is not Tree tree) continue;
-            var kaderTyp = tab.Name.ToString().Replace(" ", ""); // "JugendA"
-            FuelleBaum(tree, alle.Where(s => s.Kader == kaderTyp).ToList());
-        }
-    }
-
-    private static string TalentSterne(int talent)
-    {
-        int sterne = talent switch
-        {
-            >= 80 => 5,
-            >= 65 => 4,
-            >= 50 => 3,
-            >= 35 => 2,
-            _     => 1,
-        };
-        return new string('★', sterne) + new string('☆', 5 - sterne);
-    }
-
-    private static void FuelleBaum(Tree tree, List<Spieler> spieler)
-    {
-        tree.Clear();
-        var root = tree.CreateItem();
-        var sortiert = spieler
-            .OrderBy(x => x.Sortierung.Item1)
-            .ThenByDescending(x => x.Talent)
-            .ThenBy(x => x.Name)
-            .ToList();
-
-        Positionsgruppe? letzte = null;
-        bool abgesetzt = false;
-
-        foreach (var s in sortiert)
-        {
-            if (letzte != s.Gruppe) { abgesetzt = false; letzte = s.Gruppe; }
-
-            var item = tree.CreateItem(root);
-            item.SetMetadata(0, s.Id);
-            item.SetText(0, s.Name);
-            item.SetText(1, s.HauptPosition);
-            item.SetText(2, s.Staerke.ToString());
-            item.SetTooltipText(2,
-                "Rohe Stärke ohne Positionsbezug - Grundlage der Talenteinschätzung im Jugendbereich.");
-            item.SetText(3, TalentSterne(s.Talent));
-            item.SetText(4, s.Alter.ToString());
-            item.SetText(5, s.Nationalitaet);
-
-            var zeilenfarbe = FmTheme.FuerGruppe(s.Gruppe, abgesetzt);
-            for (int spalte = 0; spalte < Spalten.Length; spalte++)
-                item.SetCustomBgColor(spalte, zeilenfarbe);
-
-            item.SetCustomColor(1, FmTheme.TextFuerGruppe(s.Gruppe));
-
-            var talentFarbe = s.Talent >= 80 ? FmTheme.Gold
-                            : s.Talent >= 65 ? FmTheme.Success
-                            : FmTheme.TextSecondary;
-            item.SetCustomColor(3, talentFarbe);
-
-            abgesetzt = !abgesetzt;
+            grid.Zeige(alle.Where(s => s.Kader == kaderTyp));
         }
     }
 }
