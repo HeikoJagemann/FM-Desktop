@@ -19,8 +19,17 @@ public partial class JugendView : Control
     public override async void _Ready()
     {
         BuildUI();
+        // Ein hochgezogenes Talent verschwindet aus der Jugend - also neu laden.
+        SpielerKontextmenue.KaderGeaendert += OnKaderGeaendert;
         await LadeSpieler();
     }
+
+    public override void _ExitTree()
+    {
+        SpielerKontextmenue.KaderGeaendert -= OnKaderGeaendert;
+    }
+
+    private async void OnKaderGeaendert() => await LadeSpieler();
 
     private void BuildUI()
     {

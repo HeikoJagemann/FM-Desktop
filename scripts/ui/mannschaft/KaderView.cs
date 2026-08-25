@@ -18,8 +18,17 @@ public partial class KaderView : Control
     public override async void _Ready()
     {
         BuildUI();
+        // Nach einem Kaderwechsel neu laden - der Spieler steht dann in einem anderen Tab.
+        SpielerKontextmenue.KaderGeaendert += OnKaderGeaendert;
         await LadeSpieler();
     }
+
+    public override void _ExitTree()
+    {
+        SpielerKontextmenue.KaderGeaendert -= OnKaderGeaendert;
+    }
+
+    private async void OnKaderGeaendert() => await LadeSpieler();
 
     private void BuildUI()
     {
