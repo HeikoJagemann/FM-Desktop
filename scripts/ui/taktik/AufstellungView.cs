@@ -149,6 +149,8 @@ public partial class AufstellungView : Control
 {
     private static readonly string[] FormationNames = { "4-4-2", "4-2-3-1", "4-3-3" };
 
+    private const string EinstellungAmateureAnzeigen = "aufstellung_amateure_anzeigen";
+
     private static readonly Dictionary<string, (string Slot, float X, float Y)[]> Formations = new()
     {
         ["4-4-2"] = new[]
@@ -184,6 +186,7 @@ public partial class AufstellungView : Control
     private OptionButton    _formationBtn = null!;
     private Control         _fieldControl = null!;
     private FmGrid<Spieler> _spielerGrid  = null!;
+    private CheckBox        _amateureCheckbox = null!;
     private Label           _statusLabel = null!;
     private Label         _staerkeLabel = null!;
     private Label         _warnungLabel = null!;
@@ -452,6 +455,37 @@ public partial class AufstellungView : Control
         style.SetContentMarginAll(0);
         panel.AddThemeStyleboxOverride("panel", style);
 
+        var vbox = new VBoxContainer();
+        vbox.AddThemeConstantOverride("separation", 0);
+        panel.AddChild(vbox);
+
+        var kopfrand = new MarginContainer();
+        FmTheme.SetMargin(kopfrand, 8, 6);
+        vbox.AddChild(kopfrand);
+
+        var kopfleiste = new HBoxContainer();
+        kopfleiste.AddThemeConstantOverride("separation", 6);
+        kopfrand.AddChild(kopfleiste);
+
+        var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        kopfleiste.AddChild(spacer);
+
+        _amateureCheckbox = new CheckBox
+        {
+            Text = "Amateurkader anzeigen",
+            ButtonPressed = ClientEinstellungen.GetBool(EinstellungAmateureAnzeigen, true),
+        };
+        _amateureCheckbox.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
+        _amateureCheckbox.TooltipText = "Blendet Spieler aus dem Amateurkader in dieser Liste "
+                                       + "ein oder aus - bereits aufgestellte Amateure bleiben "
+                                       + "im Feld stehen. Die Einstellung wird gemerkt.";
+        _amateureCheckbox.Toggled += gezeigt =>
+        {
+            ClientEinstellungen.SetBool(EinstellungAmateureAnzeigen, gezeigt);
+            FuelleSpielerListe(_alleSpieler);
+        };
+        kopfleiste.AddChild(_amateureCheckbox);
+
         // Spalten, Farben, Mouseover und das Ziehen kommen aus dem gemeinsamen Grid.
         var spalten = new List<GridSpalte<Spieler>> { AufstellungsSpalte };
         spalten.AddRange(SpielerSpalten.Aufstellungsliste);
@@ -469,7 +503,7 @@ public partial class AufstellungView : Control
                 ["position"] = s.Position,
             },
         };
-        panel.AddChild(_spielerGrid);
+        vbox.AddChild(_spielerGrid);
 
         return panel;
     }
@@ -530,8 +564,12 @@ public partial class AufstellungView : Control
 
     private void FuelleSpielerListe(List<Spieler> spieler)
     {
-        // Nur Profi- und Amateurkader; Jugendspieler stehen hier nicht zur Wahl.
-        _spielerGrid.Zeige(spieler.Where(s => s.Kader == "Profi" || s.Kader == "Amateur"));
+        // Nur Profi- und Amateurkader; Jugendspieler stehen hier nicht zur Wahl. Der Amateurkader
+        // laesst sich zusaetzlich per Checkbox ausblenden - wer dort bereits steht, bleibt im
+        // Feld, die Checkbox filtert nur die Auswahlliste.
+        bool amateureZeigen = _amateureCheckbox == null || _amateureCheckbox.ButtonPressed;
+        _spielerGrid.Zeige(spieler.Where(s =>
+            s.Kader == "Profi" || (s.Kader == "Amateur" && amateureZeigen)));
         AktualisiereListenPositionen();
     }
 
