@@ -28,6 +28,8 @@ public partial class GameMain : Control
     private const string SceneAufstellung = "res://scenes/taktik/AufstellungView.tscn";
     private const string SceneTraining     = "res://scenes/training/TrainingView.tscn";
     private const string SceneKalender     = "res://scenes/kalender/KalenderView.tscn";
+    private const string SceneFinanzen     = "res://scenes/finanzen/FinanzenView.tscn";
+    private const string SceneTransfer     = "res://scenes/transfer/TransferView.tscn";
 
     public override async void _Ready()
     {
@@ -115,7 +117,8 @@ public partial class GameMain : Control
         foreach (var (label, scene) in new (string, string)[] {
             ("📅  Kalender", SceneKalender),
             ("💪  Training", SceneTraining),
-            ("💶  Finanzen", ""),
+            ("💶  Finanzen", SceneFinanzen),
+            ("🔁  Transfers", SceneTransfer),
             ("🏟  Umfeld",   ""),
             ("👦  Jugend",   SceneJugend),
         })

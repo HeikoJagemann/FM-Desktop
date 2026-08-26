@@ -97,6 +97,14 @@ public static class FmTheme
         btn.AddThemeColorOverride("font_color",  Colors.White);
     }
 
+    /// <summary>
+    /// Einheitliche Geldformatierung - Tausendertrennung mit Punkt (deutsch), Euro-Zeichen am
+    /// Betrag. Vorher gab es zwei uneinheitliche Schreibweisen: einmal das € im Spaltentitel,
+    /// einmal am Betrag selbst. Die eigentliche Formatierung liegt in
+    /// <see cref="Models.Geldformat"/>, damit auch die Modellschicht sie nutzen kann.
+    /// </summary>
+    public static string Geld(long betrag) => Models.Geldformat.Text(betrag);
+
     public static Label MakeLabel(string text, int size = 14, Color? color = null,
         HorizontalAlignment align = HorizontalAlignment.Left)
     {

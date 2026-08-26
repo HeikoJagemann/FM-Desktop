@@ -53,6 +53,12 @@ public partial class FmGrid<T> : VBoxContainer
     public event Action<T>? Rechtsklick;
     public event Action<T>? Doppelklick;
 
+    /// <summary>Einfacher Linksklick auf eine Zeile - die Zeile wird dabei hervorgehoben.</summary>
+    public event Action<T>? Ausgewaehlt;
+
+    private GridZeile<T>? _gewaehlteZeile;
+    private Color _farbeVorAuswahl;
+
     public FmGrid(IEnumerable<GridSpalte<T>> spalten)
     {
         _spalten = spalten.ToList();
@@ -190,6 +196,8 @@ public partial class FmGrid<T> : VBoxContainer
     {
         foreach (var kind in _zeilenBox.GetChildren()) kind.QueueFree();
         _zeilen.Clear();
+        // Die alten Zeilen sind gleich freigegeben - eine Auswahl darauf waere ein toter Verweis.
+        _gewaehlteZeile = null;
 
         var sortiert = Sortiert(_daten);
 
@@ -293,8 +301,36 @@ public partial class FmGrid<T> : VBoxContainer
 
     private void OnZeileAngeklickt(GridZeile<T> zeile, MouseButton taste, bool doppelt)
     {
-        if (taste == MouseButton.Right) Rechtsklick?.Invoke(zeile.Datensatz);
-        else if (doppelt) Doppelklick?.Invoke(zeile.Datensatz);
+        if (taste == MouseButton.Right)
+        {
+            Rechtsklick?.Invoke(zeile.Datensatz);
+            return;
+        }
+        if (doppelt)
+        {
+            Doppelklick?.Invoke(zeile.Datensatz);
+            return;
+        }
+        if (Ausgewaehlt != null)
+        {
+            WaehleAus(zeile);
+            Ausgewaehlt.Invoke(zeile.Datensatz);
+        }
+    }
+
+    /// <summary>
+    /// Hebt die angeklickte Zeile hervor und stellt die vorherige wieder her. Ohne sichtbare
+    /// Markierung waere fuer den Nutzer nicht erkennbar, worauf sich eine Schaltflaeche bezieht.
+    /// </summary>
+    private void WaehleAus(GridZeile<T> zeile)
+    {
+        if (_gewaehlteZeile != null && IsInstanceValid(_gewaehlteZeile))
+        {
+            _gewaehlteZeile.Hintergrund = _farbeVorAuswahl;
+        }
+        _gewaehlteZeile = zeile;
+        _farbeVorAuswahl = zeile.Hintergrund;
+        zeile.Hintergrund = FmTheme.Accent.Darkened(0.35f);
     }
 }
 

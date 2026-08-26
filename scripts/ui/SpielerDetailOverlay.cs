@@ -158,9 +158,14 @@ public partial class SpielerDetailOverlay : Control
         v.AddThemeConstantOverride("separation", 6);
         v.AddChild(InfoZeile("Geburtsdatum", _s.Geburtsdatum.ToString("dd.MM.yyyy")));
         v.AddChild(InfoZeile("Nationalität", _s.Nationalitaet));
-        v.AddChild(InfoZeile("Marktwert", $"{_s.Wert:N0} €"));
+        v.AddChild(InfoZeile("Marktwert", FmTheme.Geld(_s.Wert)));
         v.AddChild(InfoZeile("Kader", KaderLabel(_s.Kader)));
         v.AddChild(InfoZeile("Beste Positionen", _s.Top3PositionenText));
+        if (_s.Gehalt > 0)
+        {
+            v.AddChild(InfoZeile("Gehalt/Woche", FmTheme.Geld(_s.Gehalt)));
+            v.AddChild(InfoZeile("Vertrag bis", $"Saison {_s.VertragBis}/{_s.VertragBis + 1}"));
+        }
     }));
 
     private Control BuildStatistikenCard() => BaueCard("📊  Statistiken", new VBoxContainer().Also(v =>

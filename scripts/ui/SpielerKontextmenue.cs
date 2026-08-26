@@ -27,6 +27,13 @@ public static class SpielerKontextmenue
         var menu = new PopupMenu();
         menu.AddItem("👤  Spielerdetails anzeigen", 0);
 
+        // Nur Profis und Amateure haben einen Vertrag - Jugendspieler noch nicht.
+        bool hatVertrag = spieler.Kader is "Profi" or "Amateur";
+        if (hatVertrag)
+        {
+            menu.AddItem("📄  Vertrag um 2 Jahre verlängern", 1);
+        }
+
         menu.AddSeparator("Verschieben nach");
 
         // Nur Ziele anbieten, in denen der Spieler auch auflaufen darf - was zulässig ist,
@@ -50,6 +57,10 @@ public static class SpielerKontextmenue
             if (gewaehlt == 0)
             {
                 SpielerDetailOverlay.Zeige(caller, spieler);
+            }
+            else if (gewaehlt == 1)
+            {
+                _ = VerlaengereAsync(caller, spieler);
             }
             else if (ziele.TryGetValue(gewaehlt, out var ziel))
             {
@@ -77,6 +88,31 @@ public static class SpielerKontextmenue
             "JugendC"            => alter <= 14,
             _                    => false,
         };
+    }
+
+    /// <summary>
+    /// Verlängert um zwei Jahre ab dem späteren von laufendem Vertragsende und aktueller Saison -
+    /// so verkürzt die Aktion nie versehentlich einen bereits länger laufenden Vertrag. Das Gehalt
+    /// wird dabei neu zum Marktsatz berechnet; eine Verhandlung mit Ablehnung gibt es noch nicht.
+    /// </summary>
+    private static async System.Threading.Tasks.Task VerlaengereAsync(Control caller, Spieler spieler)
+    {
+        var kalender = await ApiClient.GetAsync<KalenderStand>("kalender");
+        int saison = kalender?.Saison ?? DateTime.Now.Year;
+        int bis = Math.Max(spieler.VertragBis, saison) + 2;
+
+        var ergebnis = await ApiClient.PutAsync<object, Spieler>(
+            $"spieler/{spieler.Id}/vertrag?bis={bis}", new { });
+
+        if (ergebnis == null)
+        {
+            GD.PrintErr($"Vertragsverlängerung für {spieler.Name} abgelehnt.");
+            return;
+        }
+
+        spieler.Gehalt = ergebnis.Gehalt;
+        spieler.VertragBis = ergebnis.VertragBis;
+        KaderGeaendert?.Invoke();
     }
 
     private static async System.Threading.Tasks.Task VerschiebeAsync(Spieler spieler, string ziel)

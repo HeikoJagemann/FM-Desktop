@@ -122,10 +122,22 @@ public static class SpielerSpalten
 
     public static GridSpalte<Spieler> Wert => new()
     {
-        Titel = "Wert (€)", Breite = 110, Expand = true, ExpandGewicht = 2,
+        Titel = "Marktwert", Breite = 120, Expand = true, ExpandGewicht = 2,
         Ausrichtung = HorizontalAlignment.Right,
-        Text       = s => $"{s.Wert:N0}",
+        Text       = s => FmTheme.Geld(s.Wert),
         Sortierung = s => -s.Wert,
+    };
+
+    /// <summary>Wochengehalt; leer bei Jugendspielern, die keinen Vertrag haben.</summary>
+    public static GridSpalte<Spieler> Gehalt => new()
+    {
+        Titel = "Gehalt/Woche", Breite = 130, Expand = true, ExpandGewicht = 2,
+        Ausrichtung = HorizontalAlignment.Right,
+        Text       = s => s.Gehalt > 0 ? FmTheme.Geld(s.Gehalt) : "–",
+        Tooltip    = s => s.VertragBis > 0
+            ? $"Vertrag bis Saison {s.VertragBis}/{s.VertragBis + 1}"
+            : "Kein verwalteter Vertrag.",
+        Sortierung = s => -s.Gehalt,
     };
 
     public static GridSpalte<Spieler> Nation => new()
@@ -169,7 +181,7 @@ public static class SpielerSpalten
 
     public static IEnumerable<GridSpalte<Spieler>> Kaderliste => new[]
     {
-        Name, Position, Staerke, Talent, Alter, Wert, Nation,
+        Name, Position, Staerke, Talent, Alter, Wert, Gehalt, Nation,
     };
 
     public static IEnumerable<GridSpalte<Spieler>> Jugendliste => new[]

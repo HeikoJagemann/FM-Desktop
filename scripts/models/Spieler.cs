@@ -53,6 +53,10 @@ public class Spieler
     public int    Staerke              { get; set; }
     public int    Talent               { get; set; }
     public int    Wert                 { get; set; }
+    /// <summary>Wochengehalt in Euro; 0 bei Jugendspielern, die keinen Vertrag haben.</summary>
+    public int    Gehalt               { get; set; }
+    /// <summary>Saisonjahr, bis zu dessen Ende der Vertrag läuft; 0 ohne verwalteten Vertrag.</summary>
+    public int    VertragBis           { get; set; }
     // Technisch
     public int    Pass                 { get; set; }
     public int    Ballkontrolle        { get; set; }
