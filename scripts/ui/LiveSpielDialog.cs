@@ -141,8 +141,8 @@ public partial class LiveSpielDialog : Control
             MinValue = 0, MaxValue = Spielminuten, Value = 0, ShowPercentage = false,
             SizeFlagsHorizontal = SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(0, 12),
         };
-        _uhr.AddThemeStyleboxOverride("fill", Balken(FmTheme.Success));
-        _uhr.AddThemeStyleboxOverride("background", Balken(FmTheme.BgToolbar));
+        _uhr.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.Success));
+        _uhr.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgToolbar));
         uhrZeile.AddChild(_uhr);
         _minuteLabel = FmTheme.MakeLabel("0'", 15, FmTheme.TextPrimary, HorizontalAlignment.Right);
         _minuteLabel.CustomMinimumSize = new Vector2(48, 0);
@@ -234,13 +234,6 @@ public partial class LiveSpielDialog : Control
 
         return panel;
     }
-
-    private static StyleBoxFlat Balken(Color farbe) => new()
-    {
-        BgColor = farbe,
-        CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3,
-        CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
-    };
 
     // ── Ablauf ───────────────────────────────────────────────────────────────
 
@@ -352,20 +345,13 @@ public partial class LiveSpielDialog : Control
                 ShowPercentage = false,
                 CustomMinimumSize = new Vector2(46, 8),
             };
-            frische.AddThemeStyleboxOverride("fill", Balken(FrischeFarbe(s.Kondition)));
-            frische.AddThemeStyleboxOverride("background", Balken(FmTheme.BgDark));
+            frische.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.FrischeFarbe(s.Kondition)));
+            frische.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgDark));
             zeile.AddChild(frische);
 
             box.AddChild(zeile);
         }
     }
-
-    private static Color FrischeFarbe(double frische) => frische switch
-    {
-        >= 85 => FmTheme.Success,
-        >= 70 => FmTheme.Gold,
-        _     => FmTheme.Danger,
-    };
 
     /// <summary>Farbe der Stärke-Zahl eines Spielers, nach Anteil des ermüdungsbedingten Verlusts.</summary>
     private static Color StaerkeFarbeSpieler(int basis, int effektiv)
@@ -449,7 +435,7 @@ public partial class LiveSpielDialog : Control
 
         SchreibeZeile(Spielminuten,
             $"Abpfiff  –  Endstand {_spiel.HeimTore} : {_spiel.GastTore}", FmTheme.TextPrimary);
-        _uhr.AddThemeStyleboxOverride("fill", Balken(FmTheme.Accent));
+        _uhr.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.Accent));
 
         // Der restliche Spieltag läuft im Hintergrund - erst danach sind Tabelle und
         // Statistiken stimmig, deshalb wird bis dahin gewartet.

@@ -26,8 +26,6 @@ public partial class StartScreen : Control
     private ProgressBar  _progressBar     = null!;
     private Label        _progressLabel   = null!;
     private HBoxContainer _vereineContainer = null!;
-    private Godot.Timer? _pollTimer;
-    private bool         _polling;
 
     private VBoxContainer _schemaListeContainer = null!;
     private string        _gewaehlteSchema      = "db_default";

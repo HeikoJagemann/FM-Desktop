@@ -687,15 +687,16 @@ public partial class AufstellungView : Control
         // Bestehende Zuweisungen retten, sofern Slot noch existiert
         var alteZuweisungen = _slots
             .Where(kv => kv.Value.SpielerId.HasValue)
-            .ToDictionary(kv => kv.Key, kv => (kv.Value.SpielerId!.Value, kv.Value.SpielerName, kv.Value.Staerke));
+            .ToDictionary(kv => kv.Key, kv => (kv.Value.SpielerId!.Value, kv.Value.SpielerName,
+                kv.Value.Staerke, kv.Value.Grundstaerke, kv.Value.Eingespieltheit));
 
         _currentFormation = newFormation;
         BuildSlots(_currentFormation);
 
-        foreach (var (slotName, (spielerId, name, staerke)) in alteZuweisungen)
+        foreach (var (slotName, (spielerId, name, staerke, grundstaerke, eingespieltheit)) in alteZuweisungen)
         {
             if (_slots.TryGetValue(slotName, out var slot))
-                slot.Assign(spielerId, name, staerke);
+                slot.Assign(spielerId, name, staerke, grundstaerke, eingespieltheit);
         }
 
         AktualisiereListenPositionen();
@@ -720,12 +721,8 @@ public partial class AufstellungView : Control
                 slot.Clear();
         }
 
-        // Wenn auf dem Ziel-Slot bereits jemand ist und der gedropte woanders herkam: tauschen
-        if (targetSlot.SpielerId.HasValue && targetSlot.SpielerId != spielerId)
-        {
-            // kein Tausch zurück nötig – der vorherige wird einfach überschrieben
-        }
-
+        // Steht auf dem Ziel-Slot schon jemand anderes, wird er einfach überschrieben -
+        // ein Tausch zurück ist nicht nötig, der vorherige landet ja bereits leer da oben.
         targetSlot.Assign(spielerId, spielerName);
         AktualisiereListenPositionen();
         _statusLabel.Text = $"{spielerName} → {targetSlot.Anzeige}";

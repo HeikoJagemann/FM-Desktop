@@ -87,6 +87,22 @@ public static class FmTheme
         return s;
     }
 
+    /// <summary>Gerundeter Balken für Kondition/Frische-Anzeigen (ProgressBar-Stylebox).</summary>
+    public static StyleBoxFlat KonditionsBalken(Color farbe) => new()
+    {
+        BgColor = farbe,
+        CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3,
+        CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
+    };
+
+    /// <summary>Einheitliche Ampelfarbe für einen Frische-/Konditionswert (0-100).</summary>
+    public static Color FrischeFarbe(double frische) => frische switch
+    {
+        >= 85 => Success,
+        >= 70 => Gold,
+        _     => Danger,
+    };
+
     // ── Hilfs-Methoden für Controls ───────────────────────────
     public static void ApplyButton(Button btn, Color bg)
     {

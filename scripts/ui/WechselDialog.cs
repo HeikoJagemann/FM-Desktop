@@ -376,8 +376,8 @@ public partial class WechselDialog : Control
                 SizeFlagsVertical = SizeFlags.ShrinkCenter,
                 MouseFilter = MouseFilterEnum.Ignore,
             };
-            frische.AddThemeStyleboxOverride("fill", Balken(FrischeFarbe(s.Kondition)));
-            frische.AddThemeStyleboxOverride("background", Balken(FmTheme.BgDark));
+            frische.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.FrischeFarbe(s.Kondition)));
+            frische.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgDark));
             inhalt.AddChild(frische);
         }
         else
@@ -501,17 +501,4 @@ public partial class WechselDialog : Control
         return s;
     }
 
-    private static StyleBoxFlat Balken(Color farbe) => new()
-    {
-        BgColor = farbe,
-        CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3,
-        CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
-    };
-
-    private static Color FrischeFarbe(double frische) => frische switch
-    {
-        >= 85 => FmTheme.Success,
-        >= 70 => FmTheme.Gold,
-        _     => FmTheme.Danger,
-    };
 }
