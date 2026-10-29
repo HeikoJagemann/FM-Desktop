@@ -34,4 +34,14 @@ public static class ClientEinstellungen
         cfg.SetValue(Abschnitt, schluessel, wert);
         cfg.Save(Pfad);
     }
+
+    public static string GetString(string schluessel, string standard) =>
+        Laden().GetValue(Abschnitt, schluessel, standard).AsString();
+
+    public static void SetString(string schluessel, string wert)
+    {
+        var cfg = Laden();
+        cfg.SetValue(Abschnitt, schluessel, wert);
+        cfg.Save(Pfad);
+    }
 }

@@ -40,7 +40,7 @@ public static class ApiClient
                 System.Net.Http.HttpMethod.Get, path);
             request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
             var response = await Http.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return default;
+            if (!DarfLesen(path, response)) return default;
             return await response.Content.ReadFromJsonAsync<T>(JsonOpts);
         }
         catch (Exception e)
@@ -76,7 +76,7 @@ public static class ApiClient
             request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
             request.Content = JsonContent.Create(body, options: SendeOpts);
             var response = await Http.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return default;
+            if (!DarfLesen(path, response)) return default;
             if (response.Content.Headers.ContentLength is null or 0) return default;
             return await response.Content.ReadFromJsonAsync<TResult>(JsonOpts);
         }
@@ -84,6 +84,58 @@ public static class ApiClient
         {
             GD.PrintErr($"[ApiClient] PUT {path} fehlgeschlagen: {e.Message}");
             return default;
+        }
+    }
+
+    /// <summary>
+    /// Ob sich das Lesen der Antwort lohnt - und meldet, wenn nicht.
+    ///
+    /// <para>Vorher wurde jeder Fehlerstatus stillschweigend zu <c>null</c>. Ein Endpunkt, den
+    /// ein nicht neu gestartetes Backend gar nicht kennt, sah damit genauso aus wie eine leere
+    /// Antwort, und der Grund stand nirgends im Log.</para>
+    ///
+    /// <para>204 ist kein Fehler, sondern die uebliche Antwort auf eine Anfrage ohne Ergebnis -
+    /// dort gibt es nur nichts zu lesen.</para>
+    /// </summary>
+    private static bool DarfLesen(string path, System.Net.Http.HttpResponseMessage antwort)
+    {
+        if (antwort.StatusCode == System.Net.HttpStatusCode.NoContent) return false;
+        if (antwort.IsSuccessStatusCode) return true;
+
+        GD.PrintErr($"[ApiClient] {path}: HTTP {(int)antwort.StatusCode} {antwort.StatusCode}"
+                    + (antwort.StatusCode == System.Net.HttpStatusCode.NotFound
+                        ? " - kennt der Server diesen Pfad? Backend neu gestartet?"
+                        : ""));
+        return false;
+    }
+
+    /// <summary>
+    /// Wie <see cref="PostAsync{TBody,TResult}"/>, gibt aber zusätzlich den Status zurück.
+    ///
+    /// <para>Für Aufrufe, bei denen „nichts da“ und „ging schief“ verschiedene Dinge sind: Ein
+    /// spielfreier Tag antwortet mit 204, ein abgestürzter Server gar nicht. Beides zu
+    /// <c>null</c> zu machen, hat eine leere Ansicht erzeugt, die keinen der beiden Fälle
+    /// erklärte.</para>
+    /// </summary>
+    public static async Task<(TResult? Wert, int Status)> PostMitStatus<TBody, TResult>(
+        string path, TBody body)
+    {
+        try
+        {
+            var request = new System.Net.Http.HttpRequestMessage(
+                System.Net.Http.HttpMethod.Post, path);
+            request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
+            request.Content = JsonContent.Create(body, options: SendeOpts);
+            var response = await Http.SendAsync(request);
+            int status = (int)response.StatusCode;
+
+            if (!DarfLesen(path, response)) return (default, status);
+            return (await response.Content.ReadFromJsonAsync<TResult>(JsonOpts), status);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[ApiClient] POST {path} fehlgeschlagen: {e.Message}");
+            return (default, 0);
         }
     }
 
@@ -96,7 +148,7 @@ public static class ApiClient
             request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
             request.Content = JsonContent.Create(body, options: SendeOpts);
             var response = await Http.SendAsync(request);
-            if (!response.IsSuccessStatusCode) return default;
+            if (!DarfLesen(path, response)) return default;
             return await response.Content.ReadFromJsonAsync<TResult>(JsonOpts);
         }
         catch (Exception e)

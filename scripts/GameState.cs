@@ -26,6 +26,10 @@ public partial class GameState : Node
     public override void _Ready()
     {
         Instance = this;
+
+        // Fenstermodus vom letzten Start wiederherstellen - liegt lokal, nicht im Spielstand.
+        if (ClientEinstellungen.GetBool("vollbild", false))
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
     }
 
     public void SetVerein(long vereinId, string vereinName, long ligaId, string ligaName)

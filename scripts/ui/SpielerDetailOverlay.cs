@@ -163,7 +163,7 @@ public partial class SpielerDetailOverlay : Control
         v.AddChild(InfoZeile("Beste Positionen", _s.Top3PositionenText));
         if (_s.Gehalt > 0)
         {
-            v.AddChild(InfoZeile("Gehalt/Woche", FmTheme.Geld(_s.Gehalt)));
+            v.AddChild(InfoZeile(FmTheme.GehaltTitel, FmTheme.Gehalt(_s.Gehalt)));
             v.AddChild(InfoZeile("Vertrag bis", $"Saison {_s.VertragBis}/{_s.VertragBis + 1}"));
         }
     }));

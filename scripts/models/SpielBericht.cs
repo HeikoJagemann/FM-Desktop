@@ -27,5 +27,9 @@ public class SpielBericht
     public double HeimStaerke { get; set; }
     public double GastStaerke { get; set; }
 
+    /// <summary>Kennzahlen der Partie; null bei Spielen von vor der Statistikerfassung.</summary>
+    public Spielstatistik? HeimStatistik { get; set; }
+    public Spielstatistik? GastStatistik { get; set; }
+
     public string Ergebnis => Gespielt ? $"{HeimTore} : {GastTore}" : "– : –";
 }

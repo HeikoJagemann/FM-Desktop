@@ -67,6 +67,10 @@ public class LiveSpiel
 
     public List<SpielEreignis> Ereignisse { get; set; } = new();
 
+    /// <summary>Kennzahlen der Partie zum aktuellen Stand - laufen während des Spiels mit.</summary>
+    public Spielstatistik? HeimStatistik { get; set; }
+    public Spielstatistik? GastStatistik { get; set; }
+
     public bool EigenesHeimspiel => EigenerVereinId != null && EigenerVereinId == HeimVereinId;
 
     /// <summary>Spieler der eigenen Mannschaft, die gerade auf dem Platz stehen.</summary>

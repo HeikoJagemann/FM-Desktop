@@ -51,7 +51,7 @@ public partial class FinanzenView : Control
 
         _kontostandLabel   = BaueKennzahl(kennzahlen, "Kontostand");
         _wochenbilanzLabel = BaueKennzahl(kennzahlen, "Wochenbilanz");
-        _gehaltsetatLabel  = BaueKennzahl(kennzahlen, "Gehaltsetat / Woche");
+        _gehaltsetatLabel  = BaueKennzahl(kennzahlen, $"Gehaltsetat / {Gehaltsformat.PeriodeLabel}");
 
         vbox.AddChild(BaueTicketpreisPanel());
 
@@ -144,7 +144,7 @@ public partial class FinanzenView : Control
         _wochenbilanzLabel.AddThemeColorOverride("font_color",
             finanzen.Wochenbilanz >= 0 ? FmTheme.Success : FmTheme.Danger);
 
-        _gehaltsetatLabel.Text = FmTheme.Geld(finanzen.Gehaltsetat);
+        _gehaltsetatLabel.Text = FmTheme.Gehalt(finanzen.Gehaltsetat);
 
         _fuellt = true;
         _ticketpreisFeld.Value = _stadion?.Ticketpreis ?? finanzen.Ticketpreis;

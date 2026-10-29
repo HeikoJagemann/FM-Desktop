@@ -151,8 +151,7 @@ public partial class StartScreen : Control
         vbox.AddChild(_btnLaden);
 
         var btnEinstellungen = MakeMenuButton("⚙   Einstellungen", FmTheme.BgPanel);
-        btnEinstellungen.Disabled = true;
-        btnEinstellungen.TooltipText = "Noch nicht verfügbar";
+        btnEinstellungen.Pressed += () => EinstellungenDialog.Zeige(this);
         vbox.AddChild(btnEinstellungen);
 
         var spacer2 = new Control { CustomMinimumSize = new Vector2(0, 4) };

@@ -76,8 +76,8 @@ public static class TransferSpalten
 
     public static GridSpalte<TransferSpieler> Gehaltsforderung => new()
     {
-        Titel = "Gehalt/Woche", Breite = 120, Ausrichtung = HorizontalAlignment.Right,
-        Text       = s => FmTheme.Geld(s.Gehaltsforderung),
+        Titel = FmTheme.GehaltTitel, Breite = 120, Ausrichtung = HorizontalAlignment.Right,
+        Text       = s => FmTheme.Gehalt(s.Gehaltsforderung),
         Tooltip    = _ => "Was der Spieler bei einem Wechsel fordert - etwas über seinem "
                         + "bisherigen Marktsatz.",
         Sortierung = s => -s.Gehaltsforderung,
@@ -129,8 +129,8 @@ public static class TransferSpalten
 
     public static GridSpalte<TransferangebotModel> AngebotGehalt => new()
     {
-        Titel = "Gehalt/Woche", Breite = 120, Ausrichtung = HorizontalAlignment.Right,
-        Text    = a => FmTheme.Geld(a.Gehalt),
+        Titel = FmTheme.GehaltTitel, Breite = 120, Ausrichtung = HorizontalAlignment.Right,
+        Text    = a => FmTheme.Gehalt(a.Gehalt),
         Tooltip = a => $"Neuer Vertrag bis Saison {a.VertragBis}/{a.VertragBis + 1}",
     };
 

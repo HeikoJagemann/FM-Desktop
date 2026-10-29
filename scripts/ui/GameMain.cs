@@ -12,9 +12,14 @@ public partial class GameMain : Control
     private Label   _vereinLabel = null!;
     private Label   _spieltagLabel = null!;
     private Label   _fortschrittLabel = null!;
+    private Label   _ereignisLabel = null!;
+    private Button  _trainingButton = null!;
     private Button  _simulierenButton = null!;
     private Timer   _pollTimer = null!;
     private KalenderStand? _kalenderStand;
+
+    /// <summary>Sperrt weitere Abfragen, solange eine unterwegs ist.</summary>
+    private bool _pollLaeuft;
 
     /// Aktuell angezeigte Szene - nach einem Wochendurchlauf wird sie neu geladen,
     /// weil die Views ihre Daten nur einmal in _Ready() holen.
@@ -30,6 +35,9 @@ public partial class GameMain : Control
     private const string SceneKalender     = "res://scenes/kalender/KalenderView.tscn";
     private const string SceneFinanzen     = "res://scenes/finanzen/FinanzenView.tscn";
     private const string SceneTransfer     = "res://scenes/transfer/TransferView.tscn";
+
+    /// Eigener Bildschirm statt Overlay - die Partie übernimmt das ganze Fenster.
+    private const string SceneSpiel        = "res://scenes/spiel/SpielView.tscn";
 
     public override async void _Ready()
     {
@@ -139,11 +147,22 @@ public partial class GameMain : Control
         _fortschrittLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
         hbox.AddChild(_fortschrittLabel);
 
+        // Ereignis, auf dem der Stand gerade steht
+        _ereignisLabel = FmTheme.MakeLabel("", 12, FmTheme.Gold);
+        hbox.AddChild(_ereignisLabel);
+
+        // Nur am Wochenstart: Abkürzung zur Trainingsplanung, denn genau dafür hält er an.
+        _trainingButton = new Button { Text = "💪  Training planen", Visible = false };
+        FmTheme.ApplyButton(_trainingButton, FmTheme.BgPanel);
+        _trainingButton.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        _trainingButton.Pressed += () => LadeScene(SceneTraining);
+        hbox.AddChild(_trainingButton);
+
         // Spieldatum und Saisonabschnitt
         _spieltagLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
         hbox.AddChild(_spieltagLabel);
 
-        _simulierenButton = new Button { Text = "▶  Woche weiter" };
+        _simulierenButton = new Button { Text = "▶  Weiter" };
         FmTheme.ApplyButton(_simulierenButton, FmTheme.Accent);
         _simulierenButton.Pressed += OnSimulierenPressed;
         hbox.AddChild(_simulierenButton);
@@ -154,28 +173,37 @@ public partial class GameMain : Control
         _vereinLabel = FmTheme.MakeLabel(GameState.Instance.VereinName, 14, FmTheme.TextPrimary);
         hbox.AddChild(_vereinLabel);
 
+        // Einstellungen (Fenstermodus, Gehaltsanzeige)
+        var einstellungen = new Button { Text = "⚙", TooltipText = "Einstellungen", CustomMinimumSize = new Vector2(36, 0) };
+        FmTheme.ApplyButton(einstellungen, FmTheme.BgPanel);
+        einstellungen.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
+        einstellungen.Pressed += () => EinstellungenDialog.Zeige(this, () => LadeScene(_aktuelleScene));
+        hbox.AddChild(einstellungen);
+
         return panel;
     }
 
-    // ── Wochendurchlauf ──────────────────────────────────────────────────────
+    // ── Schritt auf der Zeitachse ────────────────────────────────────────────
 
     /// <summary>
-    /// Ein Schritt auf der Zeitachse. Steht heute das eigene Spiel an, wird zuerst die Aufstellung
-    /// geprüft - sonst geht es ohne Rückfrage eine Woche weiter.
+    /// Ein Schritt von Ereignis zu Ereignis. Steht man auf einer eigenen Partie, wird sie gespielt -
+    /// sonst läuft die Zeit bis zum nächsten Halt.
     /// </summary>
     private async void OnSimulierenPressed()
     {
         _simulierenButton.Disabled = true;
 
-        bool spielHeute = _kalenderStand?.NaechstesSpiel != null
-                       && _kalenderStand.NaechstesSpiel.Datum <= NaechsterHalt();
-
-        if (!spielHeute)
+        if (_kalenderStand?.AktuellesEreignis is { IstSpiel: true })
         {
-            StarteWochendurchlauf();
+            await StarteEigenesSpiel();
             return;
         }
+        StarteDurchlauf();
+    }
 
+    /// <summary>Prüft die Aufstellung und pfeift dann an.</summary>
+    private async System.Threading.Tasks.Task StarteEigenesSpiel()
+    {
         _fortschrittLabel.Text = "Prüfe Aufstellung …";
         long vereinId = GameState.Instance.VereinId;
         var aufstellung = await ApiClient.GetAsync<AufstellungModel>($"aufstellung/{vereinId}");
@@ -196,47 +224,36 @@ public partial class GameMain : Control
             _simulierenButton.Disabled = false;
             FrageNach("Aufstellung unvollständig",
                 aufstellung.Warnung + "\n\nDeine Mannschaft tritt dann in Unterzahl an. Trotzdem spielen?",
-                StarteWochendurchlauf);
+                Anpfiff);
             return;
         }
 
-        StarteWochendurchlauf();
+        Anpfiff();
     }
 
-    /// <summary>Bis wohin der nächste Schritt reicht - nächster Sonntag oder eigenes Spiel.</summary>
-    private DateOnly NaechsterHalt()
+    /// <summary>
+    /// Übergibt an den Spielbildschirm. Die Partie bekommt eine eigene Szene statt eines Overlays:
+    /// Während sie läuft, darf weder navigiert noch die Zeit weitergeschaltet werden - diese
+    /// Toolbar wäre also durchgehend irreführend. Der Anpfiff selbst geschieht dort.
+    /// </summary>
+    private void Anpfiff()
     {
-        var heute = GameState.Instance.Spieldatum;
-        int bisSonntag = ((int)DayOfWeek.Sunday - (int)heute.DayOfWeek + 7) % 7;
-        return heute.AddDays(bisSonntag == 0 ? 7 : bisSonntag);
+        _fortschrittLabel.Text = "";
+        GetTree().ChangeSceneToFile(SceneSpiel);
     }
 
-    private async void StarteWochendurchlauf()
+    /// <summary>Lässt die Zeit bis zum nächsten Ereignis laufen.</summary>
+    private async void StarteDurchlauf()
     {
         _simulierenButton.Disabled = true;
-        _fortschrittLabel.Text = "Die Woche läuft …";
-
-        // Steht das eigene Spiel heute an, wird es live gespielt statt gerechnet.
-        long vereinId = GameState.Instance.VereinId;
-        var live = await ApiClient.PostAsync<object, LiveSpiel>(
-            $"spiel/live/start?vereinId={vereinId}", new { });
-
-        if (live != null && live.SpielId > 0)
-        {
-            _fortschrittLabel.Text = "";
-            LiveSpielDialog.Zeige(this, live, async () =>
-            {
-                _simulierenButton.Disabled = false;
-                await AktualisiereKalenderstand();
-                LadeScene(_aktuelleScene);
-            });
-            return;
-        }
+        _fortschrittLabel.Text = _kalenderStand?.NaechstesEreignis is { } ziel
+            ? $"Weiter bis {ziel.Titel} …"
+            : "Die Zeit läuft …";
 
         bool gestartet = await ApiClient.PostAsync("kalender/weiter");
         if (!gestartet)
         {
-            _fortschrittLabel.Text = "Der Wochendurchlauf konnte nicht gestartet werden";
+            _fortschrittLabel.Text = "Der Durchlauf konnte nicht gestartet werden";
             _simulierenButton.Disabled = false;
             return;
         }
@@ -272,7 +289,22 @@ public partial class GameMain : Control
 
     private async void OnPollTimeout()
     {
-        var stand = await ApiClient.GetAsync<Fortschritt>("kalender/fortschritt");
+        // Der Timer feuert weiter, während die Anfrage unterwegs ist. Ohne diesen Riegel sind
+        // mehrere Abfragen gleichzeitig offen, melden alle "fertig" und laden die Ansicht mehrfach.
+        if (_pollLaeuft) return;
+
+        Fortschritt? stand;
+        _pollLaeuft = true;
+        try
+        {
+            stand = await ApiClient.GetAsync<Fortschritt>("kalender/fortschritt");
+        }
+        finally
+        {
+            _pollLaeuft = false;
+        }
+
+        if (!IsInstanceValid(this)) return;
         if (stand == null)
         {
             return; // Nächster Tick versucht es erneut.
@@ -289,11 +321,12 @@ public partial class GameMain : Control
         _simulierenButton.Disabled = false;
 
         await AktualisiereKalenderstand();
+        if (!IsInstanceValid(this)) return;
         LadeScene(_aktuelleScene);
     }
 
     /// <summary>
-    /// Holt das Spieldatum und beschriftet die Toolbar damit. Der Fortschritt haengt seit dem
+    /// Holt den Spielzeitpunkt und richtet die Toolbar daran aus. Der Fortschritt haengt seit dem
     /// Kalender an der Zeit, nicht mehr an einem Spieltagszaehler.
     /// </summary>
     private async System.Threading.Tasks.Task AktualisiereKalenderstand()
@@ -308,11 +341,31 @@ public partial class GameMain : Control
         GameState.Instance.SetSpieldatum(stand.Datum);
         _kalenderStand = stand;
 
-        _spieltagLabel.Text = $"Saison {stand.SaisonText} · {stand.DatumText} · {stand.Phase}";
+        _spieltagLabel.Text = $"Saison {stand.SaisonText} · {stand.ZeitpunktText} · {stand.Phase}";
+        ZeigeEreignis(stand);
+    }
+
+    /// <summary>
+    /// Richtet Toolbar und Schaltfläche am Ereignis aus, auf dem der Stand steht. Die Beschriftung
+    /// kommt vom Server mit - so heißt der Knopf auf einer eigenen Partie "Spiel starten", ohne
+    /// dass der Client die Ereignisarten einzeln kennen müsste.
+    /// </summary>
+    private void ZeigeEreignis(KalenderStand stand)
+    {
+        var hier = stand.AktuellesEreignis;
+        var ziel = stand.NaechstesEreignis;
+
+        _ereignisLabel.Text = hier != null ? $"{hier.Symbol}  {hier.Titel}" : "";
+        // Der Wochenstart hält genau dafür an, dass hier geplant wird.
+        _trainingButton.Visible = hier is { IstWochenstart: true };
+
         _simulierenButton.Disabled = false;
-        _simulierenButton.TooltipText = stand.NaechstesSpiel == null
-            ? "Eine Woche weiter"
-            : $"Nächstes Spiel: {stand.NaechstesSpiel.Titel} am {stand.NaechstesSpiel.Datum:dd.MM.}";
+        _simulierenButton.Text = $"▶  {hier?.AktionText ?? "Weiter"}";
+        _simulierenButton.TooltipText = hier is { IstSpiel: true }
+            ? $"{hier.Titel} · {hier.Untertitel}"
+            : ziel == null
+                ? "Die Zeit weiterlaufen lassen"
+                : $"Nächster Halt: {ziel.Titel} ({ziel.ZeitText})";
     }
 
     private MenuButton BuildDropdown(string label, (string Label, string Scene)[] items)

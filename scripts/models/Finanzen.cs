@@ -51,3 +51,48 @@ public static class Geldformat
     public static string Text(long betrag) =>
         betrag.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("de-DE")) + " €";
 }
+
+/// <summary>Zeitraum, auf den Gehälter fürs Anzeigen umgerechnet werden - reine Client-Einstellung.</summary>
+public enum GehaltsPeriode { Woche, Monat, Jahr }
+
+/// <summary>
+/// Rechnet die vom Backend stets als Wochenbetrag gelieferten Gehälter in die vom Nutzer
+/// gewählte Anzeigeperiode um. Das Backend selbst kennt nur Wochengehälter - Verträge, Angebote
+/// und der Gehaltsetat rechnen intern ausschließlich damit; hier wird nur fürs Anzeigen umgerechnet.
+/// </summary>
+public static class Gehaltsformat
+{
+    private const string Schluessel = "gehalt_periode";
+
+    public static GehaltsPeriode Periode
+    {
+        get => Enum.TryParse<GehaltsPeriode>(
+            ClientEinstellungen.GetString(Schluessel, nameof(GehaltsPeriode.Woche)), out var periode)
+            ? periode : GehaltsPeriode.Woche;
+        set => ClientEinstellungen.SetString(Schluessel, value.ToString());
+    }
+
+    public static string PeriodeLabel => Periode switch
+    {
+        GehaltsPeriode.Monat => "Monat",
+        GehaltsPeriode.Jahr  => "Jahr",
+        _                    => "Woche",
+    };
+
+    /// <summary>Spaltentitel/Zeilenbeschriftung, passend zur aktuell eingestellten Periode.</summary>
+    public static string Titel => $"Gehalt/{PeriodeLabel}";
+
+    /// <summary>
+    /// Ein Jahr hat 52 Kalenderwochen; ein Monat entsprechend 52/12 Wochen - kein grober
+    /// Faktor 4, sonst würde das angezeigte Jahresgehalt nicht dem Zwölffachen des Monatsgehalts
+    /// entsprechen.
+    /// </summary>
+    private static long Umrechnen(long wochenbetrag) => Periode switch
+    {
+        GehaltsPeriode.Monat => wochenbetrag * 52 / 12,
+        GehaltsPeriode.Jahr  => wochenbetrag * 52,
+        _                    => wochenbetrag,
+    };
+
+    public static string Text(long wochenbetrag) => Geldformat.Text(Umrechnen(wochenbetrag));
+}

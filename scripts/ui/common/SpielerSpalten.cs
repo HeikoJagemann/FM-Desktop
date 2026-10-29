@@ -131,9 +131,9 @@ public static class SpielerSpalten
     /// <summary>Wochengehalt; leer bei Jugendspielern, die keinen Vertrag haben.</summary>
     public static GridSpalte<Spieler> Gehalt => new()
     {
-        Titel = "Gehalt/Woche", Breite = 130, Expand = true, ExpandGewicht = 2,
+        Titel = FmTheme.GehaltTitel, Breite = 130, Expand = true, ExpandGewicht = 2,
         Ausrichtung = HorizontalAlignment.Right,
-        Text       = s => s.Gehalt > 0 ? FmTheme.Geld(s.Gehalt) : "–",
+        Text       = s => s.Gehalt > 0 ? FmTheme.Gehalt(s.Gehalt) : "–",
         Tooltip    = s => s.VertragBis > 0
             ? $"Vertrag bis Saison {s.VertragBis}/{s.VertragBis + 1}"
             : "Kein verwalteter Vertrag.",

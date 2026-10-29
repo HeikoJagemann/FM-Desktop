@@ -121,6 +121,15 @@ public static class FmTheme
     /// </summary>
     public static string Geld(long betrag) => Models.Geldformat.Text(betrag);
 
+    /// <summary>
+    /// Gehalt in der vom Nutzer eingestellten Periode (Woche/Monat/Jahr) formatiert -
+    /// <paramref name="wochenbetrag"/> ist immer der vom Backend gelieferte Wochenbetrag.
+    /// </summary>
+    public static string Gehalt(long wochenbetrag) => Models.Gehaltsformat.Text(wochenbetrag);
+
+    /// <summary>Spaltentitel "Gehalt/Woche" etc., passend zur eingestellten Periode.</summary>
+    public static string GehaltTitel => Models.Gehaltsformat.Titel;
+
     public static Label MakeLabel(string text, int size = 14, Color? color = null,
         HorizontalAlignment align = HorizontalAlignment.Left)
     {
