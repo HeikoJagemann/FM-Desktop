@@ -26,10 +26,11 @@ public partial class GameMain : Control
     /// <summary>Sperrt weitere Abfragen, solange eine unterwegs ist.</summary>
     private bool _pollLaeuft;
 
-    /// Aktuell angezeigte Szene - nach einem Wochendurchlauf wird sie neu geladen,
-    /// weil die Views ihre Daten nur einmal in _Ready() holen.
-    private string _aktuelleScene = SceneKader;
+    /// Aktuell angezeigte Szene - etwa fuer die Einstellungen, die sie nach dem Schliessen neu
+    /// laden, weil die Views ihre Daten nur einmal in _Ready() holen.
+    private string _aktuelleScene = SceneDashboard;
 
+    private const string SceneDashboard   = "res://scenes/dashboard/DashboardView.tscn";
     private const string SceneKader       = "res://scenes/mannschaft/KaderView.tscn";
     private const string SceneJugend      = "res://scenes/jugend/JugendView.tscn";
     private const string SceneTabelle     = "res://scenes/liga/TabelleView.tscn";
@@ -52,6 +53,7 @@ public partial class GameMain : Control
     /// </summary>
     private static readonly (string Bereich, (string Seite, string Scene)[] Seiten)[] Bereiche =
     {
+        ("Übersicht",  new[] { ("Dashboard", SceneDashboard) }),
         ("Mannschaft", new[] { ("Kader", SceneKader) }),
         ("Taktik",     new[] { ("Aufstellung", SceneAufstellung) }),
         ("Training",   new[] { ("Trainingsplan", SceneTraining) }),
@@ -65,7 +67,8 @@ public partial class GameMain : Control
     public override async void _Ready()
     {
         BuildUI();
-        LadeScene(GameState.Instance.StartAnsicht ?? SceneKader);
+        // Jeder Spielstart beginnt auf dem Dashboard - dort steht, was seit dem letzten Mal passiert ist.
+        LadeScene(GameState.Instance.StartAnsicht ?? SceneDashboard);
 
         _pollTimer = new Timer { WaitTime = 0.5, OneShot = false, Autostart = false };
         _pollTimer.Timeout += OnPollTimeout;
@@ -440,7 +443,9 @@ public partial class GameMain : Control
 
         await AktualisiereKalenderstand();
         if (!IsInstanceValid(this)) return;
-        LadeScene(_aktuelleScene);
+        // Nach jedem Schritt zurück aufs Dashboard: Ereignisse, Ergebnisse und Training der
+        // vergangenen Tage stehen dort.
+        LadeScene(SceneDashboard);
     }
 
     /// <summary>

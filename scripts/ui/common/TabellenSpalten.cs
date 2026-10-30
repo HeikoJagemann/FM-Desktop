@@ -85,6 +85,12 @@ public static class TabellenSpalten
         Platz, Verein, Spiele, Siege, Unentschieden, Niederlagen, Tore, Tordifferenz, Punkte,
     };
 
+    /// <summary>Die Tabelle in schmal - für das Dashboard.</summary>
+    public static IEnumerable<GridSpalte<TabellenEintrag>> Kompakt => new[]
+    {
+        Platz, Verein, Spiele, Tordifferenz, Punkte,
+    };
+
     /// <summary>
     /// Zeilenfarbe: der eigene Verein hervorgehoben, Auf- und Abstiegsplätze angedeutet.
     /// </summary>
