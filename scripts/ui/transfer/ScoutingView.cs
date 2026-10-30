@@ -93,7 +93,7 @@ public partial class ScoutingView : Control
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        _berichtGrid.Doppelklick += s => { if (_fensterOffen) BietenDialog.Zeige(this, s, Melde); };
+        _berichtGrid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, _fensterOffen, Melde);
         _berichtGrid.Rechtsklick += s => TransferAktionen.Zeige(this, s, _fensterOffen, Melde);
         vbox.AddChild(_berichtGrid);
 
@@ -145,7 +145,7 @@ public partial class ScoutingView : Control
         zeile.AddChild(suchen);
 
         zeile.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        zeile.AddChild(FmTheme.MakeLabel("Doppelklick: Angebot  ·  Rechtsklick: mehr", 12, FmTheme.TextGedimmt));
+        zeile.AddChild(FmTheme.MakeLabel("Doppelklick: Scoutbericht  ·  Rechtsklick: Angebot und mehr", 12, FmTheme.TextGedimmt));
         return panel;
     }
 

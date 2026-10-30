@@ -36,6 +36,10 @@ public partial class BietenDialog : Overlaykarte
 
         inhalt.AddChild(Zeile("Stärke", FmTheme.MakeLabel(s.StaerkeText, 13, FmTheme.TextPrimary)));
         inhalt.AddChild(Zeile("Talent", FmTheme.MakeLabel(s.TalentText, 13, FmTheme.TextPrimary)));
+        var scouting = FmTheme.MakeLabel(s.KenntnisText, 13, FmTheme.TextPrimary);
+        scouting.TooltipText = s.KenntnisTooltip;
+        scouting.MouseFilter = MouseFilterEnum.Pass;
+        inhalt.AddChild(Zeile("Scouting", scouting));
         inhalt.AddChild(Zeile("Marktwert", FmTheme.MakeLabel(FmTheme.Geld(s.Wert), 13, FmTheme.TextPrimary)));
         inhalt.AddChild(Zeile("Vertrag", FmTheme.MakeLabel(s.VertragText, 13, FmTheme.TextPrimary)));
         inhalt.AddChild(Zeile(FmTheme.GehaltTitel,

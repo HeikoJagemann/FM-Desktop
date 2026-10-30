@@ -70,7 +70,7 @@ public partial class TransferView : Control
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         _grid.Ausgewaehlt += s => { _gewaehlt = s; AktualisiereKnoepfe(); };
-        _grid.Doppelklick += s => { if (_fensterOffen) BietenDialog.Zeige(this, s, Melde); };
+        _grid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, _fensterOffen, Melde);
         _grid.Rechtsklick += s => TransferAktionen.Zeige(this, s, _fensterOffen, Melde);
         vbox.AddChild(_grid);
     }
@@ -170,7 +170,7 @@ public partial class TransferView : Control
         _grid.Zeige(treffer);
         _statusLabel.Text = treffer.Count == 0
             ? "Niemand passt - Filter lockern, oder über das Scouting Spieler finden, die nicht zum Verkauf stehen."
-            : $"{treffer.Count} Spieler auf der Transferliste. Doppelklick oder Rechtsklick für ein Angebot.";
+            : $"{treffer.Count} Spieler auf der Transferliste. Doppelklick: Scoutbericht  ·  Rechtsklick: Angebot und mehr.";
     }
 
     private void AktualisiereKnoepfe()

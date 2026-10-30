@@ -31,6 +31,15 @@ public class TransferSpieler
     public int       TalentBis        { get; set; }
     public int       Beobachtungen    { get; set; }
     public DateOnly? Zuletzt          { get; set; }
+
+    /// <summary>
+    /// Wie weit der Spieler gescoutet ist, 0 bis 100 - bezogen auf das, was der beste bisherige
+    /// Beobachter herausfinden kann. Eigene Spieler 100.
+    /// </summary>
+    public int       Kenntnis         { get; set; }
+
+    /// <summary>Qualität dieses besten Beobachters; 0 ohne Beobachtung.</summary>
+    public int       Beobachter       { get; set; }
     public int       Alter            { get; set; }
     public int       Wert             { get; set; }
     public int       VertragBis       { get; set; }
@@ -55,6 +64,24 @@ public class TransferSpieler
     public long   Vorschlag => Preis > 0 ? Preis : Wert;
 
     public static string Spanne(int von, int bis) => von == bis ? von.ToString() : $"{von}–{bis}";
+
+    /// <summary>Der Scoutingfortschritt als kleiner Balken aus fünf Feldern samt Prozentzahl.</summary>
+    public string KenntnisText
+    {
+        get
+        {
+            int voll = (int)Math.Round(Kenntnis / 20.0);
+            return new string('■', voll) + new string('□', 5 - voll) + $"  {Kenntnis} %";
+        }
+    }
+
+    public string KenntnisTooltip => Beobachtungen == 0
+        ? "Noch nicht beobachtet - nur der öffentliche Eindruck.\nEin Scout macht Stärke und Talent genauer."
+        : $"{Beobachtungen} Beobachtung(en), zuletzt {Zuletzt:dd.MM.yyyy}, bester Beobachter Qualität {Beobachter}.\n"
+          + "100 % heißt: Mehr findet dieser Beobachter nicht heraus - ein schwacher Scout\n"
+          + "deckt auch dann nicht alles auf, erst ein besserer sieht genauer.\n"
+          + "Ein alter Bericht verliert wieder an Stand - Spieler entwickeln sich.\n"
+          + "Doppelklick zeigt den Scoutbericht.";
 }
 
 /// <summary>Ein Transferangebot in beide Richtungen (GET transfer/eingehend bzw. /ausgehend).</summary>

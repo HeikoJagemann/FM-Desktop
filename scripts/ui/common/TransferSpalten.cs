@@ -61,6 +61,18 @@ public static class TransferSpalten
         Sortierung = s => -(s.TalentVon + s.TalentBis),
     };
 
+    /// <summary>Wie weit der Spieler gescoutet ist - je voller, desto enger die Spannen.</summary>
+    public static GridSpalte<TransferSpieler> Scouting => new()
+    {
+        Titel = "Scouting", Breite = 104,
+        Text       = s => s.KenntnisText,
+        Farbe      = s => s.Kenntnis >= 80 ? FmTheme.Success
+                        : s.Kenntnis >= 30 ? FmTheme.TextPrimary
+                        : FmTheme.TextGedimmt,
+        Tooltip    = s => s.KenntnisTooltip,
+        Sortierung = s => -s.Kenntnis,
+    };
+
     public static GridSpalte<TransferSpieler> Alter => new()
     {
         Titel = "Alter", Breite = 52, Ausrichtung = HorizontalAlignment.Center,
@@ -108,12 +120,12 @@ public static class TransferSpalten
 
     public static IEnumerable<GridSpalte<TransferSpieler>> Transferliste => new[]
     {
-        Name, Position, Verein, Staerke, Talent, Alter, Vertrag, Preis, Gehaltsforderung,
+        Name, Position, Verein, Staerke, Talent, Scouting, Alter, Vertrag, Preis, Gehaltsforderung,
     };
 
     public static IEnumerable<GridSpalte<TransferSpieler>> Berichte => new[]
     {
-        Name, Position, Verein, Staerke, Talent, Alter, Vertrag, Marktwert, Preis,
+        Name, Position, Verein, Staerke, Talent, Scouting, Alter, Vertrag, Marktwert, Preis,
     };
 
     // ── Angebote ─────────────────────────────────────────────────────────────
