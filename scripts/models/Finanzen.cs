@@ -33,6 +33,7 @@ public class BuchungModel
         "GEHALT"       => "Gehälter",
         "BETRIEB"      => "Betrieb",
         "SPONSOR"      => "Sponsor",
+        "FERNSEHGELD"  => "Fernsehgeld",
         "TRANSFER"     => "Transfer",
         "PRAEMIE"      => "Prämie",
         _              => Art,

@@ -43,7 +43,7 @@ public static class FinanzSpalten
 
     private static Color FarbeFuerArt(string art) => art switch
     {
-        "ZUSCHAUER" or "SPONSOR" or "STARTKAPITAL" or "TRANSFER" or "PRAEMIE" => FmTheme.TextPrimary,
+        "ZUSCHAUER" or "SPONSOR" or "FERNSEHGELD" or "STARTKAPITAL" or "TRANSFER" or "PRAEMIE" => FmTheme.TextPrimary,
         _ => FmTheme.TextSecondary,
     };
 }
