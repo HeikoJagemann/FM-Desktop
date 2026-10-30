@@ -37,7 +37,7 @@ public partial class KaderView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("👥  Mannschaft – Kader", 20, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeTitel("Kader"));
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);

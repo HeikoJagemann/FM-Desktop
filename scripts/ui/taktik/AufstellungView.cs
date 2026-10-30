@@ -12,37 +12,60 @@ namespace FMDesktop.UI.Taktik;
 // ---------------------------------------------------------------------------
 // Drop-target slot on the football field
 // ---------------------------------------------------------------------------
+
+/// <summary>
+/// Ein Platz auf dem Feld oder auf der Bank - gezeichnet als Spielerplakette.
+///
+/// <para>Auf dem Feld: ein Ring in der Farbe des Mannschaftsteils, darin die Stärke auf dieser
+/// Position, darunter Namensschild und Positionskürzel. Spielt jemand auf einer Position, die er
+/// nicht gelernt hat, steht darunter, wie gut er dort eingespielt ist. Auf der Bank wird derselbe
+/// Platz als kompakte Karte gezeichnet. Vorher war beides ein grüner Knopf mit drei Zeilen
+/// Text.</para>
+/// </summary>
 public partial class PositionSlot : Button
 {
     /// <summary>Technischer Schlüssel der Aufstellung, etwa "ZM_1".</summary>
     public string SlotName { get; private set; } = "";
-
     /// <summary>Was auf dem Platz steht, etwa "LZM" - der Schlüssel bleibt unverändert.</summary>
     public string Anzeige { get; private set; } = "";
-
     public long?  SpielerId { get; private set; }
     public string SpielerName { get; private set; } = "";
     public int?   Staerke { get; private set; }
     public int?   Grundstaerke { get; private set; }
     public int?   Eingespieltheit { get; private set; }
+    /// <summary>Gelernte Position des Spielers - für die Bank, wo der Platz keine hat.</summary>
+    public string? SpielerPosition { get; private set; }
+
+    /// <summary>Bankplatz statt Feldposition - als Karte statt als Plakette gezeichnet.</summary>
+    public bool IstBank { get; private set; }
 
     public event Action<PositionSlot, long, string>? PlayerDropped;
-    public static PositionSlot Create(string slotName, string anzeige)
+
+    public const float PlaketteBreite = 96f;
+    public const float PlaketteHoehe  = 80f;
+
+    public static PositionSlot Create(string slotName, string anzeige, bool bank = false)
     {
-        var slot = new PositionSlot { SlotName = slotName, Anzeige = anzeige };
-        slot.CustomMinimumSize = new Vector2(64, 52);
+        var slot = new PositionSlot { SlotName = slotName, Anzeige = anzeige, IstBank = bank };
+        slot.CustomMinimumSize = bank ? new Vector2(0, 52) : new Vector2(PlaketteBreite, PlaketteHoehe);
+        slot.FocusMode = FocusModeEnum.None;
+        foreach (var zustand in new[] { "normal", "hover", "pressed", "focus", "disabled" })
+            slot.AddThemeStyleboxOverride(zustand, new StyleBoxEmpty());
+        slot.MouseEntered += slot.QueueRedraw;
+        slot.MouseExited  += slot.QueueRedraw;
         slot.Refresh();
         return slot;
     }
 
     public void Assign(long spielerId, string spielerName, int? staerke = null,
-        int? grundstaerke = null, int? eingespieltheit = null)
+        int? grundstaerke = null, int? eingespieltheit = null, string? spielerPosition = null)
     {
         SpielerId       = spielerId;
         SpielerName     = spielerName;
         Staerke         = staerke;
         Grundstaerke    = grundstaerke;
         Eingespieltheit = eingespieltheit;
+        SpielerPosition = spielerPosition;
         Refresh();
     }
 
@@ -61,71 +84,146 @@ public partial class PositionSlot : Button
         Staerke         = null;
         Grundstaerke    = null;
         Eingespieltheit = null;
+        SpielerPosition = null;
         Refresh();
     }
 
+    /// <summary>Mannschaftsteil: auf dem Feld der des Platzes, auf der Bank der des Spielers.</summary>
+    private Positionsgruppe Gruppe => PositionsgruppeHelfer.Von(
+        IstBank ? SpielerPosition : SlotBezeichnung.Basis(SlotName));
+
     private void Refresh()
     {
-        bool occupied = SpielerId.HasValue;
-        var bgColor   = occupied ? new Color(0.15f, 0.45f, 0.25f) : new Color(0.10f, 0.30f, 0.15f);
-        var style = new StyleBoxFlat
-        {
-            BgColor     = bgColor,
-            BorderColor = occupied ? FmTheme.Success : FmTheme.Border,
-            CornerRadiusTopLeft     = 6,
-            CornerRadiusTopRight    = 6,
-            CornerRadiusBottomLeft  = 6,
-            CornerRadiusBottomRight = 6,
-        };
-        style.SetBorderWidthAll(1);
-        style.SetContentMarginAll(2);
-        AddThemeStyleboxOverride("normal",  style);
-        AddThemeStyleboxOverride("hover",   MakeSlotStyle(bgColor.Lightened(0.1f), occupied));
-        AddThemeStyleboxOverride("pressed", MakeSlotStyle(bgColor.Darkened(0.1f),  occupied));
-        AddThemeStyleboxOverride("focus",   style);
-        AddThemeColorOverride("font_color", FmTheme.TextPrimary);
-        AddThemeFontSizeOverride("font_size", 11);
+        Text = "";
+        TooltipText = SpielerId.HasValue && Staerke.HasValue && Grundstaerke.HasValue && Eingespieltheit.HasValue
+            ? StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value)
+            : SpielerId.HasValue
+                ? $"{SpielerName} - zum Entfernen anklicken"
+                : IstBank ? "Freier Bankplatz - Spieler hierher ziehen" : $"{Anzeige} - Spieler hierher ziehen";
+        QueueRedraw();
+    }
 
-        // Auf dem Platz steht die Positionsbezeichnung, nicht der technische Schlüssel.
-        if (occupied)
-        {
-            if (Staerke.HasValue)
-                Text = $"{Anzeige}\n{TruncateName(SpielerName)}\n{Staerke.Value}";
-            else
-                Text = $"{Anzeige}\n{TruncateName(SpielerName)}";
+    public override void _Draw()
+    {
+        if (IstBank) ZeichneKarte();
+        else ZeichnePlakette();
+    }
 
-            TooltipText = Staerke.HasValue && Grundstaerke.HasValue && Eingespieltheit.HasValue
-                ? StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value)
-                : "";
+    private void ZeichnePlakette()
+    {
+        bool besetzt = SpielerId.HasValue;
+        bool schwebend = IsHovered();
+        var gruppenfarbe = FmTheme.GruppeFarbe(Gruppe);
+        float mitteX = Size.X / 2f;
+        var kreis = new Vector2(mitteX, 23);
+
+        // Ring mit Stärke
+        if (besetzt)
+        {
+            DrawCircle(kreis + new Vector2(0, 2), 23, new Color(0, 0, 0, 0.35f));
+            DrawCircle(kreis, 22, new Color("0F1814"));
+            DrawArc(kreis, 20.5f, 0, Mathf.Pi * 2, 48, schwebend ? gruppenfarbe.Lightened(0.25f) : gruppenfarbe, 3, true);
+            string zahl = Staerke?.ToString() ?? "–";
+            Zentriert(FmTheme.SchriftZahl, zahl, kreis.Y, 20, FmTheme.TextPrimary);
         }
         else
         {
-            Text = Anzeige;
-            TooltipText = "";
+            DrawCircle(kreis, 22, new Color(0.06f, 0.09f, 0.08f, schwebend ? 0.55f : 0.35f));
+            DrawArc(kreis, 20.5f, 0, Mathf.Pi * 2, 48, new Color(1, 1, 1, schwebend ? 0.8f : 0.45f), 2, true);
+            Zentriert(FmTheme.SchriftUi(700), "+", kreis.Y, 18, new Color(1, 1, 1, 0.7f));
+        }
+
+        // Fremde Position: wie gut er dort eingespielt ist - als Abzeichen am Ring, damit die
+        // Plakette nicht höher wird als der Abstand zur nächsten Reihe.
+        if (besetzt && Eingespieltheit is < 100)
+        {
+            string text = $"{Eingespieltheit} %";
+            var schrift = FmTheme.SchriftUi(700);
+            float breite = schrift.GetStringSize(text, HorizontalAlignment.Left, -1, 10).X + 10;
+            var abzeichen = new Rect2(kreis.X + 12, kreis.Y - 25, breite, 16);
+            DrawStyleBox(FmTheme.Flaeche(FmTheme.Accent, 8), abzeichen);
+            DrawString(schrift, new Vector2(abzeichen.Position.X + 5, abzeichen.Position.Y + 12), text,
+                HorizontalAlignment.Left, -1, 10, FmTheme.AccentText);
+        }
+
+        // Namensschild mit Positionskürzel: "Lenz · OM"
+        float y = 50;
+        var namenSchrift = FmTheme.SchriftUi(600);
+        var kuerzelSchrift = FmTheme.SchriftUi(700);
+        string kuerzel = Anzeige;
+        float kuerzelBreite = kuerzelSchrift.GetStringSize(kuerzel, HorizontalAlignment.Left, -1, 10).X;
+        var kuerzelFarbe = besetzt ? FmTheme.TextFuerGruppe(Gruppe) : new Color(1, 1, 1, 0.8f);
+        if (besetzt)
+        {
+            string name = Nachname(SpielerName);
+            float namenBreite = namenSchrift.GetStringSize(name, HorizontalAlignment.Left, -1, 12).X;
+            float breite = Mathf.Min(Size.X, namenBreite + kuerzelBreite + 22);
+            var schild = new Rect2(mitteX - breite / 2f, y, breite, 21);
+            DrawStyleBox(FmTheme.Flaeche(new Color(0.035f, 0.055f, 0.047f, 0.85f), 6), schild);
+            DrawString(namenSchrift, new Vector2(schild.Position.X + 8, y + 15), name,
+                HorizontalAlignment.Left, breite - kuerzelBreite - 22, 12, FmTheme.TextPrimary);
+            DrawString(kuerzelSchrift, new Vector2(schild.End.X - 8 - kuerzelBreite, y + 15), kuerzel,
+                HorizontalAlignment.Left, -1, 10, kuerzelFarbe);
+        }
+        else
+        {
+            Zentriert(kuerzelSchrift, kuerzel, y + 10, 11, kuerzelFarbe);
         }
     }
 
-    private static StyleBoxFlat MakeSlotStyle(Color bg, bool occupied)
+    private void ZeichneKarte()
     {
-        var s = new StyleBoxFlat
+        bool besetzt = SpielerId.HasValue;
+        bool schwebend = IsHovered();
+        var rahmen = new Rect2(Vector2.Zero, Size);
+        var flaeche = FmTheme.Flaeche(FmTheme.BgPanel, 10,
+            schwebend ? FmTheme.TextGedimmt : FmTheme.Border);
+        if (!besetzt)
         {
-            BgColor     = bg,
-            BorderColor = occupied ? FmTheme.Success : FmTheme.Border,
-            CornerRadiusTopLeft     = 6,
-            CornerRadiusTopRight    = 6,
-            CornerRadiusBottomLeft  = 6,
-            CornerRadiusBottomRight = 6,
-        };
-        s.SetBorderWidthAll(1);
-        s.SetContentMarginAll(2);
-        return s;
+            flaeche.BgColor = new Color(0, 0, 0, 0);
+            flaeche.BorderColor = schwebend ? FmTheme.TextGedimmt : FmTheme.BorderStark;
+        }
+        DrawStyleBox(flaeche, rahmen);
+
+        if (!besetzt)
+        {
+            Zentriert(FmTheme.SchriftUi(500), "frei", Size.Y / 2f, 12, FmTheme.TextGedimmt);
+            return;
+        }
+
+        // Zeile 1: Positionschip und Stärke
+        string position = SpielerPosition ?? "";
+        var chipSchrift = FmTheme.SchriftUi(700);
+        float chipBreite = Mathf.Max(30, chipSchrift.GetStringSize(position, HorizontalAlignment.Left, -1, 11).X + 12);
+        var chip = new Rect2(10, 8, chipBreite, 18);
+        DrawStyleBox(FmTheme.Flaeche(FmTheme.GruppeChip(Gruppe), 5), chip);
+        DrawString(chipSchrift, new Vector2(chip.Position.X, chip.Position.Y + 13), position,
+            HorizontalAlignment.Center, chipBreite, 11, FmTheme.TextFuerGruppe(Gruppe));
+
+        if (Staerke.HasValue)
+        {
+            DrawString(FmTheme.SchriftZahl, new Vector2(10, 24), Staerke.Value.ToString(),
+                HorizontalAlignment.Right, Size.X - 20, 20, FmTheme.TextPrimary);
+        }
+
+        // Zeile 2: Name
+        DrawString(FmTheme.SchriftUi(600), new Vector2(10, 44), Nachname(SpielerName),
+            HorizontalAlignment.Left, Size.X - 20, 13, FmTheme.TextPrimary);
     }
 
-    private static string TruncateName(string name)
+    /// <summary>Zeichnet Text waagerecht zentriert, mit der Mitte der Großbuchstaben auf <paramref name="mitteY"/>.</summary>
+    private void Zentriert(Font schrift, string text, float mitteY, int groesse, Color farbe)
+    {
+        float hoehe = schrift.GetAscent(groesse) - schrift.GetDescent(groesse);
+        DrawString(schrift, new Vector2(0, mitteY + hoehe / 2f - schrift.GetDescent(groesse)), text,
+            HorizontalAlignment.Center, Size.X, groesse, farbe);
+    }
+
+    private static string Nachname(string name)
     {
         var parts = name.Split(' ');
-        if (parts.Length == 1) return name.Length > 9 ? name[..9] + "." : name;
-        return parts[^1].Length > 9 ? parts[^1][..9] + "." : parts[^1];
+        var nachname = parts[^1];
+        return nachname.Length > 11 ? nachname[..10] + "." : nachname;
     }
 
     public override bool _CanDropData(Vector2 atPosition, Variant data)
@@ -142,6 +240,39 @@ public partial class PositionSlot : Button
     }
 }
 
+/// <summary>Der Rasen: Streifen, Seitenlinien, Mittelkreis und beide Strafräume.</summary>
+public partial class Rasen : Control
+{
+    public override void _Draw()
+    {
+        var feld = new Rect2(Vector2.Zero, Size);
+        DrawStyleBox(FmTheme.Flaeche(FmTheme.Rasen, 14, FmTheme.Border), feld);
+
+        // Streifen - ohne die gerundeten Ecken zu überdecken
+        const int Streifen = 10;
+        float hoehe = Size.Y / Streifen;
+        for (int i = 1; i < Streifen - 1; i += 2)
+            DrawRect(new Rect2(1, i * hoehe, Size.X - 2, hoehe), FmTheme.RasenStreif);
+
+        var linie = FmTheme.Linie;
+        const float Rand = 14f;
+        var spielfeld = new Rect2(Rand, Rand, Size.X - 2 * Rand, Size.Y - 2 * Rand);
+        DrawRect(spielfeld, linie, false, 2);
+        float mitteY = Size.Y / 2f;
+        DrawLine(new Vector2(Rand, mitteY), new Vector2(Size.X - Rand, mitteY), linie, 2);
+        DrawArc(new Vector2(Size.X / 2f, mitteY), Size.X * 0.11f, 0, Mathf.Pi * 2, 64, linie, 2, true);
+        DrawCircle(new Vector2(Size.X / 2f, mitteY), 2.5f, linie);
+
+        // Strafräume und Torräume, oben und unten
+        float b16 = Size.X * 0.56f, t16 = Size.Y * 0.15f;
+        float b5 = Size.X * 0.28f, t5 = Size.Y * 0.06f;
+        DrawRect(new Rect2((Size.X - b16) / 2f, Rand, b16, t16), linie, false, 2);
+        DrawRect(new Rect2((Size.X - b5) / 2f, Rand, b5, t5), linie, false, 2);
+        DrawRect(new Rect2((Size.X - b16) / 2f, Size.Y - Rand - t16, b16, t16), linie, false, 2);
+        DrawRect(new Rect2((Size.X - b5) / 2f, Size.Y - Rand - t5, b5, t5), linie, false, 2);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Main view
 // ---------------------------------------------------------------------------
@@ -155,36 +286,39 @@ public partial class AufstellungView : Control
     {
         ["4-4-2"] = new[]
         {
-            ("TW",   0.50f, 0.88f),
-            ("LV",   0.12f, 0.70f), ("IV_1", 0.37f, 0.70f), ("IV_2", 0.63f, 0.70f), ("RV", 0.88f, 0.70f),
-            ("LM",   0.12f, 0.48f), ("ZM_1", 0.37f, 0.48f), ("ZM_2", 0.63f, 0.48f), ("RM", 0.88f, 0.48f),
-            ("ST_1", 0.35f, 0.22f), ("ST_2", 0.65f, 0.22f),
+            ("TW",   0.50f, 0.895f),
+            ("LV",   0.13f, 0.71f), ("IV_1", 0.37f, 0.73f), ("IV_2", 0.63f, 0.73f), ("RV", 0.87f, 0.71f),
+            ("LM",   0.13f, 0.46f), ("ZM_1", 0.37f, 0.48f), ("ZM_2", 0.63f, 0.48f), ("RM", 0.87f, 0.46f),
+            ("ST_1", 0.37f, 0.15f), ("ST_2", 0.63f, 0.15f),
         },
         ["4-2-3-1"] = new[]
         {
-            ("TW",   0.50f, 0.88f),
-            ("LV",   0.12f, 0.70f), ("IV_1", 0.37f, 0.70f), ("IV_2", 0.63f, 0.70f), ("RV", 0.88f, 0.70f),
-            ("DM_1", 0.35f, 0.54f), ("DM_2", 0.65f, 0.54f),
-            ("LM",   0.12f, 0.36f), ("OM",   0.50f, 0.36f), ("RM",   0.88f, 0.36f),
-            ("ST",   0.50f, 0.16f),
+            ("TW",   0.50f, 0.895f),
+            ("LV",   0.13f, 0.71f), ("IV_1", 0.37f, 0.73f), ("IV_2", 0.63f, 0.73f), ("RV", 0.87f, 0.71f),
+            ("DM_1", 0.37f, 0.535f), ("DM_2", 0.63f, 0.535f),
+            ("LM",   0.13f, 0.33f), ("OM",   0.50f, 0.345f), ("RM",   0.87f, 0.33f),
+            ("ST",   0.50f, 0.135f),
         },
         ["4-3-3"] = new[]
         {
-            ("TW",   0.50f, 0.88f),
-            ("LV",   0.12f, 0.70f), ("IV_1", 0.37f, 0.70f), ("IV_2", 0.63f, 0.70f), ("RV", 0.88f, 0.70f),
-            ("ZM_1", 0.22f, 0.46f), ("ZM_2", 0.50f, 0.46f), ("ZM_3", 0.78f, 0.46f),
-            ("LA",   0.12f, 0.18f), ("ST",   0.50f, 0.18f), ("RA",   0.88f, 0.18f),
+            ("TW",   0.50f, 0.895f),
+            ("LV",   0.13f, 0.71f), ("IV_1", 0.37f, 0.73f), ("IV_2", 0.63f, 0.73f), ("RV", 0.87f, 0.71f),
+            ("ZM_1", 0.26f, 0.48f), ("ZM_2", 0.50f, 0.52f), ("ZM_3", 0.74f, 0.48f),
+            ("LA",   0.15f, 0.20f), ("ST",   0.50f, 0.14f), ("RA",   0.85f, 0.20f),
         },
     };
 
-    // Field dimensions (fixed)
-    private const float FieldW = 330f;
-    private const float FieldH = 520f;
-    private const float SlotW  = 64f;
-    private const float SlotH  = 52f;
+    // Spielfeld - passt samt zweireihiger Bank ins Fenster mit 900 Pixeln Höhe.
+    private const float FieldW = 430f;
+    private const float FieldH = 500f;
+    private const float SlotW  = PositionSlot.PlaketteBreite;
+    private const float SlotH  = PositionSlot.PlaketteHoehe;
 
-    private OptionButton    _formationBtn = null!;
+    private readonly Dictionary<string, Button> _formationsKnoepfe = new();
+    private readonly Dictionary<string, Button> _filterKnoepfe = new();
+    private string _filter = "Alle";
     private Control         _fieldControl = null!;
+    private Symbol          _warnungSymbol = null!;
     private FmGrid<Spieler> _spielerGrid  = null!;
     private CheckBox        _amateureCheckbox = null!;
     private Label           _statusLabel = null!;
@@ -192,9 +326,10 @@ public partial class AufstellungView : Control
     private Label         _warnungLabel = null!;
     private Button        _autoBtn = null!;
 
-    private const int BankSpalten = 5;
+    private const int BankSpalten = 4;
 
     private Label         _bankLabel     = null!;
+    private Label         _bankHinweis   = null!;
     private GridContainer _bankContainer = null!;
     private readonly List<PositionSlot> _bankSlots = new();
 
@@ -218,17 +353,14 @@ public partial class AufstellungView : Control
     {
         var root = new VBoxContainer();
         root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        root.AddThemeConstantOverride("separation", 10);
+        root.AddThemeConstantOverride("separation", 16);
         AddChild(root);
 
         root.AddChild(BuildHeader());
 
-        _warnungLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
-        root.AddChild(_warnungLabel);
-
-        var content = new HSplitContainer();
+        var content = new HBoxContainer();
         content.SizeFlagsVertical = SizeFlags.ExpandFill;
-        content.AddThemeConstantOverride("separation", 12);
+        content.AddThemeConstantOverride("separation", 24);
         root.AddChild(content);
 
         content.AddChild(BuildField());
@@ -238,26 +370,70 @@ public partial class AufstellungView : Control
     private Control BuildHeader()
     {
         var hbox = new HBoxContainer();
-        hbox.AddThemeConstantOverride("separation", 12);
+        hbox.AddThemeConstantOverride("separation", 16);
 
-        hbox.AddChild(FmTheme.MakeLabel("🎯  Taktik – Aufstellung", 20, FmTheme.TextPrimary));
+        var titel = new VBoxContainer();
+        titel.AddThemeConstantOverride("separation", 2);
+        titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        titel.AddChild(FmTheme.MakeTitel("Aufstellung"));
 
-        var spacer1 = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        hbox.AddChild(spacer1);
+        var warnung = new HBoxContainer();
+        warnung.AddThemeConstantOverride("separation", 8);
+        _warnungSymbol = Symbol.Neu(Symbol.Art.Haken, FmTheme.Success, 16);
+        _warnungSymbol.Visible = false;
+        warnung.AddChild(_warnungSymbol);
+        _warnungLabel = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
+        warnung.AddChild(_warnungLabel);
+        titel.AddChild(warnung);
+        hbox.AddChild(titel);
 
-        hbox.AddChild(FmTheme.MakeLabel("Formation:", 13, FmTheme.TextSecondary));
+        _statusLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        _statusLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        hbox.AddChild(_statusLabel);
 
-        _formationBtn = new OptionButton();
-        _formationBtn.CustomMinimumSize = new Vector2(110, 0);
-        foreach (var f in FormationNames)
-            _formationBtn.AddItem(f);
-        _formationBtn.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
-        _formationBtn.ItemSelected += OnFormationChanged;
-        hbox.AddChild(_formationBtn);
+        // Formation als Segmentschalter: alle drei auf einen Blick, die gewählte in Bernstein.
+        var segment = new PanelContainer { SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        var segmentStil = FmTheme.Flaeche(FmTheme.BgPanel, 12, FmTheme.Border);
+        segmentStil.SetContentMarginAll(4);
+        segment.AddThemeStyleboxOverride("panel", segmentStil);
+        var segmente = new HBoxContainer();
+        segmente.AddThemeConstantOverride("separation", 4);
+        segment.AddChild(segmente);
+        for (int i = 0; i < FormationNames.Length; i++)
+        {
+            var name = FormationNames[i];
+            var knopf = new Button
+            {
+                Text = name,
+                FocusMode = FocusModeEnum.None,
+                CustomMinimumSize = new Vector2(76, 36),
+                TooltipText = $"Formation {name}",
+            };
+            int index = i;
+            knopf.Pressed += () => OnFormationChanged(index);
+            _formationsKnoepfe[name] = knopf;
+            segmente.AddChild(knopf);
+        }
+        hbox.AddChild(segment);
+        ZeigeFormationsAuswahl();
 
-        _autoBtn = new Button { Text = "⚡  Automatisch aufstellen" };
-        FmTheme.ApplyButton(_autoBtn, FmTheme.BgPanel);
-        _autoBtn.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        _autoBtn = new Button
+        {
+            Text = "Automatisch aufstellen",
+            CustomMinimumSize = new Vector2(0, 44),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+        };
+        FmTheme.ApplySecondaryButton(_autoBtn);
+        foreach (var zustand in new[] { "normal", "hover", "pressed", "disabled" })
+        {
+            var stil = (StyleBoxFlat)_autoBtn.GetThemeStylebox(zustand).Duplicate();
+            stil.ContentMarginLeft = 42;
+            _autoBtn.AddThemeStyleboxOverride(zustand, stil);
+        }
+        var blitz = Symbol.Neu(Symbol.Art.Blitz, FmTheme.Accent, 18);
+        blitz.Position = new Vector2(16, 13);
+        blitz.Size = new Vector2(18, 18);
+        _autoBtn.AddChild(blitz);
         _autoBtn.TooltipText = "Besetzt jede Position mit dem stärksten verfügbaren Spieler "
                              + "und füllt die Ersatzbank.";
         _autoBtn.Pressed += async () => await AutomatischAufstellen();
@@ -265,11 +441,27 @@ public partial class AufstellungView : Control
 
         // Kein Speichern-Knopf: Jede Änderung wird sofort übernommen, gespielt wird immer
         // mit der aktuellen Aufstellung.
-
-        _statusLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
-        hbox.AddChild(_statusLabel);
-
         return hbox;
+    }
+
+    /// <summary>Hebt die gewählte Formation im Segmentschalter hervor.</summary>
+    private void ZeigeFormationsAuswahl()
+    {
+        foreach (var (name, knopf) in _formationsKnoepfe)
+        {
+            bool aktiv = name == _currentFormation;
+            var stil = FmTheme.Flaeche(aktiv ? FmTheme.Accent : new Color(0, 0, 0, 0), 8);
+            var schwebend = FmTheme.Flaeche(aktiv ? FmTheme.Accent : FmTheme.BgHover, 8);
+            foreach (var zustand in new[] { "normal", "pressed", "focus" })
+                knopf.AddThemeStyleboxOverride(zustand, stil);
+            knopf.AddThemeStyleboxOverride("hover", schwebend);
+            var farbe = aktiv ? FmTheme.AccentText : FmTheme.TextNav;
+            knopf.AddThemeColorOverride("font_color", farbe);
+            knopf.AddThemeColorOverride("font_pressed_color", farbe);
+            knopf.AddThemeColorOverride("font_hover_color", aktiv ? FmTheme.AccentText : FmTheme.TextPrimary);
+            knopf.AddThemeFontOverride("font", FmTheme.SchriftAnzeige);
+            knopf.AddThemeFontSizeOverride("font_size", 17);
+        }
     }
 
     /// <summary>Zeigt an, ob die Mannschaft so antreten kann.</summary>
@@ -282,118 +474,71 @@ public partial class AufstellungView : Control
         }
 
         var warnung = aufstellung.Warnung;
+        _warnungSymbol.Visible = true;
         if (warnung == null)
         {
-            _warnungLabel.Text = "✓  Mannschaft vollständig aufgestellt";
+            int bank = _bankSlots.Count(b => b.SpielerId.HasValue);
+            _warnungLabel.Text = $"Spielbereit · 11 von 11 aufgestellt · Bank {bank} von {_bankSlots.Count}";
             _warnungLabel.AddThemeColorOverride("font_color", FmTheme.Success);
+            _warnungSymbol.Form = Symbol.Art.Haken;
+            _warnungSymbol.Farbe = FmTheme.Success;
             return;
         }
 
         // Zu wenige Spieler verhindern den Anpfiff, fehlende Positionen sind nur ein Hinweis.
-        _warnungLabel.Text = (aufstellung.Spielbereit ? "⚠  " : "✖  ") + warnung;
-        _warnungLabel.AddThemeColorOverride("font_color",
-            aufstellung.Spielbereit ? FmTheme.Gold : FmTheme.Danger);
+        _warnungLabel.Text = warnung;
+        var farbe = aufstellung.Spielbereit ? FmTheme.Gold : FmTheme.Danger;
+        _warnungLabel.AddThemeColorOverride("font_color", farbe);
+        _warnungSymbol.Form = aufstellung.Spielbereit ? Symbol.Art.Warnung : Symbol.Art.Kreuz;
+        _warnungSymbol.Farbe = farbe;
     }
 
     private Control BuildField()
     {
-        var panel = new PanelContainer();
-        panel.CustomMinimumSize = new Vector2(FieldW + 24, 0);
-        panel.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
-
-        var style = new StyleBoxFlat { BgColor = FmTheme.BgPanel };
-        style.SetBorderWidthAll(1);
-        style.SetContentMarginAll(0);
-        panel.AddThemeStyleboxOverride("panel", style);
-
-        var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 12);
-        panel.AddChild(margin);
-
-        var spalte = new VBoxContainer();
+        var spalte = new VBoxContainer { CustomMinimumSize = new Vector2(FieldW, 0) };
         spalte.AddThemeConstantOverride("separation", 10);
-        margin.AddChild(spalte);
 
-        _fieldControl = new Control();
-        _fieldControl.CustomMinimumSize = new Vector2(FieldW, FieldH);
+        _fieldControl = new Rasen { CustomMinimumSize = new Vector2(FieldW, FieldH) };
         spalte.AddChild(_fieldControl);
 
-        var bankTrenner = new HSeparator();
-        bankTrenner.AddThemeColorOverride("color", FmTheme.Border);
-        spalte.AddChild(bankTrenner);
-
-        _bankLabel = FmTheme.MakeLabel("Ersatzbank", 12, FmTheme.TextSecondary);
-        spalte.AddChild(_bankLabel);
-
-        // Die Anzahl der Plaetze kommt vom Server (pro Wettbewerb), daher erst beim Laden gefuellt.
-        _bankContainer = new GridContainer { Columns = BankSpalten };
-        _bankContainer.AddThemeConstantOverride("h_separation", 4);
-        _bankContainer.AddThemeConstantOverride("v_separation", 4);
-        spalte.AddChild(_bankContainer);
-
-        DrawFieldBackground();
-        BuildSlots(_currentFormation);
-
-        _staerkeLabel = FmTheme.MakeLabel("Gesamtstärke: –", 12, FmTheme.TextPrimary);
-        _staerkeLabel.Position = new Vector2(FieldW - 162, 6);
-        _staerkeLabel.CustomMinimumSize = new Vector2(156, 0);
-        _staerkeLabel.HorizontalAlignment = HorizontalAlignment.Right;
-        _staerkeLabel.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.85f));
-        _staerkeLabel.AddThemeConstantOverride("shadow_offset_x", 1);
-        _staerkeLabel.AddThemeConstantOverride("shadow_offset_y", 1);
-        _staerkeLabel.TooltipText =
+        // Teamstärke als Tafel unten links auf dem Rasen
+        var tafel = new PanelContainer { Position = new Vector2(22, FieldH - 76) };
+        var tafelStil = FmTheme.Flaeche(new Color(0.035f, 0.055f, 0.047f, 0.85f), 10);
+        tafelStil.ContentMarginLeft = tafelStil.ContentMarginRight = 12;
+        tafelStil.ContentMarginTop = tafelStil.ContentMarginBottom = 6;
+        tafel.AddThemeStyleboxOverride("panel", tafelStil);
+        tafel.TooltipText =
             "Durchschnitt der Stärke über alle Positionen der Formation.\n"
           + "Unbesetzte Positionen zählen dabei mit 0 - sonst wäre eine Elf mit neun\n"
           + "starken Spielern rechnerisch besser als eine vollständige mit denselben\n"
           + "neun plus zwei schwächeren.";
-        _fieldControl.AddChild(_staerkeLabel);
+        var tafelInhalt = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        tafelInhalt.AddThemeConstantOverride("separation", -4);
+        var tafelTitel = FmTheme.MakeLabel("TEAMSTÄRKE", 10, FmTheme.TextSecondary);
+        tafelTitel.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        tafelInhalt.AddChild(tafelTitel);
+        _staerkeLabel = FmTheme.MakeZahl("–", 28);
+        tafelInhalt.AddChild(_staerkeLabel);
+        tafel.AddChild(tafelInhalt);
+        _fieldControl.AddChild(tafel);
 
-        return panel;
-    }
+        var bankKopf = new HBoxContainer();
+        _bankLabel = FmTheme.MakeAbschnitt("Ersatzbank", 20);
+        _bankLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        bankKopf.AddChild(_bankLabel);
+        _bankHinweis = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        _bankHinweis.SizeFlagsVertical = SizeFlags.ShrinkEnd;
+        bankKopf.AddChild(_bankHinweis);
+        spalte.AddChild(bankKopf);
 
-    private void DrawFieldBackground()
-    {
-        // Grüner Rasen
-        var grass = new ColorRect
-        {
-            Color = new Color(0.13f, 0.40f, 0.18f),
-            Size  = new Vector2(FieldW, FieldH),
-        };
-        _fieldControl.AddChild(grass);
+        // Die Anzahl der Plaetze kommt vom Server (pro Wettbewerb), daher erst beim Laden gefuellt.
+        _bankContainer = new GridContainer { Columns = BankSpalten };
+        _bankContainer.AddThemeConstantOverride("h_separation", 8);
+        _bankContainer.AddThemeConstantOverride("v_separation", 8);
+        spalte.AddChild(_bankContainer);
 
-        // Mittellinie
-        AddFieldLine(0, FieldH * 0.5f, FieldW, FieldH * 0.5f, new Color(1, 1, 1, 0.25f));
-        // Mittelkreis (approximiert durch schmales Rechteck)
-        var circle = new ColorRect
-        {
-            Color              = new Color(1, 1, 1, 0.12f),
-            CustomMinimumSize  = new Vector2(100, 100),
-            Size               = new Vector2(100, 100),
-        };
-        circle.Position = new Vector2((FieldW - 100) * 0.5f, (FieldH - 100) * 0.5f);
-        _fieldControl.AddChild(circle);
-
-        // Strafraum oben (gegnerisch)
-        AddFieldRect(FieldW * 0.18f, 0, FieldW * 0.64f, FieldH * 0.18f, new Color(1, 1, 1, 0.12f));
-        // Strafraum unten (eigen)
-        AddFieldRect(FieldW * 0.18f, FieldH * 0.82f, FieldW * 0.64f, FieldH * 0.18f, new Color(1, 1, 1, 0.12f));
-    }
-
-    private void AddFieldLine(float x1, float y1, float x2, float y2, Color color)
-    {
-        var line = new ColorRect
-        {
-            Color    = color,
-            Position = new Vector2(x1, y1 - 1),
-            Size     = new Vector2(x2 - x1, 2),
-        };
-        _fieldControl.AddChild(line);
-    }
-
-    private void AddFieldRect(float x, float y, float w, float h, Color color)
-    {
-        var outline = new ColorRect { Color = color, Position = new Vector2(x, y), Size = new Vector2(w, h) };
-        _fieldControl.AddChild(outline);
+        BuildSlots(_currentFormation);
+        return spalte;
     }
 
     private void BuildSlots(string formation)
@@ -417,8 +562,11 @@ public partial class AufstellungView : Control
             _fieldControl.AddChild(slot);
         }
 
-        if (_staerkeLabel?.GetParent() == _fieldControl)
-            _fieldControl.MoveChild(_staerkeLabel, _fieldControl.GetChildCount() - 1);
+        // Die Teamstärke-Tafel liegt unter den Plaketten - im Strafraum vor dem eigenen Tor
+        // steht sie sonst über dem Torwart.
+        var tafel = _staerkeLabel?.GetParent()?.GetParent() as Control;
+        if (tafel?.GetParent() == _fieldControl)
+            _fieldControl.MoveChild(tafel, 0);
     }
 
     /// <summary>Legt so viele Bankplätze an, wie der Wettbewerb zulässt.</summary>
@@ -431,14 +579,14 @@ public partial class AufstellungView : Control
         foreach (Node child in _bankContainer.GetChildren())
             child.QueueFree();
 
-        _bankLabel.Text = plaetze > 0
-            ? $"Ersatzbank ({plaetze} Plätze)"
-            : "Ersatzbank – in diesem Wettbewerb nicht vorgesehen";
+        _bankHinweis.Text = plaetze > 0
+            ? $"{plaetze} Plätze"
+            : "in diesem Wettbewerb nicht vorgesehen";
 
         for (int i = 0; i < plaetze; i++)
         {
-            var slot = PositionSlot.Create($"B{i + 1}", $"B{i + 1}");
-            slot.CustomMinimumSize = new Vector2(SlotW, 44);
+            var slot = PositionSlot.Create($"B{i + 1}", $"B{i + 1}", bank: true);
+            slot.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             slot.PlayerDropped += OnPlayerDropped;
             slot.Pressed       += () => OnSlotPressed(slot);
             _bankSlots.Add(slot);
@@ -450,9 +598,8 @@ public partial class AufstellungView : Control
     {
         var panel = new PanelContainer();
         panel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        var style = new StyleBoxFlat { BgColor = FmTheme.BgPanel };
-        style.SetBorderWidthAll(1);
-        style.SetContentMarginAll(0);
+        var style = FmTheme.Flaeche(FmTheme.BgPanel, 14, FmTheme.Border);
+        style.SetContentMarginAll(1);
         panel.AddThemeStyleboxOverride("panel", style);
 
         var vbox = new VBoxContainer();
@@ -460,22 +607,69 @@ public partial class AufstellungView : Control
         panel.AddChild(vbox);
 
         var kopfrand = new MarginContainer();
-        FmTheme.SetMargin(kopfrand, 8, 6);
+        FmTheme.SetMargin(kopfrand, 16, 16, 14, 12);
         vbox.AddChild(kopfrand);
+
+        var kopf = new VBoxContainer();
+        kopf.AddThemeConstantOverride("separation", 10);
+        kopfrand.AddChild(kopf);
+
+        var titelzeile = new HBoxContainer();
+        var titel = FmTheme.MakeAbschnitt("Kader", 20);
+        titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        titelzeile.AddChild(titel);
+        var hinweis = FmTheme.MakeLabel("Auf eine Position ziehen · Plakette anklicken zum Entfernen", 12, FmTheme.TextSecondary);
+        hinweis.SizeFlagsVertical = SizeFlags.ShrinkEnd;
+        titelzeile.AddChild(hinweis);
+        kopf.AddChild(titelzeile);
 
         var kopfleiste = new HBoxContainer();
         kopfleiste.AddThemeConstantOverride("separation", 6);
-        kopfrand.AddChild(kopfleiste);
+        kopf.AddChild(kopfleiste);
+
+        // Filter nach Mannschaftsteil
+        foreach (var name in new[] { "Alle", "Tor", "Abwehr", "Mittelfeld", "Sturm" })
+        {
+            var knopf = new Button { Text = name, FocusMode = FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 32) };
+            var n = name;
+            knopf.Pressed += () =>
+            {
+                _filter = n;
+                ZeigeFilterAuswahl();
+                FuelleSpielerListe(_alleSpieler);
+            };
+            _filterKnoepfe[name] = knopf;
+            kopfleiste.AddChild(knopf);
+        }
+        ZeigeFilterAuswahl();
 
         var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         kopfleiste.AddChild(spacer);
 
         _amateureCheckbox = new CheckBox
         {
-            Text = "Amateurkader anzeigen",
+            Text = "+ Amateure",
             ButtonPressed = ClientEinstellungen.GetBool(EinstellungAmateureAnzeigen, true),
+            FocusMode = FocusModeEnum.None,
+            CustomMinimumSize = new Vector2(0, 32),
         };
-        _amateureCheckbox.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
+        // Als Chip wie die Filter daneben - ein Kästchen ist auf dem dunklen Grund kaum zu sehen.
+        var leer = ImageTexture.CreateFromImage(Image.CreateEmpty(1, 1, false, Image.Format.Rgba8));
+        foreach (var symbol in new[] { "checked", "unchecked", "checked_disabled", "unchecked_disabled" })
+            _amateureCheckbox.AddThemeIconOverride(symbol, leer);
+        var aus = FmTheme.Flaeche(new Color(0, 0, 0, 0), 16, FmTheme.BorderStark);
+        aus.ContentMarginLeft = aus.ContentMarginRight = 12;
+        var an = FmTheme.Flaeche(FmTheme.BgHover, 16, FmTheme.TextGedimmt);
+        an.ContentMarginLeft = an.ContentMarginRight = 12;
+        _amateureCheckbox.AddThemeStyleboxOverride("normal", aus);
+        _amateureCheckbox.AddThemeStyleboxOverride("hover", an);
+        _amateureCheckbox.AddThemeStyleboxOverride("pressed", an);
+        _amateureCheckbox.AddThemeStyleboxOverride("hover_pressed", an);
+        _amateureCheckbox.AddThemeColorOverride("font_color", FmTheme.TextNav);
+        _amateureCheckbox.AddThemeColorOverride("font_pressed_color", FmTheme.TextPrimary);
+        _amateureCheckbox.AddThemeColorOverride("font_hover_pressed_color", FmTheme.TextPrimary);
+        _amateureCheckbox.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        _amateureCheckbox.AddThemeFontSizeOverride("font_size", 12);
         _amateureCheckbox.TooltipText = "Blendet Spieler aus dem Amateurkader in dieser Liste "
                                        + "ein oder aus - bereits aufgestellte Amateure bleiben "
                                        + "im Feld stehen. Die Einstellung wird gemerkt.";
@@ -506,6 +700,29 @@ public partial class AufstellungView : Control
         vbox.AddChild(_spielerGrid);
 
         return panel;
+    }
+
+    /// <summary>Filterchips: der gewählte hell, die übrigen nur umrandet.</summary>
+    private void ZeigeFilterAuswahl()
+    {
+        foreach (var (name, knopf) in _filterKnoepfe)
+        {
+            bool aktiv = name == _filter;
+            var stil = FmTheme.Flaeche(aktiv ? FmTheme.TextPrimary : new Color(0, 0, 0, 0), 16,
+                aktiv ? FmTheme.TextPrimary : FmTheme.BorderStark);
+            stil.ContentMarginLeft = stil.ContentMarginRight = 12;
+            var schwebend = (StyleBoxFlat)stil.Duplicate();
+            if (!aktiv) schwebend.BgColor = FmTheme.BgHover;
+            foreach (var zustand in new[] { "normal", "pressed", "focus" })
+                knopf.AddThemeStyleboxOverride(zustand, stil);
+            knopf.AddThemeStyleboxOverride("hover", schwebend);
+            var farbe = aktiv ? FmTheme.BgDark : FmTheme.TextNav;
+            knopf.AddThemeColorOverride("font_color", farbe);
+            knopf.AddThemeColorOverride("font_pressed_color", farbe);
+            knopf.AddThemeColorOverride("font_hover_color", aktiv ? FmTheme.BgDark : FmTheme.TextPrimary);
+            knopf.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+            knopf.AddThemeFontSizeOverride("font_size", 12);
+        }
     }
 
     /// <summary>Auf welchem Platz der Spieler gerade steht - Feldposition oder Bank.</summary>
@@ -544,8 +761,7 @@ public partial class AufstellungView : Control
         if (aufstellung?.Formation != null && Formations.ContainsKey(aufstellung.Formation))
         {
             _currentFormation = aufstellung.Formation;
-            int idx = Array.IndexOf(FormationNames, _currentFormation);
-            if (idx >= 0) _formationBtn.Selected = idx;
+            ZeigeFormationsAuswahl();
             BuildSlots(_currentFormation);
             WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
                 aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit);
@@ -559,7 +775,8 @@ public partial class AufstellungView : Control
         AktualisiereListenPositionen();
         AktualisiereWarnung(aufstellung);
 
-        _statusLabel.Text = $"{_alleSpieler.Count} Spieler";
+        int kader = _alleSpieler.Count(s => s.Kader == "Profi" || s.Kader == "Amateur");
+        _statusLabel.Text = $"{kader} Spieler in Profi- und Amateurkader";
     }
 
     private void FuelleSpielerListe(List<Spieler> spieler)
@@ -569,9 +786,20 @@ public partial class AufstellungView : Control
         // Feld, die Checkbox filtert nur die Auswahlliste.
         bool amateureZeigen = _amateureCheckbox == null || _amateureCheckbox.ButtonPressed;
         _spielerGrid.Zeige(spieler.Where(s =>
-            s.Kader == "Profi" || (s.Kader == "Amateur" && amateureZeigen)));
+            (s.Kader == "Profi" || (s.Kader == "Amateur" && amateureZeigen))
+            && PasstZumFilter(s)));
         AktualisiereListenPositionen();
     }
+
+    /// <summary>Ob ein Spieler zum gewählten Mannschaftsteil passt.</summary>
+    private bool PasstZumFilter(Spieler s) => _filter switch
+    {
+        "Tor"        => s.Gruppe == Positionsgruppe.Tor,
+        "Abwehr"     => s.Gruppe == Positionsgruppe.Abwehr,
+        "Mittelfeld" => s.Gruppe == Positionsgruppe.Mittelfeld,
+        "Sturm"      => s.Gruppe == Positionsgruppe.Sturm,
+        _            => true,
+    };
 
     /// <summary>
     /// Traegt in die Liste ein, wer gerade wo steht. Aktualisiert nur die Zellen, statt die
@@ -614,7 +842,7 @@ public partial class AufstellungView : Control
         }
 
         WendeAufstellungAn(ergebnis);
-        _statusLabel.Text = "Automatisch aufgestellt ✓";
+        _statusLabel.Text = "Automatisch aufgestellt";
     }
 
     /// <summary>Überträgt eine komplette Aufstellung vom Server auf die Oberfläche.</summary>
@@ -623,8 +851,7 @@ public partial class AufstellungView : Control
         if (aufstellung.Formation != null && Formations.ContainsKey(aufstellung.Formation))
         {
             _currentFormation = aufstellung.Formation;
-            int idx = Array.IndexOf(FormationNames, _currentFormation);
-            if (idx >= 0) _formationBtn.Selected = idx;
+            ZeigeFormationsAuswahl();
         }
 
         // Neu aufbauen, damit alte Zuweisungen nicht stehen bleiben.
@@ -647,7 +874,9 @@ public partial class AufstellungView : Control
         {
             if (_playerNames.TryGetValue(ersatzbank[i], out var name))
             {
-                _bankSlots[i].Assign(ersatzbank[i], name);
+                var spieler = _alleSpieler.Find(s => s.Id == ersatzbank[i]);
+                _bankSlots[i].Assign(ersatzbank[i], name, spieler?.Staerke,
+                    spielerPosition: spieler?.Position);
             }
         }
     }
@@ -691,6 +920,7 @@ public partial class AufstellungView : Control
                 kv.Value.Staerke, kv.Value.Grundstaerke, kv.Value.Eingespieltheit));
 
         _currentFormation = newFormation;
+        ZeigeFormationsAuswahl();
         BuildSlots(_currentFormation);
 
         foreach (var (slotName, (spielerId, name, staerke, grundstaerke, eingespieltheit)) in alteZuweisungen)
@@ -723,9 +953,12 @@ public partial class AufstellungView : Control
 
         // Steht auf dem Ziel-Slot schon jemand anderes, wird er einfach überschrieben -
         // ein Tausch zurück ist nicht nötig, der vorherige landet ja bereits leer da oben.
-        targetSlot.Assign(spielerId, spielerName);
+        var gezogen = _alleSpieler.Find(s => s.Id == spielerId);
+        targetSlot.Assign(spielerId, spielerName,
+            targetSlot.IstBank ? gezogen?.Staerke : null,
+            spielerPosition: gezogen?.Position);
         AktualisiereListenPositionen();
-        _statusLabel.Text = $"{spielerName} → {targetSlot.Anzeige}";
+        _statusLabel.Text = $"{spielerName} auf {targetSlot.Anzeige}";
 
         // Auto-Speichern nach Zuweisung
         _ = UebernehmeAenderung();
@@ -788,8 +1021,8 @@ public partial class AufstellungView : Control
         // Durchschnitt über alle Positionen der Formation - Kultur-unabhängig mit Punkt-Trennung
         // wäre irritierend, deshalb bewusst die deutsche Schreibweise.
         _staerkeLabel.Text = gesamtstaerke > 0
-            ? $"Gesamtstärke: {gesamtstaerke.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("de-DE"))}"
-            : "Gesamtstärke: –";
+            ? gesamtstaerke.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("de-DE"))
+            : "–";
     }
 
 }

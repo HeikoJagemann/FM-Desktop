@@ -35,6 +35,13 @@ public partial class TransferView : Control
     private TransferSpieler? _gewaehlt;
     private bool _fensterOffen;
 
+    /// <summary>
+    /// Ob die Ansicht noch da ist. Nach jedem Abruf zu prüfen: Während eine Anfrage unterwegs ist,
+    /// kann der Nutzer längst in eine andere Ansicht gewechselt sein - dann sind die Labels
+    /// freigegeben, und jeder Zugriff wirft eine ObjectDisposedException.
+    /// </summary>
+    private bool Lebt => IsInstanceValid(this) && !IsQueuedForDeletion();
+
     public override async void _Ready()
     {
         BuildUI();
@@ -48,7 +55,7 @@ public partial class TransferView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("🔁  Transfermarkt", 20, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeTitel("Transfermarkt"));
 
         _fensterLabel = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
         vbox.AddChild(_fensterLabel);
@@ -128,6 +135,7 @@ public partial class TransferView : Control
     private async Task Lade()
     {
         var fenster = await ApiClient.GetAsync<TransferfensterModel>("transfer/fenster");
+        if (!Lebt) return;
         _fensterOffen = fenster?.Offen ?? false;
 
         _fensterLabel.Text = fenster?.Hinweis ?? "";
@@ -135,6 +143,7 @@ public partial class TransferView : Control
             _fensterOffen ? FmTheme.Success : FmTheme.TextSecondary);
 
         await LadeAngebote();
+        if (!Lebt) return;
         await Suche();
     }
 
@@ -143,6 +152,7 @@ public partial class TransferView : Control
         long vereinId = GameState.Instance.VereinId;
         var angebote = await ApiClient.GetAsync<List<TransferangebotModel>>(
             $"transfer/eingehend/{vereinId}");
+        if (!Lebt) return;
 
         _angeboteGrid.Zeige(angebote ?? new List<TransferangebotModel>());
         _angeboteLabel.Text = angebote is { Count: > 0 }
@@ -155,9 +165,12 @@ public partial class TransferView : Control
         long vereinId = GameState.Instance.VereinId;
         string position = _positionFeld.Selected <= 0 ? "" : Positionen[_positionFeld.Selected];
         int minStaerke = (int)_minStaerkeFeld.Value;
+        _statusLabel.Text = "Suche läuft …";
 
         var treffer = await ApiClient.GetAsync<List<TransferSpieler>>(
-            $"transfer/suche?vereinId={vereinId}&position={position}&minStaerke={minStaerke}");
+            $"transfer/suche?vereinId={vereinId}&position={position}&minStaerke={minStaerke}"
+            + $"&nurBezahlbar={(_nurBezahlbar.ButtonPressed ? "true" : "false")}");
+        if (!Lebt) return;
 
         if (treffer == null)
         {
@@ -165,11 +178,8 @@ public partial class TransferView : Control
             return;
         }
 
-        if (_nurBezahlbar.ButtonPressed)
-        {
-            treffer = treffer.FindAll(s => s.Bezahlbar);
-        }
-
+        // "nur bezahlbare" filtert der Server - vor seiner Begrenzung auf hundert Treffer. Hier
+        // nachgefiltert, blieb von den hundert stärksten Spielern für einen kleinen Verein keiner.
         _gewaehlt = null;
         AktualisiereBietenButton();
         _suchGrid.Zeige(treffer);
@@ -195,6 +205,7 @@ public partial class TransferView : Control
         long vereinId = GameState.Instance.VereinId;
         var ergebnis = await ApiClient.PostAsync<object, TransferangebotModel>(
             $"transfer/angebot?spielerId={_gewaehlt.SpielerId}&vereinId={vereinId}", new { });
+        if (!Lebt) return;
 
         if (ergebnis == null)
         {
@@ -237,6 +248,7 @@ public partial class TransferView : Control
     {
         var ergebnis = await ApiClient.PostAsync<object, TransferangebotModel>(
             $"transfer/angebot/{angebot.Id}/{aktion}", new { });
+        if (!Lebt) return;
 
         _statusLabel.Text = ergebnis == null
             ? $"Das Angebot für {angebot.SpielerName} konnte nicht bearbeitet werden."

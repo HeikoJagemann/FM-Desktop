@@ -28,7 +28,7 @@ public partial class StatistikenView : Control
         _root.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         scroll.AddChild(_root);
 
-        _root.AddChild(FmTheme.MakeLabel("📊  Statistiken", 20, FmTheme.TextPrimary));
+        _root.AddChild(FmTheme.MakeTitel("Statistiken"));
         _root.AddChild(FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary));
     }
 
@@ -126,7 +126,7 @@ public partial class StatistikenView : Control
         vbox.AddThemeConstantOverride("separation", 8);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("👟  Torjäger", 15, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeAbschnitt("Torjäger", 20));
 
         var sep = new HSeparator();
         sep.AddThemeColorOverride("color", FmTheme.Border);

@@ -25,7 +25,7 @@ public partial class SpielplanView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("📅  Spielplan", 20, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeTitel("Spielplan"));
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);

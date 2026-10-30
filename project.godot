@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Fussball-Manager"
-config/version="0.5.13"
+config/version="0.5.14"
 run/main_scene="res://scenes/LadeBildschirm.tscn"
 config/features=PackedStringArray("4.6", "C#")
 config/run/main_scene="res://scenes/LadeBildschirm.tscn"

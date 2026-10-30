@@ -38,7 +38,7 @@ public partial class JugendView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("👦  Jugendabteilung", 20, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeTitel("Jugendabteilung"));
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);

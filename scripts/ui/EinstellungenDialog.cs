@@ -102,7 +102,7 @@ public partial class EinstellungenDialog : Control
         var hbox = new HBoxContainer();
         hbox.AddThemeConstantOverride("separation", 12);
 
-        var titel = FmTheme.MakeLabel("⚙  Einstellungen", 18, FmTheme.TextPrimary);
+        var titel = FmTheme.MakeTitel("Einstellungen", 24);
         titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         hbox.AddChild(titel);
 

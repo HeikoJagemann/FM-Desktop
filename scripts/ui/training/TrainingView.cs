@@ -48,7 +48,7 @@ public partial class TrainingView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("💪  Training", 20, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeTitel("Training"));
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);

@@ -28,8 +28,11 @@ public partial class TabelleView : Control
         header.AddThemeConstantOverride("separation", 8);
         vbox.AddChild(header);
 
-        header.AddChild(FmTheme.MakeLabel("🏆  Tabelle –", 20, FmTheme.TextPrimary));
-        header.AddChild(FmTheme.MakeLabel(GameState.Instance.LigaName, 20, FmTheme.Accent));
+        header.AddChild(FmTheme.MakeTitel("Tabelle"));
+        // Bernstein bleibt den Aktionen vorbehalten - die Liga steht ruhig daneben.
+        var liga = FmTheme.MakeLabel(GameState.Instance.LigaName, 14, FmTheme.TextSecondary);
+        liga.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        header.AddChild(liga);
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);

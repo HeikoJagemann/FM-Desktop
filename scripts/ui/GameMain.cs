@@ -10,13 +10,18 @@ public partial class GameMain : Control
 {
     private Control _contentArea = null!;
     private Label   _vereinLabel = null!;
+    private Label   _vereinUnterzeile = null!;
     private Label   _spieltagLabel = null!;
+    private Label   _kontoLabel = null!;
     private Label   _fortschrittLabel = null!;
-    private Label   _ereignisLabel = null!;
     private Button  _trainingButton = null!;
-    private Button  _simulierenButton = null!;
+    private AktionsKnopf _simulierenButton = null!;
+    private HBoxContainer _unterreiter = null!;
     private Timer   _pollTimer = null!;
     private KalenderStand? _kalenderStand;
+
+    /// <summary>Die Reiter der Menüzeile, je Bereich.</summary>
+    private readonly System.Collections.Generic.Dictionary<string, Button> _reiter = new();
 
     /// <summary>Sperrt weitere Abfragen, solange eine unterwegs ist.</summary>
     private bool _pollLaeuft;
@@ -39,10 +44,26 @@ public partial class GameMain : Control
     /// Eigener Bildschirm statt Overlay - die Partie übernimmt das ganze Fenster.
     private const string SceneSpiel        = "res://scenes/spiel/SpielView.tscn";
 
+    /// <summary>
+    /// Die Bereiche der Menüzeile und ihre Seiten. Die Seiten eines Bereichs stehen in der
+    /// Unterzeile - vorher lagen sie in Ausklappmenüs und waren erst nach einem Klick zu sehen.
+    /// </summary>
+    private static readonly (string Bereich, (string Seite, string Scene)[] Seiten)[] Bereiche =
+    {
+        ("Mannschaft", new[] { ("Kader", SceneKader) }),
+        ("Taktik",     new[] { ("Aufstellung", SceneAufstellung) }),
+        ("Training",   new[] { ("Trainingsplan", SceneTraining) }),
+        ("Liga",       new[] { ("Tabelle", SceneTabelle), ("Spielplan", SceneSpielplan), ("Statistiken", SceneStatistiken) }),
+        ("Kalender",   new[] { ("Termine", SceneKalender) }),
+        ("Transfers",  new[] { ("Transfermarkt", SceneTransfer) }),
+        ("Finanzen",   new[] { ("Übersicht", SceneFinanzen) }),
+        ("Jugend",     new[] { ("Jugendkader", SceneJugend) }),
+    };
+
     public override async void _Ready()
     {
         BuildUI();
-        LadeScene(SceneKader);
+        LadeScene(GameState.Instance.StartAnsicht ?? SceneKader);
 
         _pollTimer = new Timer { WaitTime = 0.5, OneShot = false, Autostart = false };
         _pollTimer.Timeout += OnPollTimeout;
@@ -63,17 +84,12 @@ public partial class GameMain : Control
         vbox.AddThemeConstantOverride("separation", 0);
         AddChild(vbox);
 
-        // Toolbar
         vbox.AddChild(BuildToolbar());
-
-        // Trennlinie
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        vbox.AddChild(sep);
+        vbox.AddChild(BuildUnterzeile());
 
         // Inhaltsbereich
         var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 16);
+        FmTheme.SetMargin(margin, 28, 28, 20, 20);
         margin.SizeFlagsVertical = SizeFlags.ExpandFill;
         vbox.AddChild(margin);
 
@@ -82,105 +98,205 @@ public partial class GameMain : Control
         margin.AddChild(_contentArea);
     }
 
+    /// <summary>
+    /// Die Menüzeile: links der Verein, in der Mitte die Bereiche als Reiter, rechts Datum,
+    /// Kontostand und der Knopf, der die Zeit weiterlaufen lässt.
+    /// </summary>
     private Control BuildToolbar()
     {
-        var panel = new PanelContainer();
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(0, 72) };
         panel.AddThemeStyleboxOverride("panel", FmTheme.ToolbarStyle());
 
         var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 8, 6);
+        FmTheme.SetMargin(margin, 12, 16, 0, 0);
         panel.AddChild(margin);
 
         var hbox = new HBoxContainer();
-        hbox.AddThemeConstantOverride("separation", 4);
+        hbox.AddThemeConstantOverride("separation", 12);
         margin.AddChild(hbox);
 
-        // Zurück-Button
-        var back = new Button { Text = "←", TooltipText = "Hauptmenü", CustomMinimumSize = new Vector2(36, 0) };
-        FmTheme.ApplyButton(back, FmTheme.BgPanel);
-        back.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
-        back.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/StartScreen.tscn");
-        hbox.AddChild(back);
+        // Zurück zum Hauptmenü
+        var zurueck = SymbolKnopf(Symbol.Art.Zurueck, "Hauptmenü", flach: true);
+        zurueck.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/StartScreen.tscn");
+        hbox.AddChild(zurueck);
 
-        hbox.AddChild(new VSeparator());
+        // Verein
+        hbox.AddChild(Wappen.Neu(GameState.Instance.VereinName));
+        var verein = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        verein.AddThemeConstantOverride("separation", 0);
+        _vereinLabel = FmTheme.MakeTitel(GameState.Instance.VereinName, 21);
+        verein.AddChild(_vereinLabel);
+        _vereinUnterzeile = FmTheme.MakeLabel(GameState.Instance.LigaName, 12, FmTheme.TextSecondary);
+        verein.AddChild(_vereinUnterzeile);
+        hbox.AddChild(verein);
 
-        // Mannschaft-Dropdown
-        hbox.AddChild(BuildDropdown("👥  Mannschaft", new[] {
-            ("Kader", SceneKader),
-        }));
-
-        // Taktik-Dropdown
-        hbox.AddChild(BuildDropdown("🎯  Taktik", new[] {
-            ("Aufstellung", SceneAufstellung),
-        }));
-
-        // Liga-Dropdown
-        hbox.AddChild(BuildDropdown("🏆  Liga", new[] {
-            ("Tabelle",     SceneTabelle),
-            ("Spielplan",   SceneSpielplan),
-            ("Statistiken", SceneStatistiken),
-        }));
-
-        // Einfache Menüpunkte
-        foreach (var (label, scene) in new (string, string)[] {
-            ("📅  Kalender", SceneKalender),
-            ("💪  Training", SceneTraining),
-            ("💶  Finanzen", SceneFinanzen),
-            ("🔁  Transfers", SceneTransfer),
-            ("🏟  Umfeld",   ""),
-            ("👦  Jugend",   SceneJugend),
-        })
+        // Bereiche
+        var reiter = new HBoxContainer();
+        reiter.AddThemeConstantOverride("separation", 0);
+        foreach (var (bereich, seiten) in Bereiche)
         {
-            var btn = new Button { Text = label };
-            FmTheme.ApplyButton(btn, FmTheme.BgPanel);
-            btn.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
-            var s = scene;
-            btn.Pressed += () => { if (!string.IsNullOrEmpty(s)) LadeScene(s); };
-            hbox.AddChild(btn);
+            var knopf = new Button { Text = bereich, FocusMode = FocusModeEnum.None };
+            SetzeReiterStil(knopf, aktiv: false);
+            var ziel = seiten[0].Scene;
+            knopf.Pressed += () => LadeScene(ziel);
+            _reiter[bereich] = knopf;
+            reiter.AddChild(knopf);
         }
+        hbox.AddChild(reiter);
 
-        // Spacer
-        var spacer = new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        hbox.AddChild(spacer);
+        hbox.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
 
         // Fortschritt der laufenden Simulation
         _fortschrittLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        _fortschrittLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         hbox.AddChild(_fortschrittLabel);
 
-        // Ereignis, auf dem der Stand gerade steht
-        _ereignisLabel = FmTheme.MakeLabel("", 12, FmTheme.Gold);
-        hbox.AddChild(_ereignisLabel);
+        // Spieldatum und Kontostand
+        var zeit = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        zeit.AddThemeConstantOverride("separation", 0);
+        _spieltagLabel = FmTheme.MakeLabel("", 14, FmTheme.TextPrimary, HorizontalAlignment.Right);
+        _spieltagLabel.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        zeit.AddChild(_spieltagLabel);
+        _kontoLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary, HorizontalAlignment.Right);
+        zeit.AddChild(_kontoLabel);
+        hbox.AddChild(zeit);
 
         // Nur am Wochenstart: Abkürzung zur Trainingsplanung, denn genau dafür hält er an.
-        _trainingButton = new Button { Text = "💪  Training planen", Visible = false };
-        FmTheme.ApplyButton(_trainingButton, FmTheme.BgPanel);
-        _trainingButton.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        _trainingButton = new Button
+        {
+            Text = "Training planen",
+            Visible = false,
+            CustomMinimumSize = new Vector2(0, 44),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+        };
+        FmTheme.ApplySecondaryButton(_trainingButton);
         _trainingButton.Pressed += () => LadeScene(SceneTraining);
         hbox.AddChild(_trainingButton);
 
-        // Spieldatum und Saisonabschnitt
-        _spieltagLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
-        hbox.AddChild(_spieltagLabel);
-
-        _simulierenButton = new Button { Text = "▶  Weiter" };
-        FmTheme.ApplyButton(_simulierenButton, FmTheme.Accent);
+        _simulierenButton = AktionsKnopf.Neu(Symbol.Art.Abspielen, "Weiter");
+        _simulierenButton.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         _simulierenButton.Pressed += OnSimulierenPressed;
         hbox.AddChild(_simulierenButton);
 
-        hbox.AddChild(new VSeparator());
-
-        // Vereinsname rechts
-        _vereinLabel = FmTheme.MakeLabel(GameState.Instance.VereinName, 14, FmTheme.TextPrimary);
-        hbox.AddChild(_vereinLabel);
-
         // Einstellungen (Fenstermodus, Gehaltsanzeige)
-        var einstellungen = new Button { Text = "⚙", TooltipText = "Einstellungen", CustomMinimumSize = new Vector2(36, 0) };
-        FmTheme.ApplyButton(einstellungen, FmTheme.BgPanel);
-        einstellungen.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
+        var einstellungen = SymbolKnopf(Symbol.Art.Zahnrad, "Einstellungen", flach: false);
         einstellungen.Pressed += () => EinstellungenDialog.Zeige(this, () => LadeScene(_aktuelleScene));
         hbox.AddChild(einstellungen);
 
         return panel;
+    }
+
+    /// <summary>Die Seiten des aktiven Bereichs - Tabelle, Spielplan, Statistiken.</summary>
+    private Control BuildUnterzeile()
+    {
+        var panel = new PanelContainer { CustomMinimumSize = new Vector2(0, 48) };
+        var stil = new StyleBoxFlat { BgColor = FmTheme.BgSubbar, BorderColor = FmTheme.Border, BorderWidthBottom = 1 };
+        stil.SetContentMarginAll(0);
+        panel.AddThemeStyleboxOverride("panel", stil);
+
+        var margin = new MarginContainer();
+        FmTheme.SetMargin(margin, 24, 24, 7, 7);
+        panel.AddChild(margin);
+
+        _unterreiter = new HBoxContainer();
+        _unterreiter.AddThemeConstantOverride("separation", 4);
+        margin.AddChild(_unterreiter);
+        return panel;
+    }
+
+    /// <summary>Ein quadratischer Knopf mit Symbol statt Text.</summary>
+    private static Button SymbolKnopf(Symbol.Art art, string tooltip, bool flach)
+    {
+        var knopf = new Button
+        {
+            TooltipText = tooltip,
+            CustomMinimumSize = new Vector2(44, 44),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+            FocusMode = FocusModeEnum.None,
+        };
+        if (flach)
+        {
+            foreach (var zustand in new[] { "normal", "focus" })
+                knopf.AddThemeStyleboxOverride(zustand, new StyleBoxEmpty());
+            knopf.AddThemeStyleboxOverride("hover", FmTheme.Flaeche(FmTheme.BgHover, 10));
+            knopf.AddThemeStyleboxOverride("pressed", FmTheme.Flaeche(FmTheme.Border, 10));
+        }
+        else
+        {
+            FmTheme.ApplySecondaryButton(knopf);
+        }
+        var symbol = Symbol.Neu(art, flach ? FmTheme.TextNav : FmTheme.TextPrimary, 20);
+        symbol.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        symbol.OffsetLeft = symbol.OffsetTop = 12;
+        symbol.OffsetRight = symbol.OffsetBottom = -12;
+        knopf.AddChild(symbol);
+        return knopf;
+    }
+
+    /// <summary>Reiter der Menüzeile: flach, der aktive mit Bernstein-Unterstreichung.</summary>
+    private static void SetzeReiterStil(Button knopf, bool aktiv)
+    {
+        var stil = new StyleBoxFlat
+        {
+            BgColor = new Color(0, 0, 0, 0),
+            BorderColor = FmTheme.Accent,
+            BorderWidthBottom = aktiv ? 3 : 0,
+            ContentMarginLeft = 14,
+            ContentMarginRight = 14,
+        };
+        var schwebend = (StyleBoxFlat)stil.Duplicate();
+        foreach (var zustand in new[] { "normal", "pressed", "focus", "disabled" })
+            knopf.AddThemeStyleboxOverride(zustand, stil);
+        knopf.AddThemeStyleboxOverride("hover", schwebend);
+
+        var farbe = aktiv ? FmTheme.TextPrimary : FmTheme.TextNav;
+        knopf.AddThemeColorOverride("font_color", farbe);
+        knopf.AddThemeColorOverride("font_pressed_color", farbe);
+        knopf.AddThemeColorOverride("font_focus_color", farbe);
+        knopf.AddThemeColorOverride("font_hover_color", FmTheme.TextPrimary);
+        knopf.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        knopf.AddThemeFontSizeOverride("font_size", 14);
+    }
+
+    /// <summary>Seite der Unterzeile: eine Pille, die aktive hinterlegt.</summary>
+    private static void SetzeSeitenStil(Button knopf, bool aktiv)
+    {
+        var stil = FmTheme.Flaeche(aktiv ? FmTheme.BgHover : new Color(0, 0, 0, 0), 17);
+        stil.ContentMarginLeft = stil.ContentMarginRight = 14;
+        var schwebend = FmTheme.Flaeche(aktiv ? FmTheme.BgHover : new Color("18241F"), 17);
+        schwebend.ContentMarginLeft = schwebend.ContentMarginRight = 14;
+        foreach (var zustand in new[] { "normal", "pressed", "focus" })
+            knopf.AddThemeStyleboxOverride(zustand, stil);
+        knopf.AddThemeStyleboxOverride("hover", schwebend);
+
+        var farbe = aktiv ? FmTheme.TextPrimary : FmTheme.TextNav;
+        knopf.AddThemeColorOverride("font_color", farbe);
+        knopf.AddThemeColorOverride("font_pressed_color", farbe);
+        knopf.AddThemeColorOverride("font_hover_color", FmTheme.TextPrimary);
+        knopf.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        knopf.AddThemeFontSizeOverride("font_size", 13);
+    }
+
+    /// <summary>Markiert Bereich und Seite der geladenen Szene und füllt die Unterzeile.</summary>
+    private void ZeigeNavigation(string scene)
+    {
+        foreach (var (bereich, seiten) in Bereiche)
+        {
+            bool aktiv = System.Array.Exists(seiten, x => x.Scene == scene);
+            SetzeReiterStil(_reiter[bereich], aktiv);
+            if (!aktiv) continue;
+
+            foreach (Node kind in _unterreiter.GetChildren())
+                kind.QueueFree();
+            foreach (var (seite, ziel) in seiten)
+            {
+                var knopf = new Button { Text = seite, FocusMode = FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 34) };
+                SetzeSeitenStil(knopf, ziel == scene);
+                var z = ziel;
+                knopf.Pressed += () => LadeScene(z);
+                _unterreiter.AddChild(knopf);
+            }
+        }
     }
 
     // ── Schritt auf der Zeitachse ────────────────────────────────────────────
@@ -341,8 +457,30 @@ public partial class GameMain : Control
         GameState.Instance.SetSpieldatum(stand.Datum);
         _kalenderStand = stand;
 
-        _spieltagLabel.Text = $"Saison {stand.SaisonText} · {stand.ZeitpunktText} · {stand.Phase}";
+        _spieltagLabel.Text = $"{stand.Wochentag} {stand.Datum:dd.MM.yyyy} · {stand.Uhrzeit:HH\\:mm}";
+        _spieltagLabel.TooltipText = $"Saison {stand.SaisonText} · {stand.Phase}";
         ZeigeEreignis(stand);
+        await AktualisiereVerein(stand);
+    }
+
+    /// <summary>Tabellenplatz, Punkte und Kontostand für die Vereinszeile der Menüzeile.</summary>
+    private async System.Threading.Tasks.Task AktualisiereVerein(KalenderStand stand)
+    {
+        var vereinId = GameState.Instance.VereinId;
+        var tabelleTask = ApiClient.GetAsync<System.Collections.Generic.List<TabellenEintrag>>(
+            $"liga/{GameState.Instance.LigaId}/tabelle");
+        var verein = await ApiClient.GetAsync<Verein>($"verein/{vereinId}");
+        var tabelle = await tabelleTask;
+        if (!IsInstanceValid(this)) return;
+
+        var eigener = tabelle?.Find(e => e.Verein?.Id == vereinId);
+        _vereinUnterzeile.Text = eigener != null && eigener.Spiele > 0
+            ? $"{GameState.Instance.LigaName} · {eigener.Platz}. Platz · {eigener.Punkte} Punkte"
+            : GameState.Instance.LigaName;
+
+        _kontoLabel.Text = verein != null
+            ? $"{stand.Phase} · Konto {FmTheme.Geld(verein.Kontostand)}"
+            : stand.Phase;
     }
 
     /// <summary>
@@ -355,12 +493,15 @@ public partial class GameMain : Control
         var hier = stand.AktuellesEreignis;
         var ziel = stand.NaechstesEreignis;
 
-        _ereignisLabel.Text = hier != null ? $"{hier.Symbol}  {hier.Titel}" : "";
         // Der Wochenstart hält genau dafür an, dass hier geplant wird.
         _trainingButton.Visible = hier is { IstWochenstart: true };
 
         _simulierenButton.Disabled = false;
-        _simulierenButton.Text = $"▶  {hier?.AktionText ?? "Weiter"}";
+        // Die Unterzeile sagt, was der Knopf tut: Bei einer eigenen Partie, gegen wen; sonst, bis
+        // wohin die Zeit läuft.
+        _simulierenButton.Setze(hier?.AktionText ?? "Weiter",
+            hier is { IstSpiel: true } ? hier.Titel
+            : ziel != null ? $"bis {ziel.Titel}, {ziel.Datum:dd.MM.}" : "");
         _simulierenButton.TooltipText = hier is { IstSpiel: true }
             ? $"{hier.Titel} · {hier.Untertitel}"
             : ziel == null
@@ -368,29 +509,10 @@ public partial class GameMain : Control
                 : $"Nächster Halt: {ziel.Titel} ({ziel.ZeitText})";
     }
 
-    private MenuButton BuildDropdown(string label, (string Label, string Scene)[] items)
-    {
-        var btn = new MenuButton { Text = label };
-        btn.AddThemeStyleboxOverride("normal", FmTheme.ButtonStyle(FmTheme.BgPanel));
-        btn.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
-
-        var popup = btn.GetPopup();
-        for (int i = 0; i < items.Length; i++)
-            popup.AddItem(items[i].Label, i);
-
-        var captured = items;
-        popup.IdPressed += id =>
-        {
-            var scene = captured[(int)id].Scene;
-            if (!string.IsNullOrEmpty(scene)) LadeScene(scene);
-        };
-
-        return btn;
-    }
-
     private void LadeScene(string path)
     {
         _aktuelleScene = path;
+        ZeigeNavigation(path);
 
         foreach (Node child in _contentArea.GetChildren())
             child.QueueFree();

@@ -43,7 +43,7 @@ public partial class KalenderView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("📅  Kalender", 20, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeTitel("Kalender"));
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);

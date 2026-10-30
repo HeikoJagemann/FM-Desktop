@@ -16,7 +16,7 @@ namespace FMDesktop.UI.Common;
 /// </summary>
 public partial class FmGrid<T> : VBoxContainer
 {
-    private const int ZeilenHoehe = 30;
+    private const int ZeilenHoehe = 34;
 
     private readonly List<GridSpalte<T>> _spalten;
     private readonly List<GridZeile<T>>  _zeilen = new();
@@ -330,7 +330,7 @@ public partial class FmGrid<T> : VBoxContainer
         }
         _gewaehlteZeile = zeile;
         _farbeVorAuswahl = zeile.Hintergrund;
-        zeile.Hintergrund = FmTheme.Accent.Darkened(0.35f);
+        zeile.Hintergrund = FmTheme.AuswahlZeile;
     }
 }
 
@@ -396,7 +396,7 @@ public partial class GridZeile<T> : PanelContainer
                 AutowrapMode        = TextServer.AutowrapMode.Off,
                 MouseFilter         = MouseFilterEnum.Ignore,
             };
-            zelle.AddThemeFontSizeOverride("font_size", 12);
+            zelle.AddThemeFontSizeOverride("font_size", 13);
             rahmen.AddChild(zelle);
             hbox.AddChild(rahmen);
 

@@ -91,9 +91,9 @@ public static class TabellenSpalten
     public static Func<TabellenEintrag, bool, Color> Zeilenfarbe(long eigenerVerein, int anzahl) =>
         (e, wechsel) =>
         {
-            if (e.Verein?.Id == eigenerVerein) return FmTheme.Accent.Darkened(0.55f);
-            if (e.Platz <= 2)                  return FmTheme.GruppeMittelfeld;
-            if (anzahl - e.Platz < 2)          return FmTheme.GruppeSturm;
+            if (e.Verein?.Id == eigenerVerein) return FmTheme.MarkiertZeile;
+            if (e.Platz <= 2)                  return FmTheme.BgPanel.Lerp(FmTheme.Success, 0.12f);
+            if (anzahl - e.Platz < 2)          return FmTheme.BgPanel.Lerp(FmTheme.Danger, 0.12f);
             return wechsel ? FmTheme.RowAlt : FmTheme.BgPanel;
         };
 }
