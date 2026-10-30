@@ -19,7 +19,7 @@ public partial class StartScreen : Control
     private Control      _ladenPanel        = null!;
     private Control      _auswahlPanel      = null!;
 
-    private Button        _btnFortsetzen        = null!;
+    private AktionsKnopf  _btnFortsetzen        = null!;
     private Button        _btnLaden             = null!;
     private Label         _spielstandHinweis    = null!;
     private VBoxContainer _spielstandContainer  = null!;
@@ -35,15 +35,30 @@ public partial class StartScreen : Control
     {
         BuildUI();
         ZeigePanel(Zustand.Start);
+        _ = ZeigeLetztenSpielstand();
+    }
+
+    /// <summary>Schreibt unter "Spiel fortsetzen", welcher Spielstand das ist.</summary>
+    private async Task ZeigeLetztenSpielstand()
+    {
+        var staende = await ApiClient.GetAsync<List<SpielstandInfo>>("schemas/saves/uebersicht");
+        if (!IsInstanceValid(this)) return;
+        var neuester = staende?.FirstOrDefault(s => s.Ladbar);
+        if (neuester == null)
+        {
+            _btnFortsetzen.Setze("Spiel fortsetzen", "kein Spielstand vorhanden");
+            _btnFortsetzen.Disabled = true;
+            return;
+        }
+        _btnFortsetzen.Setze("Spiel fortsetzen",
+            string.IsNullOrEmpty(neuester.LigaName) ? neuester.Titel : $"{neuester.Titel} · {neuester.LigaName}");
     }
 
     // ── UI aufbauen ───────────────────────────────────────────
 
     private void BuildUI()
     {
-        var bg = new ColorRect { Color = FmTheme.BgDark };
-        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        AddChild(bg);
+        AddChild(Hintergrundfeld.Neu());
 
         var root = new MarginContainer();
         root.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -100,15 +115,16 @@ public partial class StartScreen : Control
     private Control BuildHero()
     {
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 6);
+        vbox.AddThemeConstantOverride("separation", 2);
 
-        var title = FmTheme.MakeLabel("⚽  Fussball-Manager", 34, FmTheme.TextPrimary);
+        var kicker = FmTheme.MakeLabel("DEINE TRAINERKARRIERE", 13, FmTheme.TextSecondary);
+        kicker.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        kicker.HorizontalAlignment = HorizontalAlignment.Center;
+        vbox.AddChild(kicker);
+
+        var title = FmTheme.MakeTitel("Fussball-Manager", 64);
         title.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(title);
-
-        var sub = FmTheme.MakeLabel("Starte deine Karriere als Trainer", 15, FmTheme.TextSecondary);
-        sub.HorizontalAlignment = HorizontalAlignment.Center;
-        vbox.AddChild(sub);
 
         return vbox;
     }
@@ -118,47 +134,52 @@ public partial class StartScreen : Control
         var center = new CenterContainer();
 
         var panel = new PanelContainer();
-        panel.CustomMinimumSize = new Vector2(360, 0);
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+        panel.CustomMinimumSize = new Vector2(380, 0);
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(16));
         center.AddChild(panel);
 
         var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 40, 48);
+        FmTheme.SetMargin(margin, 28, 28, 28, 20);
         panel.AddChild(margin);
 
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 12);
+        vbox.AddThemeConstantOverride("separation", 10);
         vbox.Alignment = BoxContainer.AlignmentMode.Center;
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("🏆", 52, FmTheme.Gold, HorizontalAlignment.Center));
-        vbox.AddChild(FmTheme.MakeLabel("Fussball-Manager", 24, FmTheme.TextPrimary, HorizontalAlignment.Center));
-
-        var spacer = new Control { CustomMinimumSize = new Vector2(0, 8) };
-        vbox.AddChild(spacer);
-
-        var btnNeuesSpiel = MakeMenuButton("▶   Neues Spiel", FmTheme.Accent);
-        btnNeuesSpiel.Pressed += OnSpielStarten;
-        vbox.AddChild(btnNeuesSpiel);
-
-        _btnFortsetzen = MakeMenuButton("↩   Spiel fortsetzen", FmTheme.BgPanel);
+        // Fortsetzen ist der häufigste Weg ins Spiel - deshalb der eine Bernstein-Knopf, und er
+        // sagt gleich, welcher Spielstand es ist.
+        _btnFortsetzen = AktionsKnopf.Neu(Symbol.Art.Abspielen, "Spiel fortsetzen", "zuletzt gespielter Spielstand");
         _btnFortsetzen.TooltipText = "Zuletzt angelegtes Spiel fortsetzen";
         _btnFortsetzen.Pressed += OnSpielFortsetzen;
         vbox.AddChild(_btnFortsetzen);
 
-        _btnLaden = MakeMenuButton("📂   Spiel laden", FmTheme.BgPanel);
+        var btnNeuesSpiel = MakeMenuButton("Neues Spiel", FmTheme.BgKnopf);
+        btnNeuesSpiel.TooltipText = "Einen Verein in der Oberliga übernehmen";
+        btnNeuesSpiel.Pressed += OnSpielStarten;
+        vbox.AddChild(btnNeuesSpiel);
+
+        _btnLaden = MakeMenuButton("Spiel laden", FmTheme.BgKnopf);
         _btnLaden.Pressed += OnSpielLaden;
         vbox.AddChild(_btnLaden);
 
-        var btnEinstellungen = MakeMenuButton("⚙   Einstellungen", FmTheme.BgPanel);
+        var btnEinstellungen = MakeMenuButton("Einstellungen", FmTheme.BgKnopf);
         btnEinstellungen.Pressed += () => EinstellungenDialog.Zeige(this);
         vbox.AddChild(btnEinstellungen);
 
-        var spacer2 = new Control { CustomMinimumSize = new Vector2(0, 4) };
-        vbox.AddChild(spacer2);
+        vbox.AddChild(new Control { CustomMinimumSize = new Vector2(0, 2) });
 
-        var btnBeenden = MakeMenuButton("✕   Beenden", FmTheme.BgPanel);
-        btnBeenden.AddThemeColorOverride("font_color", FmTheme.Danger);
+        var btnBeenden = new Button
+        {
+            Text = "Beenden",
+            CustomMinimumSize = new Vector2(0, 36),
+            FocusMode = FocusModeEnum.None,
+        };
+        foreach (var zustand in new[] { "normal", "pressed", "focus" })
+            btnBeenden.AddThemeStyleboxOverride(zustand, new StyleBoxEmpty());
+        btnBeenden.AddThemeStyleboxOverride("hover", FmTheme.Flaeche(FmTheme.BgHover, 10));
+        btnBeenden.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
+        btnBeenden.AddThemeColorOverride("font_hover_color", FmTheme.Danger);
         btnBeenden.Pressed += () => GetTree().Quit();
         vbox.AddChild(btnBeenden);
 
@@ -170,7 +191,7 @@ public partial class StartScreen : Control
         var btn = new Button
         {
             Text = text,
-            CustomMinimumSize = new Vector2(280, 46),
+            CustomMinimumSize = new Vector2(280, 48),
             Flat = false,
         };
         FmTheme.ApplyButton(btn, bg);
@@ -194,7 +215,9 @@ public partial class StartScreen : Control
         vbox.AddThemeConstantOverride("separation", 16);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("🗄   Datenbank auswählen", 22, FmTheme.TextPrimary, HorizontalAlignment.Center));
+        var dbTitel = FmTheme.MakeTitel("Spielwelt wählen", 30);
+        dbTitel.HorizontalAlignment = HorizontalAlignment.Center;
+        vbox.AddChild(dbTitel);
         vbox.AddChild(FmTheme.MakeLabel("Wähle die Spielwelt, mit der du starten möchtest.", 13, FmTheme.TextSecondary, HorizontalAlignment.Center));
 
         var scrollContainer = new ScrollContainer { CustomMinimumSize = new Vector2(0, 180) };
@@ -209,13 +232,13 @@ public partial class StartScreen : Control
         hbox.Alignment = BoxContainer.AlignmentMode.Center;
         vbox.AddChild(hbox);
 
-        var btnZurueck = new Button { Text = "←   Zurück", CustomMinimumSize = new Vector2(140, 40) };
-        FmTheme.ApplyButton(btnZurueck, FmTheme.BgPanel);
+        var btnZurueck = new Button { Text = "Zurück", CustomMinimumSize = new Vector2(140, 44) };
+        FmTheme.ApplySecondaryButton(btnZurueck);
         btnZurueck.Pressed += () => ZeigePanel(Zustand.Start);
         hbox.AddChild(btnZurueck);
 
-        var btnWeiter = new Button { Text = "▶   Weiter", CustomMinimumSize = new Vector2(160, 40) };
-        FmTheme.ApplyButton(btnWeiter, FmTheme.Accent);
+        var btnWeiter = new Button { Text = "Weiter", CustomMinimumSize = new Vector2(160, 44) };
+        FmTheme.ApplyPrimaryButton(btnWeiter);
         btnWeiter.Pressed += OnDbAuswahlBestaetigt;
         hbox.AddChild(btnWeiter);
 
@@ -226,8 +249,8 @@ public partial class StartScreen : Control
     {
         foreach (var (schema, btn) in _schemaButtons)
         {
-            var bg = schema == _gewaehlteSchema ? FmTheme.Accent : FmTheme.BgPanel;
-            FmTheme.ApplyButton(btn, bg);
+            FmTheme.ApplyButton(btn, schema == _gewaehlteSchema ? FmTheme.BgHover : FmTheme.BgKnopf);
+            btn.AddThemeColorOverride("font_color", schema == _gewaehlteSchema ? FmTheme.Accent : FmTheme.TextPrimary);
         }
     }
 
@@ -248,14 +271,18 @@ public partial class StartScreen : Control
         vbox.AddThemeConstantOverride("separation", 14);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("⚙", 48, align: HorizontalAlignment.Center));
-        vbox.AddChild(FmTheme.MakeLabel("Ligenwelt wird aufgebaut …", 20, FmTheme.TextPrimary, HorizontalAlignment.Center));
+        var ladeTitel = FmTheme.MakeTitel("Ligenwelt wird aufgebaut", 30);
+        ladeTitel.HorizontalAlignment = HorizontalAlignment.Center;
+        vbox.AddChild(ladeTitel);
 
         _progressLabel = FmTheme.MakeLabel("Starte …", 13, FmTheme.TextSecondary);
         _progressLabel.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(_progressLabel);
 
-        _progressBar = new ProgressBar { MinValue = 0, MaxValue = 100, CustomMinimumSize = new Vector2(0, 18) };
+        _progressBar = new ProgressBar
+        {
+            MinValue = 0, MaxValue = 100, ShowPercentage = false, CustomMinimumSize = new Vector2(0, 10),
+        };
         vbox.AddChild(_progressBar);
 
         return center;
@@ -278,7 +305,7 @@ public partial class StartScreen : Control
         vbox.AddThemeConstantOverride("separation", 14);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("Spiel laden", 20, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeTitel("Spiel laden", 30));
 
         _spielstandHinweis = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
         vbox.AddChild(_spielstandHinweis);
@@ -291,8 +318,13 @@ public partial class StartScreen : Control
         _spielstandContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         scroll.AddChild(_spielstandContainer);
 
-        var zurueck = new Button { Text = "←   Zurück", CustomMinimumSize = new Vector2(140, 40) };
-        FmTheme.ApplyButton(zurueck, FmTheme.BgPanel);
+        var zurueck = new Button
+        {
+            Text = "Zurück",
+            CustomMinimumSize = new Vector2(140, 44),
+            SizeFlagsHorizontal = SizeFlags.ShrinkBegin,
+        };
+        FmTheme.ApplySecondaryButton(zurueck);
         zurueck.Pressed += () => ZeigePanel(Zustand.Start);
         vbox.AddChild(zurueck);
 
@@ -329,7 +361,7 @@ public partial class StartScreen : Control
             Disabled = !stand.Ladbar,
             TooltipText = stand.Ladbar ? stand.Schema : "Diesem Spielstand fehlt die Vereinszuordnung.",
         };
-        FmTheme.ApplyButton(btn, stand.Ladbar ? FmTheme.BgPanel : FmTheme.BgDark);
+        FmTheme.ApplyButton(btn, stand.Ladbar ? FmTheme.BgKnopf : FmTheme.BgDark);
         btn.Text = $"{stand.Titel}\n{stand.Untertitel}";
         btn.AddThemeColorOverride("font_color",
             stand.Ladbar ? FmTheme.TextPrimary : FmTheme.TextSecondary);
@@ -367,7 +399,9 @@ public partial class StartScreen : Control
         var vbox = new VBoxContainer();
         vbox.AddThemeConstantOverride("separation", 20);
 
-        vbox.AddChild(FmTheme.MakeLabel("Wähle deinen Verein – Oberliga", 22, FmTheme.TextPrimary, HorizontalAlignment.Center));
+        var wahlTitel = FmTheme.MakeTitel("Wähle deinen Verein", 34);
+        wahlTitel.HorizontalAlignment = HorizontalAlignment.Center;
+        vbox.AddChild(wahlTitel);
         vbox.AddChild(FmTheme.MakeLabel("Drei zufällige Vereine aus der Oberliga stehen zur Auswahl.", 13, FmTheme.TextSecondary, HorizontalAlignment.Center));
 
         _vereineContainer = new HBoxContainer();
@@ -376,9 +410,8 @@ public partial class StartScreen : Control
         _vereineContainer.SizeFlagsVertical = SizeFlags.ExpandFill;
         vbox.AddChild(_vereineContainer);
 
-        var andereBtn = new Button { Text = "🔄   Andere Vereine anzeigen", CustomMinimumSize = new Vector2(240, 38) };
-        FmTheme.ApplyButton(andereBtn, FmTheme.BgPanel);
-        andereBtn.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
+        var andereBtn = new Button { Text = "Andere Vereine anzeigen", CustomMinimumSize = new Vector2(240, 44) };
+        FmTheme.ApplySecondaryButton(andereBtn);
         andereBtn.Pressed += async () => await LadeAngebote();
 
         var btnCenter = new CenterContainer();
@@ -391,25 +424,27 @@ public partial class StartScreen : Control
     private Control BaueVereinCard(Verein verein)
     {
         var panel = new PanelContainer();
-        panel.CustomMinimumSize = new Vector2(290, 310);
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+        panel.CustomMinimumSize = new Vector2(290, 330);
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(16));
 
         var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 20);
+        FmTheme.SetMargin(margin, 24);
         panel.AddChild(margin);
 
         var vbox = new VBoxContainer();
         vbox.AddThemeConstantOverride("separation", 10);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("🛡", 40, align: HorizontalAlignment.Center));
+        var wappen = new CenterContainer();
+        wappen.AddChild(Wappen.Neu(verein.Name, 76, FmTheme.BorderStark));
+        vbox.AddChild(wappen);
 
-        var name = FmTheme.MakeLabel(verein.Name, 16, FmTheme.TextPrimary);
+        var name = FmTheme.MakeTitel(verein.Name, 24);
         name.HorizontalAlignment = HorizontalAlignment.Center;
         name.AutowrapMode        = TextServer.AutowrapMode.WordSmart;
         vbox.AddChild(name);
 
-        var liga = FmTheme.MakeLabel(verein.Liga?.Name ?? "", 12, FmTheme.Accent);
+        var liga = FmTheme.MakeLabel(verein.Liga?.Name ?? "", 13, FmTheme.TextSecondary);
         liga.HorizontalAlignment = HorizontalAlignment.Center;
         vbox.AddChild(liga);
 
@@ -421,8 +456,8 @@ public partial class StartScreen : Control
         var spacer = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
         vbox.AddChild(spacer);
 
-        var btn = new Button { Text = "▶   Auswählen" };
-        FmTheme.ApplyButton(btn, FmTheme.Accent);
+        var btn = new Button { Text = "Verein übernehmen", CustomMinimumSize = new Vector2(0, 44) };
+        FmTheme.ApplyPrimaryButton(btn);
         var v = verein;
         btn.Pressed += () => VereinWaehlen(v);
         vbox.AddChild(btn);
@@ -467,7 +502,8 @@ public partial class StartScreen : Control
                 CustomMinimumSize = new Vector2(0, 38),
                 Alignment = HorizontalAlignment.Left,
             };
-            FmTheme.ApplyButton(btn, s == _gewaehlteSchema ? FmTheme.Accent : FmTheme.BgPanel);
+            FmTheme.ApplyButton(btn, s == _gewaehlteSchema ? FmTheme.BgHover : FmTheme.BgKnopf);
+            btn.AddThemeColorOverride("font_color", s == _gewaehlteSchema ? FmTheme.Accent : FmTheme.TextPrimary);
             btn.Pressed += () =>
             {
                 _gewaehlteSchema = s;

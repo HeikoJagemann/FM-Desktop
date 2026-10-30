@@ -8,7 +8,7 @@ public static class SpielKontextmenue
     public static void Zeige(Control caller, long spielId, bool gespielt)
     {
         var menu = new PopupMenu();
-        menu.AddItem("📋  Spielbericht anzeigen", 0);
+        menu.AddItem("Spielbericht anzeigen", 0);
         if (!gespielt)
         {
             // Noch nicht ausgetragen - Eintrag sichtbar lassen, aber deaktivieren.

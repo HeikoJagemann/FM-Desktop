@@ -49,7 +49,8 @@ public partial class GameState : Node
     /// Vorschau für die Gestaltung: öffnet eine Ansicht eines Spielstands, speichert ein
     /// Bildschirmfoto und beendet das Spiel. Aufruf mit Godot-Benutzerargumenten:
     /// <c>-- --vorschau save_x 192 res://scenes/taktik/AufstellungView.tscn C:/pfad/bild.png</c>.
-    /// Liest nur; am Spielstand ändert sich nichts.
+    /// Liest nur - außer bei der Spielansicht, die beim Öffnen eine Partie anpfeift; die
+    /// gehört deshalb in einen Wegwerf-Spielstand.
     /// </summary>
     private async System.Threading.Tasks.Task Vorschau(string schema, long vereinId, string ansicht, string datei)
     {
@@ -62,8 +63,10 @@ public partial class GameState : Node
             return;
         }
         SetVerein(vereinId, verein.Name, verein.Liga?.Id ?? 0, verein.Liga?.Name ?? "");
-        StartAnsicht = ansicht;
-        GetTree().ChangeSceneToFile("res://scenes/GameMain.tscn");
+        // Eigene Bildschirme (Start, Spiel) werden direkt geöffnet, alle übrigen im Hauptspiel.
+        bool eigenerBildschirm = ansicht.EndsWith("StartScreen.tscn") || ansicht.EndsWith("SpielView.tscn");
+        StartAnsicht = eigenerBildschirm ? null : ansicht;
+        GetTree().ChangeSceneToFile(eigenerBildschirm ? ansicht : "res://scenes/GameMain.tscn");
 
         // Den Ansichten Zeit lassen, ihre Daten zu holen und sich aufzubauen.
         await ToSignal(GetTree().CreateTimer(5.0), SceneTreeTimer.SignalName.Timeout);

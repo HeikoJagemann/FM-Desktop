@@ -49,6 +49,9 @@ public partial class SpielView : Control
     private Control _rumpf = null!;
     private Label _halbzeitLabel = null!;
     private Label _richtungLabel = null!;
+    private Wappen _heimWappen = null!;
+    private Wappen _gastWappen = null!;
+
     /// <summary>Die Tempo-Knöpfe, je Faktor - der gewählte steht in Bernstein.</summary>
     private readonly System.Collections.Generic.Dictionary<double, Button> _tempoKnoepfe = new();
     private Panel _pausenschild = null!;
@@ -201,31 +204,31 @@ public partial class SpielView : Control
         {
             case "TOR":
                 SchreibeZeile(v.Minute, string.IsNullOrEmpty(v.Vorlage)
-                        ? $"⚽  Tor - {v.Name}"
-                        : $"⚽  Tor - {v.Name}  (Vorlage {v.Vorlage})",
-                    eigenes ? FmTheme.Success : FmTheme.Danger);
+                        ? $"Tor - {v.Name}"
+                        : $"Tor - {v.Name}  (Vorlage {v.Vorlage})",
+                    eigenes ? FmTheme.Success : FmTheme.Danger, Symbol.Art.Ball);
                 break;
             case "EIGENTOR":
-                SchreibeZeile(v.Minute, $"⚽  Eigentor - {v.Name}",
-                    eigenes ? FmTheme.Success : FmTheme.Danger);
+                SchreibeZeile(v.Minute, $"Eigentor - {v.Name}",
+                    eigenes ? FmTheme.Success : FmTheme.Danger, Symbol.Art.Ball);
                 break;
             case "GELB":
-                SchreibeZeile(v.Minute, $"🟨  {v.Name}", FmTheme.Gold);
+                SchreibeZeile(v.Minute, $"Gelbe Karte - {v.Name}", FmTheme.Gold, Symbol.Art.Gelb);
                 break;
             case "GELBROT":
-                SchreibeZeile(v.Minute, $"🟨🟥  Gelb-Rot - {v.Name}", FmTheme.Danger);
+                SchreibeZeile(v.Minute, $"Gelb-Rot - {v.Name}", FmTheme.Danger, Symbol.Art.GelbRot);
                 break;
             case "ROT":
-                SchreibeZeile(v.Minute, $"🟥  Rote Karte - {v.Name}", FmTheme.Danger);
+                SchreibeZeile(v.Minute, $"Rote Karte - {v.Name}", FmTheme.Danger, Symbol.Art.Rot);
                 break;
             case "HALBZEIT":
                 SchreibeZeile(v.Minute,
-                    $"⏸  Halbzeit - {_feldHeimTore} : {_feldGastTore}, Seitenwechsel",
-                    FmTheme.TextPrimary);
+                    $"Halbzeit - {_feldHeimTore} : {_feldGastTore}, Seitenwechsel",
+                    FmTheme.TextPrimary, Symbol.Art.Pause);
                 break;
             case "ABPFIFF":
                 SchreibeZeile(v.Minute,
-                    $"⏹  Abpfiff - {_feldHeimTore} : {_feldGastTore}", FmTheme.TextPrimary);
+                    $"Abpfiff - {_feldHeimTore} : {_feldGastTore}", FmTheme.TextPrimary, Symbol.Art.Abpfiff);
                 break;
         }
     }
@@ -349,10 +352,6 @@ public partial class SpielView : Control
 
         root.AddChild(BaueKopf());
 
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        root.AddChild(sep);
-
         _rumpf = new Control { SizeFlagsVertical = SizeFlags.ExpandFill };
         root.AddChild(_rumpf);
         _rumpf.AddChild(BaueSpielRumpf());
@@ -360,33 +359,57 @@ public partial class SpielView : Control
         root.AddChild(BaueLeiste());
     }
 
+    /// <summary>
+    /// Die Anzeigetafel: Wappen, Vereine, Spielstand und darunter die Uhr. Der eigene Verein
+    /// trägt den Bernstein-Ring - nicht mehr eine andersfarbige Schrift.
+    /// </summary>
     private Control BaueKopf()
     {
+        var tafel = new PanelContainer();
+        var tafelStil = FmTheme.PanelStyle(14);
+        tafelStil.ContentMarginLeft = tafelStil.ContentMarginRight = 24;
+        tafelStil.ContentMarginTop = 14;
+        tafelStil.ContentMarginBottom = 12;
+        tafel.AddThemeStyleboxOverride("panel", tafelStil);
+
         var vbox = new VBoxContainer();
         vbox.AddThemeConstantOverride("separation", 10);
+        tafel.AddChild(vbox);
 
         var stand = new HBoxContainer();
         stand.AddThemeConstantOverride("separation", 16);
 
-        _heimNameLabel = FmTheme.MakeLabel("", 22, FmTheme.TextPrimary, HorizontalAlignment.Right);
+        _heimNameLabel = FmTheme.MakeTitel("", 28);
+        _heimNameLabel.HorizontalAlignment = HorizontalAlignment.Right;
         _heimNameLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _heimNameLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         stand.AddChild(_heimNameLabel);
 
-        _ergebnisLabel = FmTheme.MakeLabel("0 : 0", 40, FmTheme.TextPrimary, HorizontalAlignment.Center);
-        _ergebnisLabel.CustomMinimumSize = new Vector2(160, 0);
+        _heimWappen = Wappen.Neu("", 48, FmTheme.BorderStark);
+        stand.AddChild(_heimWappen);
+
+        _ergebnisLabel = FmTheme.MakeZahl("0 : 0", 54);
+        _ergebnisLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        _ergebnisLabel.CustomMinimumSize = new Vector2(170, 0);
         stand.AddChild(_ergebnisLabel);
 
-        _gastNameLabel = FmTheme.MakeLabel("", 22, FmTheme.TextPrimary);
+        _gastWappen = Wappen.Neu("", 48, FmTheme.BorderStark);
+        stand.AddChild(_gastWappen);
+
+        _gastNameLabel = FmTheme.MakeTitel("", 28);
         _gastNameLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _gastNameLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         stand.AddChild(_gastNameLabel);
 
         vbox.AddChild(stand);
 
         var uhrZeile = new HBoxContainer();
-        uhrZeile.AddThemeConstantOverride("separation", 10);
+        uhrZeile.AddThemeConstantOverride("separation", 12);
 
-        _halbzeitLabel = FmTheme.MakeLabel("1. Halbzeit", 13, FmTheme.TextSecondary);
+        _halbzeitLabel = FmTheme.MakeLabel("1. Halbzeit", 12, FmTheme.TextSecondary);
+        _halbzeitLabel.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
         _halbzeitLabel.CustomMinimumSize = new Vector2(92, 0);
+        _halbzeitLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         uhrZeile.AddChild(_halbzeitLabel);
 
         // Der Balken traegt eine Marke bei 45 Minuten. Ohne sie war der Halbzeitpfiff auf der
@@ -394,7 +417,8 @@ public partial class SpielView : Control
         var uhrRahmen = new Control
         {
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0, 12),
+            CustomMinimumSize = new Vector2(0, 8),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
         };
         uhrZeile.AddChild(uhrRahmen);
 
@@ -404,10 +428,10 @@ public partial class SpielView : Control
         };
         _uhr.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         _uhr.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.Success));
-        _uhr.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgToolbar));
+        _uhr.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.Border));
         uhrRahmen.AddChild(_uhr);
 
-        var marke = new ColorRect { Color = FmTheme.BgDark, MouseFilter = MouseFilterEnum.Ignore };
+        var marke = new ColorRect { Color = FmTheme.BgPanel, MouseFilter = MouseFilterEnum.Ignore };
         marke.SetAnchorsPreset(LayoutPreset.CenterLeft);
         marke.AnchorLeft = 0.5f;
         marke.AnchorRight = 0.5f;
@@ -420,12 +444,13 @@ public partial class SpielView : Control
         marke.TooltipText = "Halbzeit";
         uhrRahmen.AddChild(marke);
 
-        _minuteLabel = FmTheme.MakeLabel("0'", 17, FmTheme.TextPrimary, HorizontalAlignment.Right);
-        _minuteLabel.CustomMinimumSize = new Vector2(62, 0);
+        _minuteLabel = FmTheme.MakeZahl("0'", 24);
+        _minuteLabel.HorizontalAlignment = HorizontalAlignment.Right;
+        _minuteLabel.CustomMinimumSize = new Vector2(70, 0);
         uhrZeile.AddChild(_minuteLabel);
 
         vbox.AddChild(uhrZeile);
-        return vbox;
+        return tafel;
     }
 
     /// <summary>Hebt das gewählte Tempo hervor.</summary>
@@ -450,12 +475,12 @@ public partial class SpielView : Control
 
     private void BenenneMannschaften(LiveSpiel spiel)
     {
-        _heimNameLabel.Text = spiel.HeimVerein ?? "";
-        _heimNameLabel.AddThemeColorOverride("font_color",
-            spiel.EigenesHeimspiel ? FmTheme.Accent : FmTheme.TextPrimary);
-        _gastNameLabel.Text = spiel.GastVerein ?? "";
-        _gastNameLabel.AddThemeColorOverride("font_color",
-            !spiel.EigenesHeimspiel ? FmTheme.Accent : FmTheme.TextPrimary);
+        _heimNameLabel.Text = (spiel.HeimVerein ?? "").ToUpperInvariant();
+        _gastNameLabel.Text = (spiel.GastVerein ?? "").ToUpperInvariant();
+        _heimWappen.Setze(spiel.HeimVerein ?? "");
+        _gastWappen.Setze(spiel.GastVerein ?? "");
+        _heimWappen.Rand = spiel.EigenesHeimspiel ? FmTheme.Accent : FmTheme.BorderStark;
+        _gastWappen.Rand = !spiel.EigenesHeimspiel ? FmTheme.Accent : FmTheme.BorderStark;
     }
 
     /// <summary>
@@ -529,17 +554,17 @@ public partial class SpielView : Control
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(14));
 
         var rand = new MarginContainer();
-        FmTheme.SetMargin(rand, 12, 8);
+        FmTheme.SetMargin(rand, 16, 16, 10, 10);
         panel.AddChild(rand);
 
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 4);
+        vbox.AddThemeConstantOverride("separation", 6);
         rand.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel(titel, 12, FmTheme.TextSecondary));
+        vbox.AddChild(FmTheme.MakeAbschnitt(titel, 17));
         var sep = new HSeparator();
         sep.AddThemeColorOverride("color", FmTheme.Border);
         vbox.AddChild(sep);
@@ -627,12 +652,9 @@ public partial class SpielView : Control
         var mitte = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
         mitte.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 
-        _pausenschild = new Panel { Visible = false, CustomMinimumSize = new Vector2(260, 0) };
-        var stil = new StyleBoxFlat { BgColor = new Color(0f, 0f, 0f, 0.72f) };
-        stil.SetBorderWidthAll(1);
-        stil.BorderColor = FmTheme.Border;
-        stil.SetCornerRadiusAll(6);
-        stil.SetContentMarginAll(16);
+        _pausenschild = new Panel { Visible = false, CustomMinimumSize = new Vector2(280, 0) };
+        var stil = FmTheme.Flaeche(new Color(0.035f, 0.055f, 0.047f, 0.88f), 14, FmTheme.BorderStark);
+        stil.SetContentMarginAll(18);
         _pausenschild.AddThemeStyleboxOverride("panel", stil);
         mitte.AddChild(_pausenschild);
 
@@ -641,8 +663,9 @@ public partial class SpielView : Control
         vbox.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         _pausenschild.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("HALBZEIT", 22, FmTheme.TextPrimary,
-            HorizontalAlignment.Center));
+        var halbzeit = FmTheme.MakeTitel("Halbzeit", 32);
+        halbzeit.HorizontalAlignment = HorizontalAlignment.Center;
+        vbox.AddChild(halbzeit);
         _pausenText = FmTheme.MakeLabel("", 14, FmTheme.TextSecondary, HorizontalAlignment.Center);
         vbox.AddChild(_pausenText);
         return mitte;
@@ -651,20 +674,18 @@ public partial class SpielView : Control
     private Control BaueTeamSpalte(out VBoxContainer spielerBox, out Label staerkeLabel)
     {
         var panel = new PanelContainer { CustomMinimumSize = new Vector2(280, 0) };
-        var style = new StyleBoxFlat { BgColor = FmTheme.BgToolbar };
-        style.SetBorderWidthAll(1);
-        style.SetContentMarginAll(0);
-        panel.AddThemeStyleboxOverride("panel", style);
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(14));
 
         var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 12, 10);
+        FmTheme.SetMargin(margin, 14, 14, 12, 12);
         panel.AddChild(margin);
 
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 3);
+        vbox.AddThemeConstantOverride("separation", 6);
         margin.AddChild(vbox);
 
-        staerkeLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
+        staerkeLabel = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
+        staerkeLabel.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
         staerkeLabel.TooltipText = "Elf-Stärke bei Anpfiff gegen die aktuelle Stärke auf dem Platz - "
             + "sinkt mit der Ermüdung, springt bei Wechseln und Platzverweisen.";
         vbox.AddChild(staerkeLabel);
@@ -674,7 +695,7 @@ public partial class SpielView : Control
         vbox.AddChild(sep);
 
         spielerBox = new VBoxContainer();
-        spielerBox.AddThemeConstantOverride("separation", 2);
+        spielerBox.AddThemeConstantOverride("separation", 5);
         vbox.AddChild(spielerBox);
 
         return panel;
@@ -689,14 +710,13 @@ public partial class SpielView : Control
         _wechselLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         leiste.AddChild(_wechselLabel);
 
-        _wechselButton = new Button { Text = "🔄  Wechseln", CustomMinimumSize = new Vector2(160, 40) };
-        FmTheme.ApplyButton(_wechselButton, FmTheme.BgPanel);
-        _wechselButton.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        _wechselButton = new Button { Text = "Wechseln", CustomMinimumSize = new Vector2(160, 44) };
+        FmTheme.ApplySecondaryButton(_wechselButton);
         _wechselButton.Pressed += OnWechselnPressed;
         leiste.AddChild(_wechselButton);
 
-        _aktionButton = new Button { Text = "⏩  Überspringen", CustomMinimumSize = new Vector2(190, 40) };
-        FmTheme.ApplyButton(_aktionButton, FmTheme.BgPanel);
+        _aktionButton = new Button { Text = "Überspringen", CustomMinimumSize = new Vector2(190, 44) };
+        FmTheme.ApplySecondaryButton(_aktionButton);
         _aktionButton.Pressed += OnAktionPressed;
         leiste.AddChild(_aktionButton);
 
@@ -848,18 +868,24 @@ public partial class SpielView : Control
             var zeile = new HBoxContainer();
             zeile.AddThemeConstantOverride("separation", 6);
 
-            var slot = FmTheme.MakeLabel(s.Slot, 11, FmTheme.TextSecondary);
-            slot.CustomMinimumSize = new Vector2(42, 0);
+            var slot = FmTheme.MakeLabel(s.Slot, 11, s.AufDemPlatz
+                ? FmTheme.TextFuerGruppe(PositionsgruppeHelfer.Von(s.Position))
+                : FmTheme.TextGedimmt);
+            slot.AddThemeFontOverride("font", FmTheme.SchriftUi(700));
+            slot.CustomMinimumSize = new Vector2(38, 0);
             zeile.AddChild(slot);
 
-            var name = FmTheme.MakeLabel(s.Name, 11,
-                s.AufDemPlatz ? FmTheme.TextPrimary : FmTheme.TextSecondary);
+            var name = FmTheme.MakeLabel(s.Name, 12,
+                s.AufDemPlatz ? FmTheme.TextPrimary : FmTheme.TextGedimmt);
             name.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            name.ClipText = true;
+            name.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
             zeile.AddChild(name);
 
-            var staerke = FmTheme.MakeLabel(s.EffektiveStaerke.ToString(), 11,
-                s.AufDemPlatz ? StaerkeFarbeSpieler(s.Staerke, s.EffektiveStaerke) : FmTheme.TextSecondary,
-                HorizontalAlignment.Right);
+            var staerke = FmTheme.MakeZahl(s.EffektiveStaerke.ToString(), 16,
+                s.AufDemPlatz ? StaerkeFarbeSpieler(s.Staerke, s.EffektiveStaerke) : FmTheme.TextGedimmt);
+            staerke.HorizontalAlignment = HorizontalAlignment.Right;
+            staerke.MouseFilter = MouseFilterEnum.Pass;
             staerke.CustomMinimumSize = new Vector2(24, 0);
             staerke.TooltipText = s.AufDemPlatz
                 ? s.Erklaerung
@@ -878,11 +904,12 @@ public partial class SpielView : Control
                 MinValue = 0, MaxValue = 100,
                 Value = s.AufDemPlatz ? s.Kondition : 0,
                 ShowPercentage = false,
-                CustomMinimumSize = new Vector2(46, 8),
+                CustomMinimumSize = new Vector2(46, 6),
+                SizeFlagsVertical = SizeFlags.ShrinkCenter,
             };
             frische.AddThemeStyleboxOverride("fill",
                 FmTheme.KonditionsBalken(FmTheme.FrischeFarbe(s.Kondition)));
-            frische.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgDark));
+            frische.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.Border));
             zeile.AddChild(frische);
 
             box.AddChild(zeile);
@@ -973,8 +1000,8 @@ public partial class SpielView : Control
         }
 
         SchreibeZeile(Spielminuten,
-            $"⏹  Abpfiff  –  Endstand {_spiel?.HeimTore} : {_spiel?.GastTore}",
-            FmTheme.TextPrimary);
+            $"Abpfiff  –  Endstand {_spiel?.HeimTore} : {_spiel?.GastTore}",
+            FmTheme.TextPrimary, Symbol.Art.Abpfiff);
         _uhr.Value = Spielminuten;
         _uhr.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.Accent));
         _pausenschild.Visible = false;
@@ -1046,7 +1073,7 @@ public partial class SpielView : Control
         inhalt.AddThemeConstantOverride("separation", 18);
         scroll.AddChild(inhalt);
 
-        inhalt.AddChild(FmTheme.MakeLabel("Spielbericht", 18, FmTheme.TextPrimary));
+        inhalt.AddChild(FmTheme.MakeTitel("Spielbericht", 30));
 
         var tafel = new StatistikTafel { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         inhalt.AddChild(tafel);
@@ -1056,7 +1083,7 @@ public partial class SpielView : Control
         sep.AddThemeColorOverride("color", FmTheme.Border);
         inhalt.AddChild(sep);
 
-        inhalt.AddChild(FmTheme.MakeLabel("Noten", 18, FmTheme.TextPrimary));
+        inhalt.AddChild(FmTheme.MakeAbschnitt("Noten", 22));
 
         var noten = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         noten.AddThemeConstantOverride("separation", 18);
@@ -1072,18 +1099,23 @@ public partial class SpielView : Control
                                            bool eigener)
     {
         var panel = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(14));
 
         var margin = new MarginContainer();
         FmTheme.SetMargin(margin, 16, 12);
         panel.AddChild(margin);
 
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 5);
+        vbox.AddThemeConstantOverride("separation", 6);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel(verein, 15,
-            eigener ? FmTheme.Accent : FmTheme.TextPrimary));
+        var kopf = new HBoxContainer();
+        kopf.AddThemeConstantOverride("separation", 10);
+        kopf.AddChild(Wappen.Neu(verein, 32, eigener ? FmTheme.Accent : FmTheme.BorderStark));
+        var name = FmTheme.MakeAbschnitt(verein, 18);
+        name.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        kopf.AddChild(name);
+        vbox.AddChild(kopf);
 
         var sep = new HSeparator();
         sep.AddThemeColorOverride("color", FmTheme.Border);
@@ -1112,7 +1144,7 @@ public partial class SpielView : Control
 
         // Tore, Vorlagen und Karten als Symbole - eine Zahlenspalte je Kategorie wäre in einer
         // Notenübersicht mehr Tabelle als Information.
-        var marken = FmTheme.MakeLabel(Marken(s), 12, FmTheme.TextSecondary);
+        var marken = Marken(s);
         marken.CustomMinimumSize = new Vector2(70, 0);
         zeile.AddChild(marken);
 
@@ -1131,14 +1163,28 @@ public partial class SpielView : Control
         return zeile;
     }
 
-    private static string Marken(AufstellungsSpieler s)
+    /// <summary>Tore, Vorlagen und Karten als kleine Zeichen - gezeichnet, nicht als Emoji.</summary>
+    private static Control Marken(AufstellungsSpieler s)
     {
-        string text = "";
-        for (int i = 0; i < s.Tore; i++)        text += "⚽";
-        for (int i = 0; i < s.Vorlagen; i++)    text += "🅰";
-        for (int i = 0; i < s.GelbeKarten; i++) text += "🟨";
-        for (int i = 0; i < s.RoteKarten; i++)  text += "🟥";
-        return text;
+        var reihe = new HBoxContainer { MouseFilter = MouseFilterEnum.Pass };
+        reihe.AddThemeConstantOverride("separation", 2);
+        for (int i = 0; i < s.Tore; i++)        reihe.AddChild(Symbol.Neu(Symbol.Art.Ball, FmTheme.TextPrimary, 16));
+        for (int i = 0; i < s.Vorlagen; i++)
+        {
+            var vorlage = FmTheme.MakeLabel("V", 11, FmTheme.TextSecondary);
+            vorlage.AddThemeFontOverride("font", FmTheme.SchriftUi(700));
+            reihe.AddChild(vorlage);
+        }
+        for (int i = 0; i < s.GelbeKarten; i++) reihe.AddChild(Symbol.Neu(Symbol.Art.Gelb, FmTheme.TextPrimary, 16));
+        for (int i = 0; i < s.RoteKarten; i++)  reihe.AddChild(Symbol.Neu(Symbol.Art.Rot, FmTheme.TextPrimary, 16));
+
+        var teile = new List<string>();
+        if (s.Tore > 0) teile.Add(s.Tore == 1 ? "1 Tor" : $"{s.Tore} Tore");
+        if (s.Vorlagen > 0) teile.Add(s.Vorlagen == 1 ? "1 Vorlage" : $"{s.Vorlagen} Vorlagen");
+        if (s.GelbeKarten > 0) teile.Add("Gelbe Karte");
+        if (s.RoteKarten > 0) teile.Add("Rote Karte");
+        reihe.TooltipText = string.Join(", ", teile);
+        return reihe;
     }
 
     /// <summary>Einsatzzeit als Spanne; wer durchspielt, bekommt nur die Dauer.</summary>
@@ -1163,14 +1209,20 @@ public partial class SpielView : Control
 
     // ── Protokoll ────────────────────────────────────────────────────────────
 
-    private void SchreibeZeile(int minute, string text, Color farbe)
+    private void SchreibeZeile(int minute, string text, Color farbe, Symbol.Art? zeichen = null)
     {
         var zeile = new HBoxContainer();
         zeile.AddThemeConstantOverride("separation", 10);
 
-        var min = FmTheme.MakeLabel($"{minute}'", 13, FmTheme.TextSecondary, HorizontalAlignment.Right);
+        var min = FmTheme.MakeZahl($"{minute}'", 15, FmTheme.TextSecondary);
+        min.HorizontalAlignment = HorizontalAlignment.Right;
         min.CustomMinimumSize = new Vector2(40, 0);
         zeile.AddChild(min);
+
+        // Das Zeichen hält seinen Platz auch ohne Ereignis, damit die Texte untereinander stehen.
+        zeile.AddChild(zeichen.HasValue
+            ? Symbol.Neu(zeichen.Value, FmTheme.TextPrimary, 18)
+            : new Control { CustomMinimumSize = new Vector2(18, 18) });
 
         var inhalt = FmTheme.MakeLabel(text, 13, farbe);
         inhalt.SizeFlagsHorizontal = SizeFlags.ExpandFill;

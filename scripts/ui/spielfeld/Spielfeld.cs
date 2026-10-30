@@ -31,12 +31,14 @@ public partial class Spielfeld : Control
     private const float TorBreite         = 7.32f;
     private const float TorTiefe          = 2f;
 
-    private static readonly Color Rasen        = new(0.09f, 0.20f, 0.13f);
-    private static readonly Color RasenStreif  = new(0.10f, 0.23f, 0.15f);
-    private static readonly Color Linie        = new(1f, 1f, 1f, 0.32f);
-    private static readonly Color HeimFarbe    = new(0.20f, 0.55f, 0.92f);
-    private static readonly Color GastFarbe    = new(0.90f, 0.45f, 0.16f);
-    private static readonly Color TorwartFarbe = new(0.85f, 0.75f, 0.20f);
+    // Etwas dunkler als der Rasen der Aufstellung: Hier müssen 22 Punkte und der Ball darauf
+    // hervortreten, nicht Plaketten mit eigenem Untergrund.
+    private static readonly Color Rasen        = new("1E4A2B");
+    private static readonly Color RasenStreif  = new("22512F");
+    private static readonly Color Linie        = new(1f, 1f, 1f, 0.38f);
+    private static readonly Color HeimFarbe    = new("5AA9F0");
+    private static readonly Color GastFarbe    = new("F08A4B");
+    private static readonly Color TorwartFarbe = new("F7CB6E");
     private static readonly Color BallFarbe    = new(0.97f, 0.97f, 0.95f);
 
     /// <summary>Zahl der Mähstreifen - ungerade, damit die Mittellinie in einem Streifen liegt.</summary>

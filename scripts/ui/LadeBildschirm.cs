@@ -69,9 +69,7 @@ public partial class LadeBildschirm : Control
 
     private void BaueUI()
     {
-        var bg = new ColorRect { Color = FmTheme.BgDark };
-        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        AddChild(bg);
+        AddChild(Hintergrundfeld.Neu());
 
         var center = new CenterContainer();
         center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
@@ -81,9 +79,13 @@ public partial class LadeBildschirm : Control
         vbox.AddThemeConstantOverride("separation", 14);
         center.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel("⚽", 64, FmTheme.Gold, HorizontalAlignment.Center));
-        vbox.AddChild(FmTheme.MakeLabel("Fussball-Manager", 30, FmTheme.TextPrimary,
-            HorizontalAlignment.Center));
+        var kicker = FmTheme.MakeLabel("DEINE TRAINERKARRIERE", 13, FmTheme.TextSecondary,
+            HorizontalAlignment.Center);
+        kicker.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        vbox.AddChild(kicker);
+        var titel = FmTheme.MakeTitel("Fussball-Manager", 56);
+        titel.HorizontalAlignment = HorizontalAlignment.Center;
+        vbox.AddChild(titel);
 
         var abstand = new Control { CustomMinimumSize = new Vector2(0, 12) };
         vbox.AddChild(abstand);
@@ -91,10 +93,10 @@ public partial class LadeBildschirm : Control
         _balken = new ProgressBar
         {
             MinValue = 0, MaxValue = 100, Value = 0, ShowPercentage = false,
-            CustomMinimumSize = new Vector2(0, 14),
+            CustomMinimumSize = new Vector2(0, 8),
         };
         _balken.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.Accent));
-        _balken.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgToolbar));
+        _balken.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.Border));
         vbox.AddChild(_balken);
 
         _statusLabel = FmTheme.MakeLabel("Startet …", 13, FmTheme.TextSecondary,
@@ -108,10 +110,10 @@ public partial class LadeBildschirm : Control
         _beendenButton = new Button
         {
             Text = "Beenden",
-            CustomMinimumSize = new Vector2(160, 38),
+            CustomMinimumSize = new Vector2(160, 44),
             Visible = false,
         };
-        FmTheme.ApplyButton(_beendenButton, FmTheme.BgPanel);
+        FmTheme.ApplySecondaryButton(_beendenButton);
         _beendenButton.AddThemeColorOverride("font_color", FmTheme.Danger);
         _beendenButton.Pressed += () => GetTree().Quit();
 

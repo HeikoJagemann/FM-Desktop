@@ -26,6 +26,13 @@ public partial class Wappen : Control
         return w;
     }
 
+    /// <summary>Farbe des Rings - Bernstein für den eigenen Verein.</summary>
+    public Color Rand
+    {
+        get => _rand;
+        set { _rand = value; QueueRedraw(); }
+    }
+
     public void Setze(string vereinsname)
     {
         _kuerzel = Kuerzel(vereinsname);
@@ -63,6 +70,8 @@ public partial class Wappen : Control
         int groesse = Mathf.RoundToInt(r * (_kuerzel.Length > 3 ? 0.58f : 0.70f));
         var breite = schrift.GetStringSize(_kuerzel, HorizontalAlignment.Left, -1, groesse);
         var grundlinie = mitte + new Vector2(-breite.X / 2f, schrift.GetAscent(groesse) / 2f - 1);
-        DrawString(schrift, grundlinie, _kuerzel, HorizontalAlignment.Left, -1, groesse, _rand);
+        // Auf einem dunklen Ring wäre das Kürzel in Ringfarbe kaum zu lesen.
+        var schriftfarbe = _rand.Luminance < 0.3f ? FmTheme.TextNav : _rand;
+        DrawString(schrift, grundlinie, _kuerzel, HorizontalAlignment.Left, -1, groesse, schriftfarbe);
     }
 }

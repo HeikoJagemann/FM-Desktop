@@ -12,7 +12,15 @@ namespace FMDesktop.UI;
 /// </summary>
 public partial class Symbol : Control
 {
-    public enum Art { Abspielen, Zurueck, Zahnrad, Blitz, Haken, Warnung, Kreuz }
+    public enum Art
+    {
+        Abspielen, Zurueck, Zahnrad, Blitz, Haken, Warnung, Kreuz,
+        // Spielereignisse - die Karten tragen ihre eigene Farbe.
+        Ball, Gelb, Rot, GelbRot, Pause, Abpfiff,
+    }
+
+    private static readonly Color KarteGelb = new("F5D33B");
+    private static readonly Color KarteRot  = new("E5484D");
 
     private Art _art;
     private Color _farbe = FmTheme.TextPrimary;
@@ -39,6 +47,14 @@ public partial class Symbol : Control
             MouseFilter = MouseFilterEnum.Ignore,
             SizeFlagsVertical = SizeFlags.ShrinkCenter,
         };
+    }
+
+    /// <summary>Eine Spielkarte im Hochformat, leicht gerundet.</summary>
+    private void Karte(Vector2 oben, float s, Color farbe)
+    {
+        var stil = new StyleBoxFlat { BgColor = farbe };
+        stil.SetCornerRadiusAll(Mathf.Max(1, Mathf.RoundToInt(s / 12f)));
+        DrawStyleBox(stil, new Rect2(oben, new Vector2(s * 0.42f, s * 0.6f)));
     }
 
     public override void _Draw()
@@ -70,6 +86,34 @@ public partial class Symbol : Control
                 DrawPolyline(new[] { P(12, 3), P(22, 20), P(2, 20), P(12, 3) }, _farbe, strich, true);
                 DrawLine(P(12, 9), P(12, 14), _farbe, strich, true);
                 DrawCircle(P(12, 17), strich * 0.7f, _farbe);
+                break;
+            case Art.Ball:
+                DrawCircle(P(12, 12), s * 0.40f, _farbe);
+                DrawArc(P(12, 12), s * 0.40f, 0, Mathf.Pi * 2, 32, new Color(0, 0, 0, 0.35f), 1, true);
+                var fuenfeck = new Vector2[5];
+                for (int i = 0; i < 5; i++)
+                {
+                    float w = -Mathf.Pi / 2 + Mathf.Pi * 2 * i / 5;
+                    fuenfeck[i] = P(12, 12) + new Vector2(Mathf.Cos(w), Mathf.Sin(w)) * s * 0.15f;
+                }
+                DrawColoredPolygon(fuenfeck, new Color("1A2621"));
+                break;
+            case Art.Gelb:
+                Karte(P(7, 4), s, KarteGelb);
+                break;
+            case Art.Rot:
+                Karte(P(7, 4), s, KarteRot);
+                break;
+            case Art.GelbRot:
+                Karte(P(4, 3), s, KarteGelb);
+                Karte(P(10, 5), s, KarteRot);
+                break;
+            case Art.Pause:
+                DrawRect(new Rect2(P(7, 5), new Vector2(s * 0.14f, s * 0.58f)), _farbe);
+                DrawRect(new Rect2(P(14, 5), new Vector2(s * 0.14f, s * 0.58f)), _farbe);
+                break;
+            case Art.Abpfiff:
+                DrawRect(new Rect2(P(6, 6), new Vector2(s * 0.5f, s * 0.5f)), _farbe);
                 break;
             case Art.Zahnrad:
                 for (int i = 0; i < 8; i++)
