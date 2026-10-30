@@ -35,6 +35,7 @@ public class BuchungModel
         "SPONSOR"      => "Sponsor",
         "FERNSEHGELD"  => "Fernsehgeld",
         "TRANSFER"     => "Transfer",
+        "SCOUTING"     => "Scouting",
         "PRAEMIE"      => "Prämie",
         _              => Art,
     };

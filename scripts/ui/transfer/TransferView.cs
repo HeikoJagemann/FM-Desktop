@@ -9,12 +9,14 @@ using FMDesktop.UI.Common;
 namespace FMDesktop.UI.Transfer;
 
 /// <summary>
-/// Der Transfermarkt: Spieler suchen und Angebote abgeben, dazu die Angebote anderer Vereine für
-/// eigene Spieler.
+/// Die Transferliste: Spieler, die ihre Vereine abgeben wollen, zum ausgeschriebenen Preis.
 ///
-/// <para>Gewechselt wird nur im offenen Transferfenster - außerhalb bleibt die Ansicht sichtbar,
-/// aber die Knöpfe sind gesperrt, damit erkennbar ist, dass es den Markt gibt und wann er wieder
-/// öffnet.</para>
+/// <para>Wer nicht darauf steht, ist nicht verloren - ihn findet man über das Scouting und wirbt
+/// ihn mit einem Angebot ab. Stärke und Talent stehen hier als Spannen: Genau kennt der Verein nur
+/// seine eigenen Spieler.</para>
+///
+/// <para>Gewechselt wird nur im offenen Transferfenster - außerhalb bleibt die Liste sichtbar,
+/// aber Angebote sind gesperrt.</para>
 /// </summary>
 public partial class TransferView : Control
 {
@@ -24,13 +26,11 @@ public partial class TransferView : Control
     private Label _statusLabel = null!;
     private Label _fensterLabel = null!;
     private OptionButton _positionFeld = null!;
-    private SpinBox _minStaerkeFeld = null!;
+    private SpinBox _maxAlterFeld = null!;
     private CheckBox _nurBezahlbar = null!;
-    private Button _suchenButton = null!;
     private Button _bietenButton = null!;
-    private FmGrid<TransferSpieler> _suchGrid = null!;
-    private FmGrid<TransferangebotModel> _angeboteGrid = null!;
-    private Label _angeboteLabel = null!;
+    private Button _beobachtenButton = null!;
+    private FmGrid<TransferSpieler> _grid = null!;
 
     private TransferSpieler? _gewaehlt;
     private bool _fensterOffen;
@@ -55,7 +55,7 @@ public partial class TransferView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeTitel("Transfermarkt"));
+        vbox.AddChild(FmTheme.MakeTitel("Transferliste"));
 
         _fensterLabel = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
         vbox.AddChild(_fensterLabel);
@@ -63,27 +63,19 @@ public partial class TransferView : Control
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);
 
-        vbox.AddChild(BaueSuchleiste());
+        vbox.AddChild(BaueFilterleiste());
 
-        _suchGrid = new FmGrid<TransferSpieler>(TransferSpalten.Suchergebnis)
+        _grid = new FmGrid<TransferSpieler>(TransferSpalten.Transferliste)
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        _suchGrid.Ausgewaehlt += s => { _gewaehlt = s; AktualisiereBietenButton(); };
-        vbox.AddChild(_suchGrid);
-
-        _angeboteLabel = FmTheme.MakeLabel("Angebote für eigene Spieler", 15, FmTheme.TextPrimary);
-        vbox.AddChild(_angeboteLabel);
-
-        _angeboteGrid = new FmGrid<TransferangebotModel>(TransferSpalten.Angebotsliste(true))
-        {
-            CustomMinimumSize = new Vector2(0, 160),
-        };
-        _angeboteGrid.Rechtsklick += ZeigeAngebotsmenue;
-        vbox.AddChild(_angeboteGrid);
+        _grid.Ausgewaehlt += s => { _gewaehlt = s; AktualisiereKnoepfe(); };
+        _grid.Doppelklick += s => { if (_fensterOffen) BietenDialog.Zeige(this, s, Melde); };
+        _grid.Rechtsklick += s => TransferAktionen.Zeige(this, s, _fensterOffen, Melde);
+        vbox.AddChild(_grid);
     }
 
-    private Control BaueSuchleiste()
+    private Control BaueFilterleiste()
     {
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
@@ -99,32 +91,42 @@ public partial class TransferView : Control
         zeile.AddChild(FmTheme.MakeLabel("Position:", 13, FmTheme.TextSecondary));
         _positionFeld = new OptionButton { CustomMinimumSize = new Vector2(90, 0) };
         foreach (var p in Positionen) _positionFeld.AddItem(p);
+        _positionFeld.ItemSelected += async _ => await Suche();
         zeile.AddChild(_positionFeld);
 
-        zeile.AddChild(FmTheme.MakeLabel("Mindeststärke:", 13, FmTheme.TextSecondary));
-        _minStaerkeFeld = new SpinBox
+        zeile.AddChild(FmTheme.MakeLabel("Höchstalter:", 13, FmTheme.TextSecondary));
+        _maxAlterFeld = new SpinBox
         {
-            MinValue = 0, MaxValue = 100, Step = 1, Value = 0,
+            MinValue = 0, MaxValue = 40, Step = 1, Value = 0,
             CustomMinimumSize = new Vector2(80, 0),
+            TooltipText = "0 = jedes Alter",
         };
-        zeile.AddChild(_minStaerkeFeld);
+        zeile.AddChild(_maxAlterFeld);
 
         _nurBezahlbar = new CheckBox { Text = "nur bezahlbare", ButtonPressed = true };
         _nurBezahlbar.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
-        _nurBezahlbar.TooltipText = "Blendet Spieler aus, deren Ablöse den Kontostand übersteigt.";
+        _nurBezahlbar.TooltipText = "Blendet Spieler aus, deren Preis den Kontostand übersteigt.";
         zeile.AddChild(_nurBezahlbar);
 
-        _suchenButton = new Button { Text = "🔍  Suchen" };
-        FmTheme.ApplyButton(_suchenButton, FmTheme.BgPanel);
-        _suchenButton.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
-        _suchenButton.Pressed += async () => await Suche();
-        zeile.AddChild(_suchenButton);
+        var suchen = new Button { Text = "🔍  Suchen" };
+        FmTheme.ApplyButton(suchen, FmTheme.BgPanel);
+        suchen.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        suchen.Pressed += async () => await Suche();
+        zeile.AddChild(suchen);
 
         zeile.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
 
+        _beobachtenButton = new Button { Text = "Beobachten lassen", Disabled = true };
+        FmTheme.ApplySecondaryButton(_beobachtenButton);
+        _beobachtenButton.Pressed += async () =>
+        {
+            if (_gewaehlt != null) await TransferAktionen.BeobachtenLassen(this, _gewaehlt.SpielerId, _gewaehlt.Name, Melde);
+        };
+        zeile.AddChild(_beobachtenButton);
+
         _bietenButton = new Button { Text = "Angebot abgeben", Disabled = true };
         FmTheme.ApplyButton(_bietenButton, FmTheme.Accent);
-        _bietenButton.Pressed += async () => await Biete();
+        _bietenButton.Pressed += () => { if (_gewaehlt != null) BietenDialog.Zeige(this, _gewaehlt, Melde); };
         zeile.AddChild(_bietenButton);
 
         return panel;
@@ -142,120 +144,46 @@ public partial class TransferView : Control
         _fensterLabel.AddThemeColorOverride("font_color",
             _fensterOffen ? FmTheme.Success : FmTheme.TextSecondary);
 
-        await LadeAngebote();
-        if (!Lebt) return;
         await Suche();
-    }
-
-    private async Task LadeAngebote()
-    {
-        long vereinId = GameState.Instance.VereinId;
-        var angebote = await ApiClient.GetAsync<List<TransferangebotModel>>(
-            $"transfer/eingehend/{vereinId}");
-        if (!Lebt) return;
-
-        _angeboteGrid.Zeige(angebote ?? new List<TransferangebotModel>());
-        _angeboteLabel.Text = angebote is { Count: > 0 }
-            ? $"Angebote für eigene Spieler ({angebote.Count}) - Rechtsklick zum Entscheiden"
-            : "Angebote für eigene Spieler - derzeit keine";
     }
 
     private async Task Suche()
     {
         long vereinId = GameState.Instance.VereinId;
         string position = _positionFeld.Selected <= 0 ? "" : Positionen[_positionFeld.Selected];
-        int minStaerke = (int)_minStaerkeFeld.Value;
-        _statusLabel.Text = "Suche läuft …";
+        int maxAlter = (int)_maxAlterFeld.Value;
+        _statusLabel.Text = "Lade Transferliste …";
 
         var treffer = await ApiClient.GetAsync<List<TransferSpieler>>(
-            $"transfer/suche?vereinId={vereinId}&position={position}&minStaerke={minStaerke}"
+            $"transfer/liste?vereinId={vereinId}&position={position}&maxAlter={maxAlter}"
             + $"&nurBezahlbar={(_nurBezahlbar.ButtonPressed ? "true" : "false")}");
         if (!Lebt) return;
 
         if (treffer == null)
         {
-            _statusLabel.Text = "Transfermarkt konnte nicht geladen werden.";
+            _statusLabel.Text = "Transferliste konnte nicht geladen werden.";
             return;
         }
 
-        // "nur bezahlbare" filtert der Server - vor seiner Begrenzung auf hundert Treffer. Hier
-        // nachgefiltert, blieb von den hundert stärksten Spielern für einen kleinen Verein keiner.
         _gewaehlt = null;
-        AktualisiereBietenButton();
-        _suchGrid.Zeige(treffer);
+        AktualisiereKnoepfe();
+        _grid.Zeige(treffer);
         _statusLabel.Text = treffer.Count == 0
-            ? "Keine Spieler gefunden - Filter lockern."
-            : $"{treffer.Count} Spieler gefunden. Zeile anklicken, dann Angebot abgeben.";
+            ? "Niemand passt - Filter lockern, oder über das Scouting Spieler finden, die nicht zum Verkauf stehen."
+            : $"{treffer.Count} Spieler auf der Transferliste. Doppelklick oder Rechtsklick für ein Angebot.";
     }
 
-    // ── Aktionen ─────────────────────────────────────────────────────────────
-
-    private void AktualisiereBietenButton()
+    private void AktualisiereKnoepfe()
     {
         _bietenButton.Disabled = _gewaehlt == null || !_fensterOffen;
+        _beobachtenButton.Disabled = _gewaehlt == null;
         _bietenButton.Text = _gewaehlt == null
             ? "Angebot abgeben"
-            : $"Angebot: {_gewaehlt.Name} ({FmTheme.Geld(_gewaehlt.Abloese)})";
+            : $"Angebot: {_gewaehlt.Name} ({FmTheme.Geld(_gewaehlt.Vorschlag)})";
     }
 
-    private async Task Biete()
+    private void Melde(string text)
     {
-        if (_gewaehlt == null) return;
-
-        long vereinId = GameState.Instance.VereinId;
-        var ergebnis = await ApiClient.PostAsync<object, TransferangebotModel>(
-            $"transfer/angebot?spielerId={_gewaehlt.SpielerId}&vereinId={vereinId}", new { });
-        if (!Lebt) return;
-
-        if (ergebnis == null)
-        {
-            _statusLabel.Text = $"Angebot für {_gewaehlt.Name} wurde abgelehnt.";
-            return;
-        }
-
-        _statusLabel.Text = $"Angebot für {ergebnis.SpielerName} über "
-                          + $"{FmTheme.Geld(ergebnis.Abloese)} abgegeben.";
-        await Suche();
-    }
-
-    /// <summary>Eingehende Angebote annehmen oder ablehnen.</summary>
-    private void ZeigeAngebotsmenue(TransferangebotModel angebot)
-    {
-        var menu = new PopupMenu();
-        menu.AddItem($"📄  {angebot.SpielerName} → {angebot.NachVerein}", -1);
-        menu.SetItemDisabled(0, true);
-        menu.AddSeparator();
-        menu.AddItem($"✔  Annehmen ({FmTheme.Geld(angebot.Abloese)})", 0);
-        menu.AddItem("✖  Ablehnen", 1);
-
-        if (!_fensterOffen)
-        {
-            menu.SetItemDisabled(2, true);
-        }
-
-        AddChild(menu);
-        menu.IdPressed += async id =>
-        {
-            if (id == 0) await Entscheide(angebot, "annehmen");
-            else if (id == 1) await Entscheide(angebot, "ablehnen");
-        };
-        menu.PopupHide += menu.QueueFree;
-        menu.Position = (Vector2I)GetGlobalMousePosition();
-        menu.Popup();
-    }
-
-    private async Task Entscheide(TransferangebotModel angebot, string aktion)
-    {
-        var ergebnis = await ApiClient.PostAsync<object, TransferangebotModel>(
-            $"transfer/angebot/{angebot.Id}/{aktion}", new { });
-        if (!Lebt) return;
-
-        _statusLabel.Text = ergebnis == null
-            ? $"Das Angebot für {angebot.SpielerName} konnte nicht bearbeitet werden."
-            : aktion == "annehmen"
-                ? $"{angebot.SpielerName} wechselt für {FmTheme.Geld(angebot.Abloese)} zu {angebot.NachVerein}."
-                : $"Angebot für {angebot.SpielerName} abgelehnt.";
-
-        await LadeAngebote();
+        if (Lebt) _statusLabel.Text = text;
     }
 }

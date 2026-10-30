@@ -6,17 +6,19 @@ using FMDesktop.Models;
 namespace FMDesktop.UI.Common;
 
 /// <summary>
-/// Spaltenkataloge des Transfermarkts - einmal für die Spielersuche, einmal für die Angebotsliste.
-/// Wie die übrigen Kataloge tragen die Spalten ihr Verhalten selbst: Text, Farbe und Mouseover.
+/// Spaltenkataloge des Transfermarkts - für fremde Spieler (Transferliste, Scoutberichte) und für
+/// Angebote. Wie die übrigen Kataloge tragen die Spalten ihr Verhalten selbst: Text, Farbe und
+/// Mouseover.
 /// </summary>
 public static class TransferSpalten
 {
-    // ── Spielersuche ─────────────────────────────────────────────────────────
+    // ── Fremde Spieler ───────────────────────────────────────────────────────
 
     public static GridSpalte<TransferSpieler> Name => new()
     {
         Titel = "Name", Breite = 150, Expand = true, ExpandGewicht = 3,
-        Text       = s => s.Name,
+        Text       = s => s.AufTransferliste ? $"{s.Name}  🏷" : s.Name,
+        Tooltip    = s => s.AufTransferliste ? "Steht auf der Transferliste." : "Steht nicht zum Verkauf - abwerben.",
         Sortierung = s => s.Name,
     };
 
@@ -36,14 +38,27 @@ public static class TransferSpalten
         Sortierung = s => s.Verein,
     };
 
+    /// <summary>Eine Spanne, keine Zahl - je enger, desto mehr weiß der Verein über den Spieler.</summary>
     public static GridSpalte<TransferSpieler> Staerke => new()
     {
-        Titel = "Stärke", Breite = 64, Ausrichtung = HorizontalAlignment.Center,
-        Text       = s => s.Staerke.ToString(),
-        Farbe      = s => s.Staerke >= 70 ? FmTheme.Success
-                        : s.Staerke >= 50 ? FmTheme.TextPrimary
+        Titel = "Stärke", Breite = 74, Ausrichtung = HorizontalAlignment.Center,
+        Text       = s => s.StaerkeText,
+        Farbe      = s => s.StaerkeMitte >= 70 ? FmTheme.Success
+                        : s.StaerkeMitte >= 50 ? FmTheme.TextPrimary
                         : FmTheme.TextSecondary,
-        Sortierung = s => -s.Staerke,
+        Tooltip    = s => s.Beobachtungen == 0
+            ? "Nur der öffentliche Eindruck - ein Scoutbericht macht die Spanne enger."
+            : $"{s.Beobachtungen} Beobachtung(en), zuletzt {s.Zuletzt:dd.MM.yyyy}.",
+        Sortierung = s => -s.StaerkeMitte,
+    };
+
+    public static GridSpalte<TransferSpieler> Talent => new()
+    {
+        Titel = "Talent", Breite = 74, Ausrichtung = HorizontalAlignment.Center,
+        Text       = s => s.TalentText,
+        Farbe      = s => s.TalentBis == 0 ? FmTheme.TextGedimmt : FmTheme.TextPrimary,
+        Tooltip    = _ => "Wie weit sich der Spieler entwickeln kann.\nOhne Scoutbericht unbekannt.",
+        Sortierung = s => -(s.TalentVon + s.TalentBis),
     };
 
     public static GridSpalte<TransferSpieler> Alter => new()
@@ -62,30 +77,43 @@ public static class TransferSpalten
         Sortierung = s => s.VertragBis,
     };
 
-    /// <summary>Der entscheidende Wert - rot, wenn das Geld nicht reicht.</summary>
-    public static GridSpalte<TransferSpieler> Abloese => new()
+    public static GridSpalte<TransferSpieler> Marktwert => new()
     {
-        Titel = "Ablöse", Breite = 120, Ausrichtung = HorizontalAlignment.Right,
-        Text       = s => FmTheme.Geld(s.Abloese),
-        Farbe      = s => s.Bezahlbar ? FmTheme.TextPrimary : FmTheme.Danger,
-        Tooltip    = s => s.Bezahlbar
-            ? $"Marktwert {FmTheme.Geld(s.Wert)}"
-            : "Die Ablöse übersteigt den Kontostand.",
-        Sortierung = s => -s.Abloese,
+        Titel = "Marktwert", Breite = 110, Ausrichtung = HorizontalAlignment.Right,
+        Text       = s => FmTheme.Geld(s.Wert),
+        Sortierung = s => -s.Wert,
+    };
+
+    /// <summary>Der ausgeschriebene Preis - rot, wenn das Geld nicht reicht; leer, wenn man bieten muss.</summary>
+    public static GridSpalte<TransferSpieler> Preis => new()
+    {
+        Titel = "Preis", Breite = 110, Ausrichtung = HorizontalAlignment.Right,
+        Text       = s => s.Preis > 0 ? FmTheme.Geld(s.Preis) : "auf Anfrage",
+        Farbe      = s => s.Preis == 0 ? FmTheme.TextGedimmt
+                        : s.Bezahlbar ? FmTheme.TextPrimary : FmTheme.Danger,
+        Tooltip    = s => s.Preis == 0
+            ? "Steht nicht zum Verkauf. Was der Verein verlangt, erfährt man mit einem Angebot."
+            : s.Bezahlbar ? "So viel verlangt der Verein." : "Der Preis übersteigt den Kontostand.",
+        Sortierung = s => -s.Preis,
     };
 
     public static GridSpalte<TransferSpieler> Gehaltsforderung => new()
     {
-        Titel = FmTheme.GehaltTitel, Breite = 120, Ausrichtung = HorizontalAlignment.Right,
+        Titel = FmTheme.GehaltTitel, Breite = 110, Ausrichtung = HorizontalAlignment.Right,
         Text       = s => FmTheme.Gehalt(s.Gehaltsforderung),
         Tooltip    = _ => "Was der Spieler bei einem Wechsel fordert - etwas über seinem "
                         + "bisherigen Marktsatz.",
         Sortierung = s => -s.Gehaltsforderung,
     };
 
-    public static IEnumerable<GridSpalte<TransferSpieler>> Suchergebnis => new[]
+    public static IEnumerable<GridSpalte<TransferSpieler>> Transferliste => new[]
     {
-        Name, Position, Verein, Staerke, Alter, Vertrag, Abloese, Gehaltsforderung,
+        Name, Position, Verein, Staerke, Talent, Alter, Vertrag, Preis, Gehaltsforderung,
+    };
+
+    public static IEnumerable<GridSpalte<TransferSpieler>> Berichte => new[]
+    {
+        Name, Position, Verein, Staerke, Talent, Alter, Vertrag, Marktwert, Preis,
     };
 
     // ── Angebote ─────────────────────────────────────────────────────────────
@@ -106,9 +134,9 @@ public static class TransferSpalten
 
     public static GridSpalte<TransferangebotModel> AngebotStaerke => new()
     {
-        Titel = "Stärke", Breite = 64, Ausrichtung = HorizontalAlignment.Center,
-        Text       = a => a.Staerke.ToString(),
-        Sortierung = a => -a.Staerke,
+        Titel = "Stärke", Breite = 74, Ausrichtung = HorizontalAlignment.Center,
+        Text       = a => a.StaerkeText,
+        Sortierung = a => -(a.StaerkeVon + a.StaerkeBis),
     };
 
     /// <summary>Bei eingehenden Angeboten der Interessent, bei ausgehenden der abgebende Verein.</summary>
@@ -134,9 +162,22 @@ public static class TransferSpalten
         Tooltip = a => $"Neuer Vertrag bis Saison {a.VertragBis}/{a.VertragBis + 1}",
     };
 
-    public static IEnumerable<GridSpalte<TransferangebotModel>> Angebotsliste(bool eingehend) => new[]
+    /// <summary>Wie es um ein eigenes Angebot steht - die Begründung einer Absage im Mouseover.</summary>
+    public static GridSpalte<TransferangebotModel> AngebotStatus => new()
     {
-        AngebotSpieler, AngebotPosition, AngebotStaerke, AngebotVerein(eingehend),
-        AngebotAbloese, AngebotGehalt,
+        Titel = "Antwort", Breite = 220, Expand = true, ExpandGewicht = 3,
+        Text       = a => string.IsNullOrEmpty(a.Grund) ? a.StatusText : $"{a.StatusText}: {a.Grund}",
+        Farbe      = a => a.Status switch
+        {
+            "ANGENOMMEN" => FmTheme.Success,
+            "ABGELEHNT"  => FmTheme.Danger,
+            _            => FmTheme.TextSecondary,
+        },
+        Tooltip    = a => string.IsNullOrEmpty(a.Grund) ? a.StatusText : a.Grund,
+        Sortierung = a => a.Status,
     };
+
+    public static IEnumerable<GridSpalte<TransferangebotModel>> Angebotsliste(bool eingehend) => eingehend
+        ? new[] { AngebotSpieler, AngebotPosition, AngebotStaerke, AngebotVerein(true), AngebotAbloese, AngebotGehalt }
+        : new[] { AngebotSpieler, AngebotPosition, AngebotStaerke, AngebotVerein(false), AngebotAbloese, AngebotStatus };
 }

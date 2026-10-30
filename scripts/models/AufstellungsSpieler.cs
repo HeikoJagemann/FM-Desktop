@@ -29,6 +29,14 @@ public class AufstellungsSpieler
     public int     RoteKarten    { get; set; }
     public double  Note          { get; set; }
 
+    /// <summary>Ein fremder Spieler, den der Manager nur als Spanne kennt; Staerke ist deren Mitte.</summary>
+    public bool    Geschaetzt    { get; set; }
+    public int     StaerkeVon    { get; set; }
+    public int     StaerkeBis    { get; set; }
+
+    /// <summary>Stärke für die Anzeige - bei fremden Spielern als Spanne.</summary>
+    public string  StaerkeText   => Geschaetzt ? $"{StaerkeVon}–{StaerkeBis}" : Staerke.ToString();
+
     public bool StehtAufDemPlatz(int minute)
         => minute >= VonMinute && (BisMinute == null || minute < BisMinute);
 

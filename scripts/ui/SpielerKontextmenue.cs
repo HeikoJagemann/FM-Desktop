@@ -32,6 +32,9 @@ public static class SpielerKontextmenue
         if (hatVertrag)
         {
             menu.AddItem("📄  Vertrag um 2 Jahre verlängern", 1);
+            menu.AddItem(spieler.AufTransferliste
+                ? "🏷  Von der Transferliste nehmen"
+                : "🏷  Auf die Transferliste setzen", 2);
         }
 
         menu.AddSeparator("Verschieben nach");
@@ -61,6 +64,10 @@ public static class SpielerKontextmenue
             else if (gewaehlt == 1)
             {
                 _ = VerlaengereAsync(caller, spieler);
+            }
+            else if (gewaehlt == 2)
+            {
+                _ = ListeAsync(spieler, !spieler.AufTransferliste);
             }
             else if (ziele.TryGetValue(gewaehlt, out var ziel))
             {
@@ -112,6 +119,24 @@ public static class SpielerKontextmenue
 
         spieler.Gehalt = ergebnis.Gehalt;
         spieler.VertragBis = ergebnis.VertragBis;
+        KaderGeaendert?.Invoke();
+    }
+
+    /// <summary>
+    /// Setzt den Spieler auf die Transferliste oder nimmt ihn herunter. Gelistete Spieler sehen
+    /// andere Vereine und bieten im offenen Transferfenster - zum ausgeschriebenen Preis.
+    /// </summary>
+    private static async System.Threading.Tasks.Task ListeAsync(Spieler spieler, bool gelistet)
+    {
+        long vereinId = GameState.Instance.VereinId;
+        var antwort = await ApiClient.SendeAsync("POST",
+            $"transfer/liste/{spieler.Id}?vereinId={vereinId}&gelistet={(gelistet ? "true" : "false")}");
+        if (!antwort.Ok)
+        {
+            GD.PrintErr($"Transferliste für {spieler.Name}: {antwort.Fehler}");
+            return;
+        }
+        spieler.AufTransferliste = gelistet;
         KaderGeaendert?.Invoke();
     }
 

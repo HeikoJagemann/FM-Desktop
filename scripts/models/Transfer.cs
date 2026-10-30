@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 
 namespace FMDesktop.Models;
 
@@ -11,27 +12,49 @@ public class TransferfensterModel
     public int    Saison  { get; set; }
 }
 
-/// <summary>Ein Spieler auf dem Transfermarkt (GET transfer/suche).</summary>
+/// <summary>
+/// Ein fremder Spieler auf der Transferliste oder in einem Scoutbericht (GET transfer/liste,
+/// GET scouting/berichte).
+///
+/// <para>Stärke und Talent sind Spannen: Genau kennt der Verein nur seine eigenen Spieler. Ein
+/// Talent von 0 bis 0 heißt, der Spieler wurde noch nie beobachtet.</para>
+/// </summary>
 public class TransferSpieler
 {
-    public long   SpielerId        { get; set; }
-    public string Name             { get; set; } = "";
-    public string Position         { get; set; } = "";
-    public int    Staerke          { get; set; }
-    public int    Talent           { get; set; }
-    public int    Alter            { get; set; }
-    public int    Wert             { get; set; }
-    public int    VertragBis       { get; set; }
-    public long   VereinId         { get; set; }
-    public string Verein           { get; set; } = "";
-    public string Liga             { get; set; } = "";
-    public long   Abloese          { get; set; }
-    public long   Gehaltsforderung { get; set; }
+    public long      SpielerId        { get; set; }
+    public string    Name             { get; set; } = "";
+    public string    Position         { get; set; } = "";
+    public bool      Genau            { get; set; }
+    public int       StaerkeVon       { get; set; }
+    public int       StaerkeBis       { get; set; }
+    public int       TalentVon        { get; set; }
+    public int       TalentBis        { get; set; }
+    public int       Beobachtungen    { get; set; }
+    public DateOnly? Zuletzt          { get; set; }
+    public int       Alter            { get; set; }
+    public int       Wert             { get; set; }
+    public int       VertragBis       { get; set; }
+    public long      VereinId         { get; set; }
+    public string    Verein           { get; set; } = "";
+    public string    Liga             { get; set; } = "";
+    public bool      AufTransferliste { get; set; }
 
-    /// <summary>Ob der eigene Verein die Ablöse aufbringen kann - vom Backend gerechnet.</summary>
-    public bool Bezahlbar { get; set; }
+    /// <summary>Ausgeschriebener Preis; 0, wenn der Spieler nicht zum Verkauf steht.</summary>
+    public long      Preis            { get; set; }
+    public long      Gehaltsforderung { get; set; }
+
+    /// <summary>Ob der Kontostand den Preis deckt - ohne Preis den Marktwert.</summary>
+    public bool      Bezahlbar        { get; set; }
 
     public string VertragText => VertragBis > 0 ? $"bis {VertragBis}/{VertragBis + 1}" : "–";
+    public string StaerkeText => Spanne(StaerkeVon, StaerkeBis);
+    public string TalentText  => TalentBis == 0 ? "?" : Spanne(TalentVon, TalentBis);
+    public int    StaerkeMitte => (StaerkeVon + StaerkeBis) / 2;
+
+    /// <summary>Was ein Angebot ohne eigene Angabe bietet: der Preis, sonst der Marktwert.</summary>
+    public long   Vorschlag => Preis > 0 ? Preis : Wert;
+
+    public static string Spanne(int von, int bis) => von == bis ? von.ToString() : $"{von}–{bis}";
 }
 
 /// <summary>Ein Transferangebot in beide Richtungen (GET transfer/eingehend bzw. /ausgehend).</summary>
@@ -41,7 +64,8 @@ public class TransferangebotModel
     public long     SpielerId    { get; set; }
     public string   SpielerName  { get; set; } = "";
     public string   Position     { get; set; } = "";
-    public int      Staerke      { get; set; }
+    public int      StaerkeVon   { get; set; }
+    public int      StaerkeBis   { get; set; }
     public int      Alter        { get; set; }
     public long     VonVereinId  { get; set; }
     public string   VonVerein    { get; set; } = "";
@@ -52,4 +76,52 @@ public class TransferangebotModel
     public int      VertragBis   { get; set; }
     public DateOnly Datum        { get; set; }
     public string   Status       { get; set; } = "";
+
+    /// <summary>Warum abgelehnt wurde - vom abgebenden Verein oder vom Spieler.</summary>
+    public string   Grund        { get; set; } = "";
+
+    public string StaerkeText => TransferSpieler.Spanne(StaerkeVon, StaerkeBis);
+
+    public string StatusText => Status switch
+    {
+        "OFFEN"      => "wartet auf Antwort",
+        "ANGENOMMEN" => "angenommen",
+        "ABGELEHNT"  => "abgelehnt",
+        _            => Status,
+    };
+}
+
+/// <summary>Ein Scout des eigenen Vereins (GET scouting/{vereinId}).</summary>
+public class ScoutModel
+{
+    public long      Id              { get; set; }
+    public string    Name            { get; set; } = "";
+    public int       Qualitaet       { get; set; }
+    public int       Gehalt          { get; set; }
+    public DateOnly? Eingestellt     { get; set; }
+    public string?   AuftragArt      { get; set; }
+    public long?     AuftragZiel     { get; set; }
+    public string?   AuftragPosition { get; set; }
+    public int?      AuftragMaxAlter { get; set; }
+
+    /// <summary>Der Auftrag in Worten, leer ohne Auftrag.</summary>
+    public string    Auftrag         { get; set; } = "";
+}
+
+/// <summary>Ein Bewerber auf eine Scoutstelle - wechselt monatlich.</summary>
+public class ScoutBewerber
+{
+    public int    Nummer    { get; set; }
+    public string Name      { get; set; } = "";
+    public int    Qualitaet { get; set; }
+    public int    Gehalt    { get; set; }
+}
+
+/// <summary>Die Scoutabteilung (GET scouting/{vereinId}).</summary>
+public class ScoutingModel
+{
+    public List<ScoutModel>    Scouts          { get; set; } = new();
+    public List<ScoutBewerber> Bewerber        { get; set; } = new();
+    public int                 MaxScouts       { get; set; }
+    public int                 AbfindungWochen { get; set; }
 }

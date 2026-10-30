@@ -139,6 +139,46 @@ public static class ApiClient
         }
     }
 
+    /// <summary>Antwort auf eine Aktion: ob sie gelang, und wenn nicht, warum.</summary>
+    public readonly record struct Antwort(bool Ok, string? Fehler);
+
+    /// <summary>
+    /// Für Aktionen, deren Ablehnung der Nutzer lesen soll - ein Angebot, das am Kontostand
+    /// scheitert, eine Stelle, die schon besetzt ist. Das Backend begründet sie als
+    /// <c>{"fehler": "..."}</c>; die übrigen Methoden hier verwerfen diesen Text.
+    /// </summary>
+    /// <param name="methode">POST, PUT oder DELETE</param>
+    public static async Task<Antwort> SendeAsync(string methode, string path, object? body = null)
+    {
+        try
+        {
+            var request = new System.Net.Http.HttpRequestMessage(new System.Net.Http.HttpMethod(methode), path);
+            request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
+            if (body != null) request.Content = JsonContent.Create(body, options: SendeOpts);
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode) return new Antwort(true, null);
+
+            string text = await response.Content.ReadAsStringAsync();
+            string? fehler = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(text);
+                if (doc.RootElement.TryGetProperty("fehler", out var f)) fehler = f.GetString();
+            }
+            catch (JsonException)
+            {
+                // Kein JSON - dann bleibt es bei der allgemeinen Meldung.
+            }
+            GD.PrintErr($"[ApiClient] {methode} {path}: HTTP {(int)response.StatusCode} {fehler}");
+            return new Antwort(false, fehler ?? $"Der Server hat abgelehnt (HTTP {(int)response.StatusCode}).");
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[ApiClient] {methode} {path} fehlgeschlagen: {e.Message}");
+            return new Antwort(false, "Der Server ist nicht erreichbar.");
+        }
+    }
+
     public static async Task<TResult?> PostAsync<TBody, TResult>(string path, TBody body)
     {
         try

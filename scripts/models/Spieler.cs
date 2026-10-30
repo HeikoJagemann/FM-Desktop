@@ -57,6 +57,8 @@ public class Spieler
     public int    Gehalt               { get; set; }
     /// <summary>Saisonjahr, bis zu dessen Ende der Vertrag läuft; 0 ohne verwalteten Vertrag.</summary>
     public int    VertragBis           { get; set; }
+    /// <summary>Ob der Verein den Spieler abgeben will - dann steht er auf der Transferliste.</summary>
+    public bool   AufTransferliste     { get; set; }
     // Technisch
     public int    Pass                 { get; set; }
     public int    Ballkontrolle        { get; set; }

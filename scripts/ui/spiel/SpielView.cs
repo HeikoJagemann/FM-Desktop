@@ -882,12 +882,17 @@ public partial class SpielView : Control
             name.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
             zeile.AddChild(name);
 
-            var staerke = FmTheme.MakeZahl(s.EffektiveStaerke.ToString(), 16,
-                s.AufDemPlatz ? StaerkeFarbeSpieler(s.Staerke, s.EffektiveStaerke) : FmTheme.TextGedimmt);
+            // Einen Gegner kennt der Manager nur als Spanne aus seinen Berichten - ohne
+            // Eingespieltheit und ohne Ermüdung in Zahlen.
+            var staerke = s.Geschaetzt
+                ? FmTheme.MakeLabel($"{s.StaerkeVon}–{s.StaerkeBis}", 12,
+                    s.AufDemPlatz ? FmTheme.TextSecondary : FmTheme.TextGedimmt)
+                : FmTheme.MakeZahl(s.EffektiveStaerke.ToString(), 16,
+                    s.AufDemPlatz ? StaerkeFarbeSpieler(s.Staerke, s.EffektiveStaerke) : FmTheme.TextGedimmt);
             staerke.HorizontalAlignment = HorizontalAlignment.Right;
             staerke.MouseFilter = MouseFilterEnum.Pass;
-            staerke.CustomMinimumSize = new Vector2(24, 0);
-            staerke.TooltipText = s.AufDemPlatz
+            staerke.CustomMinimumSize = new Vector2(s.Geschaetzt ? 46 : 24, 0);
+            staerke.TooltipText = s.AufDemPlatz || s.Geschaetzt
                 ? s.Erklaerung
                 : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.Staerke);
             zeile.AddChild(staerke);

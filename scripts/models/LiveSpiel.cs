@@ -28,9 +28,18 @@ public class LiveSpieler
     public int     GelbeKarten { get; set; }
     public int     RoteKarten  { get; set; }
 
+    /// <summary>
+    /// Ein Gegner, den der Manager nur aus Berichten kennt: Die Stärke ist eine Spanne, die
+    /// Stärkewerte oben sind deren Mitte, die Eingespieltheit ist unbekannt.
+    /// </summary>
+    public bool    Geschaetzt  { get; set; }
+    public int     StaerkeVon  { get; set; }
+    public int     StaerkeBis  { get; set; }
+
     /// <summary>Mouseover-Text: Grundstärke + Eingespieltheit + Frische = Spielstärke.</summary>
-    public string Erklaerung =>
-        StaerkeErklaerung.MitFrische(Position, Grundstaerke, Eingespieltheit, Staerke, Kondition, EffektiveStaerke);
+    public string Erklaerung => Geschaetzt
+        ? $"Geschätzte Stärke {StaerkeVon}–{StaerkeBis}.\nGenauer wird es mit Scoutberichten."
+        : StaerkeErklaerung.MitFrische(Position, Grundstaerke, Eingespieltheit, Staerke, Kondition, EffektiveStaerke);
 }
 
 /// <summary>Zustand der laufenden Partie (GET/POST spiel/live/...).</summary>

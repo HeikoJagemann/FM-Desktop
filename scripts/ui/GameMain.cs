@@ -40,6 +40,8 @@ public partial class GameMain : Control
     private const string SceneKalender     = "res://scenes/kalender/KalenderView.tscn";
     private const string SceneFinanzen     = "res://scenes/finanzen/FinanzenView.tscn";
     private const string SceneTransfer     = "res://scenes/transfer/TransferView.tscn";
+    private const string SceneScouting     = "res://scenes/transfer/ScoutingView.tscn";
+    private const string SceneAngebote     = "res://scenes/transfer/AngeboteView.tscn";
 
     /// Eigener Bildschirm statt Overlay - die Partie übernimmt das ganze Fenster.
     private const string SceneSpiel        = "res://scenes/spiel/SpielView.tscn";
@@ -55,7 +57,7 @@ public partial class GameMain : Control
         ("Training",   new[] { ("Trainingsplan", SceneTraining) }),
         ("Liga",       new[] { ("Tabelle", SceneTabelle), ("Spielplan", SceneSpielplan), ("Statistiken", SceneStatistiken) }),
         ("Kalender",   new[] { ("Termine", SceneKalender) }),
-        ("Transfers",  new[] { ("Transfermarkt", SceneTransfer) }),
+        ("Transfers",  new[] { ("Transferliste", SceneTransfer), ("Scouting", SceneScouting), ("Angebote", SceneAngebote) }),
         ("Finanzen",   new[] { ("Übersicht", SceneFinanzen) }),
         ("Jugend",     new[] { ("Jugendkader", SceneJugend) }),
     };

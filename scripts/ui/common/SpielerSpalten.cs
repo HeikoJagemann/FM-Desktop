@@ -22,8 +22,9 @@ public static class SpielerSpalten
     public static GridSpalte<Spieler> Name => new()
     {
         Titel = "Name", Breite = 140, Expand = true, ExpandGewicht = 3,
-        Text       = s => s.Name,
-        Tooltip    = s => $"{s.Name} ({s.HauptPosition})\n{s.AttributrollenText}",
+        Text       = s => s.AufTransferliste ? $"{s.Name}  🏷" : s.Name,
+        Tooltip    = s => $"{s.Name} ({s.HauptPosition})\n{s.AttributrollenText}"
+                        + (s.AufTransferliste ? "\nSteht auf der Transferliste." : ""),
         Sortierung = s => s.Name,
     };
 
