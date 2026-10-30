@@ -49,7 +49,8 @@ public partial class SpielView : Control
     private Control _rumpf = null!;
     private Label _halbzeitLabel = null!;
     private Label _richtungLabel = null!;
-    private Label _wertungsLabel = null!;
+    /// <summary>Die Tempo-Knöpfe, je Faktor - der gewählte steht in Bernstein.</summary>
+    private readonly System.Collections.Generic.Dictionary<double, Button> _tempoKnoepfe = new();
     private Panel _pausenschild = null!;
     private Label _pausenText = null!;
     private VBoxContainer _heimSpalte = null!;
@@ -424,14 +425,27 @@ public partial class SpielView : Control
         uhrZeile.AddChild(_minuteLabel);
 
         vbox.AddChild(uhrZeile);
-
-        // Es gibt nur noch eine Engine. Was auf dem Platz geschieht, ist das Ergebnis.
-        _wertungsLabel = FmTheme.MakeLabel(
-            "Was hier gespielt wird, zählt: Ergebnis, Torschützen und Karten gehen so in die "
-            + "Tabelle ein.",
-            11, FmTheme.TextSecondary, HorizontalAlignment.Center);
-        vbox.AddChild(_wertungsLabel);
         return vbox;
+    }
+
+    /// <summary>Hebt das gewählte Tempo hervor.</summary>
+    private void ZeigeTempo()
+    {
+        foreach (var (tempo, knopf) in _tempoKnoepfe)
+        {
+            bool aktiv = tempo == _spielfeldTempo;
+            var stil = FmTheme.Flaeche(aktiv ? FmTheme.Accent : new Color(0, 0, 0, 0), 7);
+            var schwebend = FmTheme.Flaeche(aktiv ? FmTheme.Accent : FmTheme.BgHover, 7);
+            foreach (var zustand in new[] { "normal", "pressed", "focus" })
+                knopf.AddThemeStyleboxOverride(zustand, stil);
+            knopf.AddThemeStyleboxOverride("hover", schwebend);
+            var farbe = aktiv ? FmTheme.AccentText : FmTheme.TextNav;
+            knopf.AddThemeColorOverride("font_color", farbe);
+            knopf.AddThemeColorOverride("font_pressed_color", farbe);
+            knopf.AddThemeColorOverride("font_hover_color", aktiv ? FmTheme.AccentText : FmTheme.TextPrimary);
+            knopf.AddThemeFontOverride("font", FmTheme.SchriftAnzeige);
+            knopf.AddThemeFontSizeOverride("font_size", 16);
+        }
     }
 
     private void BenenneMannschaften(LiveSpiel spiel)
@@ -561,12 +575,34 @@ public partial class SpielView : Control
 
         // Eine Partie dauert bei einfachem Tempo neunzig Minuten, bei zwanzigfachem
         // viereinhalb. Wer gar nicht zusehen will, nimmt "Ueberspringen" in der Fußleiste.
+        // Als Segmentschalter wie die Formation in der Aufstellung: Das gewählte Tempo ist auf
+        // einen Blick zu erkennen. Vorher sahen alle drei Knöpfe gleich aus.
+        var segment = new PanelContainer { SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        var segmentStil = FmTheme.Flaeche(FmTheme.BgPanel, 10, FmTheme.Border);
+        segmentStil.SetContentMarginAll(3);
+        segment.AddThemeStyleboxOverride("panel", segmentStil);
+        var segmente = new HBoxContainer();
+        segmente.AddThemeConstantOverride("separation", 3);
+        segment.AddChild(segmente);
         foreach (double tempo in new[] { 1.0, 5.0, 20.0 })
         {
-            var knopf = new Button { Text = $"{tempo:0}x", CustomMinimumSize = new Vector2(44, 0) };
-            knopf.Pressed += () => _spielfeldTempo = tempo;
-            kopf.AddChild(knopf);
+            var knopf = new Button
+            {
+                Text = $"{tempo:0}x",
+                CustomMinimumSize = new Vector2(48, 30),
+                FocusMode = FocusModeEnum.None,
+                TooltipText = tempo == 1.0 ? "Echtzeit" : $"{tempo:0}-fache Geschwindigkeit",
+            };
+            knopf.Pressed += () =>
+            {
+                _spielfeldTempo = tempo;
+                ZeigeTempo();
+            };
+            _tempoKnoepfe[tempo] = knopf;
+            segmente.AddChild(knopf);
         }
+        kopf.AddChild(segment);
+        ZeigeTempo();
 
         // Platz und Halbzeitschild liegen uebereinander: Waehrend der Pause steht das Schild
         // mitten auf dem Rasen, damit die Halbzeit nicht nur eine Zeile im Verlauf ist.

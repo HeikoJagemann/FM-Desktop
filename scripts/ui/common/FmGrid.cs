@@ -389,11 +389,17 @@ public partial class GridZeile<T> : PanelContainer
                 rahmen.SizeFlagsStretchRatio = spalte.ExpandGewicht;
             }
 
+            // Abschneiden statt wachsen: Ein Label ohne ClipText ist mindestens so breit wie sein
+            // Text. War der länger als die Spalte - vier Trainingsfortschritte in "Letzte Woche" -,
+            // schob er alle folgenden Zellen nach rechts, und die Zeile passte nicht mehr unter
+            // ihre Überschriften.
             var zelle = new Label
             {
                 HorizontalAlignment = spalte.Ausrichtung,
                 VerticalAlignment   = VerticalAlignment.Center,
                 AutowrapMode        = TextServer.AutowrapMode.Off,
+                ClipText            = true,
+                TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
                 MouseFilter         = MouseFilterEnum.Ignore,
             };
             zelle.AddThemeFontSizeOverride("font_size", 13);
@@ -413,11 +419,24 @@ public partial class GridZeile<T> : PanelContainer
         for (int i = 0; i < _spalten.Count; i++)
         {
             var spalte = _spalten[i];
-            _zellen[i].Text = spalte.Text(Datensatz);
+            var text = spalte.Text(Datensatz);
+            _zellen[i].Text = text;
             _zellen[i].AddThemeColorOverride("font_color",
                 spalte.Farbe?.Invoke(Datensatz) ?? FmTheme.TextPrimary);
-            _zellRahmen[i].TooltipText = spalte.Tooltip?.Invoke(Datensatz) ?? "";
+            // Abgeschnittener Text steht vollständig im Mouseover, wenn die Spalte keinen eigenen hat.
+            _zellRahmen[i].TooltipText = spalte.Tooltip?.Invoke(Datensatz)
+                ?? (PasstNicht(_zellen[i], text) ? text : "");
         }
+    }
+
+    /// <summary>Ob ein Text breiter ist als der Platz, den seine Zelle ihm lässt.</summary>
+    private bool PasstNicht(Label zelle, string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        var rahmen = (Control)zelle.GetParent();
+        float platz = Mathf.Max(rahmen.Size.X, rahmen.CustomMinimumSize.X) - 12;
+        var schrift = zelle.GetThemeFont("font");
+        return schrift.GetStringSize(text, HorizontalAlignment.Left, -1, 13).X > platz;
     }
 
     private void SetzeHintergrund()
