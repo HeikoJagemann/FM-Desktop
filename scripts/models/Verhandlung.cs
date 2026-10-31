@@ -30,6 +30,12 @@ public class Verhandlung
     public int?    NeuesGehalt     { get; set; }
     public int?    NeuerVertragBis { get; set; }
 
+    /// <summary>
+    /// Das Transferangebot bei einem Neuzugang, sonst leer. Dann ist <see cref="Staerke"/> 0, und
+    /// Gehalt und Vertrag sind die beim bisherigen Verein.
+    /// </summary>
+    public long?   AngebotId       { get; set; }
+
     public bool Laeuft => Status == "LAEUFT";
 
     /// <summary>Kalenderjahr, in dem ein Vertrag über so viele Jahre am 30. Juni endet.</summary>

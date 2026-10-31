@@ -12,6 +12,8 @@ namespace FMDesktop.UI.Transfer;
 /// Angebote in beide Richtungen: was andere Vereine für eigene Spieler bieten, und wie die
 /// abgefragten Vereine auf die eigenen Angebote geantwortet haben - samt Begründung einer Absage.
 /// Vereinbarte Wechsel stehen in beiden Listen, bis sie mit dem Fensterstart vollzogen sind.
+/// Ist bei einem eigenen Angebot die Ablöse geklärt, öffnet ein Klick das Vertragsgespräch mit
+/// dem Spieler.
 /// </summary>
 public partial class AngeboteView : Control
 {
@@ -59,6 +61,8 @@ public partial class AngeboteView : Control
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
+        _ausgehend.Doppelklick += Verhandle;
+        _ausgehend.Rechtsklick += ZeigeEigenesMenue;
         vbox.AddChild(_ausgehend);
     }
 
@@ -83,12 +87,37 @@ public partial class AngeboteView : Control
             : offen > 0
                 ? $"Angebote für eigene Spieler ({offen}) - Rechtsklick zum Entscheiden"
                 : "Angebote für eigene Spieler - nur vereinbarte Abgänge";
-        _ausgehendLabel.Text = ausgehend is { Count: > 0 }
-            ? $"Eigene Angebote ({ausgehend.Count}) - offene und die Antworten der letzten vier Wochen"
-            : "Eigene Angebote - keine. Geboten wird aus der Transferliste oder den Scoutberichten.";
+        int geklaert = ausgehend?.FindAll(a => a.AbloeseGeklaert).Count ?? 0;
+        _ausgehendLabel.Text = ausgehend is not { Count: > 0 }
+            ? "Eigene Angebote - keine. Geboten wird aus der Transferliste oder den Scoutberichten."
+            : geklaert > 0
+                ? $"Eigene Angebote ({ausgehend.Count}) - bei {geklaert} ist die Ablöse geklärt: Doppelklick, um mit dem Spieler zu verhandeln"
+                : $"Eigene Angebote ({ausgehend.Count}) - offene und die Antworten der letzten vier Wochen";
         // Nur beim ersten Laden - danach steht dort das Ergebnis der letzten Entscheidung.
         if (_statusLabel.Text == "Lade …")
             _statusLabel.Text = "Spieler auf die Transferliste setzt du im Kader per Rechtsklick.";
+    }
+
+    /// <summary>Vertragsgespräch mit einem Spieler, dessen Ablöse geklärt ist.</summary>
+    private void Verhandle(TransferangebotModel angebot)
+    {
+        if (!angebot.AbloeseGeklaert) return;
+        UI.VertragsverhandlungDialog.ZeigeWechsel(this, angebot, () => { if (Lebt) _ = Lade(); });
+    }
+
+    private void ZeigeEigenesMenue(TransferangebotModel angebot)
+    {
+        if (!angebot.AbloeseGeklaert) return;
+        var menu = new PopupMenu();
+        menu.AddItem($"{angebot.SpielerName} ← {angebot.VonVerein}", -1);
+        menu.SetItemDisabled(0, true);
+        menu.AddSeparator();
+        menu.AddItem("Vertrag verhandeln …", 0);
+        AddChild(menu);
+        menu.IdPressed += id => { if (id == 0) Verhandle(angebot); };
+        menu.PopupHide += menu.QueueFree;
+        menu.Position = (Vector2I)GetGlobalMousePosition();
+        menu.Popup();
     }
 
     /// <summary>Eingehende Angebote annehmen oder ablehnen.</summary>

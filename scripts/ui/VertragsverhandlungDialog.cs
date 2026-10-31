@@ -9,7 +9,9 @@ using FMDesktop.Models;
 namespace FMDesktop.UI;
 
 /// <summary>
-/// Vertragsverhandlung mit einem eigenen Spieler - gegen die Uhr.
+/// Vertragsverhandlung gegen die Uhr - mit einem eigenen Spieler über die Verlängerung oder mit
+/// einem Neuzugang, dessen Ablöse schon geklärt ist. Scheitert das Gespräch mit einem Neuzugang,
+/// platzt der Wechsel.
 ///
 /// <para>Er nennt Gehalt und Laufzeit, du bietest. Er kommt dir entgegen, aber nie unter das, was
 /// er sich wert ist; zu niedrige Angebote verstimmen ihn. Nach sechzig Sekunden ist das Gespräch
@@ -20,7 +22,12 @@ namespace FMDesktop.UI;
 /// </summary>
 public partial class VertragsverhandlungDialog : Overlaykarte
 {
-    private Spieler _spieler = null!;
+    private long _spielerId;
+    private string _name = "";
+    /// <summary>Der eigene Spieler bei einer Verlängerung.</summary>
+    private Spieler? _spieler;
+    /// <summary>Das Transferangebot bei einem Neuzugang.</summary>
+    private TransferangebotModel? _angebot;
     private Action? _geaendert;
     private Verhandlung? _stand;
     private double _rest;
@@ -51,9 +58,23 @@ public partial class VertragsverhandlungDialog : Overlaykarte
     /// <param name="geaendert">wenn ein neuer Vertrag zustande kam</param>
     public static void Zeige(Node caller, Spieler spieler, Action? geaendert = null)
     {
-        Oeffne(caller, new VertragsverhandlungDialog { _spieler = spieler, _geaendert = geaendert },
-            spieler.Id.ToString());
+        Oeffne(caller, new VertragsverhandlungDialog
+        {
+            _spielerId = spieler.Id, _name = spieler.Name, _spieler = spieler, _geaendert = geaendert,
+        }, spieler.Id.ToString());
     }
+
+    /// <summary>Gespräch mit einem Neuzugang, dessen Ablöse geklärt ist.</summary>
+    /// <param name="geaendert">wenn das Gespräch zu Ende ist - der Wechsel steht oder ist geplatzt</param>
+    public static void ZeigeWechsel(Node caller, TransferangebotModel angebot, Action? geaendert = null)
+    {
+        Oeffne(caller, new VertragsverhandlungDialog
+        {
+            _spielerId = angebot.SpielerId, _name = angebot.SpielerName, _angebot = angebot, _geaendert = geaendert,
+        }, angebot.SpielerId.ToString());
+    }
+
+    private bool Wechsel => _angebot != null;
 
     // ── Gehalt in der eingestellten Periode ──────────────────────────────────
 
@@ -71,7 +92,7 @@ public partial class VertragsverhandlungDialog : Overlaykarte
 
     protected override void BaueInhalt(VBoxContainer inhalt)
     {
-        SetzeUntertitel($"{_spieler.Name}  ·  Gespräch wird vorbereitet …");
+        SetzeUntertitel($"{_name}  ·  Gespräch wird vorbereitet …");
 
         // Die Uhr
         var uhrZeile = new HBoxContainer();
@@ -139,7 +160,9 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         verlaufRahmen.AddChild(_verlaufScroll);
         inhalt.AddChild(verlaufRahmen);
 
-        _hinweis = FmTheme.MakeLabel("Brichst du nach einem Angebot ab oder läuft die Zeit ab, redet er zwei Wochen lang nicht mehr darüber.",
+        _hinweis = FmTheme.MakeLabel(Wechsel
+                ? "Brichst du nach einem Angebot ab oder läuft die Zeit ab, platzt der Wechsel - und er redet zwei Wochen lang nicht mehr mit uns."
+                : "Brichst du nach einem Angebot ab oder läuft die Zeit ab, redet er zwei Wochen lang nicht mehr darüber.",
             12, FmTheme.TextGedimmt);
         _hinweis.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         inhalt.AddChild(_hinweis);
@@ -182,19 +205,24 @@ public partial class VertragsverhandlungDialog : Overlaykarte
 
     private async Task Beginne()
     {
-        var (stand, fehler) = await ApiClient.SendeAsync<Verhandlung>("POST", $"vertrag/{_spieler.Id}/verhandlung");
+        string start = _angebot != null ? $"transfer/angebot/{_angebot.Id}/verhandlung" : $"vertrag/{_spielerId}/verhandlung";
+        var (stand, fehler) = await ApiClient.SendeAsync<Verhandlung>("POST", start);
         if (!IsInstanceValid(this)) return;
         if (stand == null)
         {
-            SetzeUntertitel(_spieler.Name);
+            SetzeUntertitel(_name);
             ZeigeFehler(fehler ?? "Das Gespräch kam nicht zustande.");
             _uhr.Text = "–";
             _beenden.Text = "Schließen";
             return;
         }
-        SetzeUntertitel($"{stand.Name}  ·  {stand.Position}, {stand.Alter} Jahre  ·  Stärke {stand.Staerke}  ·  "
-                        + $"jetzt {FmTheme.Gehalt(stand.AktuellesGehalt)} ({Gehaltsformat.PeriodeLabel}), "
-                        + $"Vertrag bis 30.06.{stand.VertragBis + 1}");
+        SetzeUntertitel(_angebot != null
+            ? $"{stand.Name}  ·  {stand.Position}, {stand.Alter} Jahre  ·  Stärke {_angebot.StaerkeText}  ·  "
+              + $"Ablöse {FmTheme.Geld(_angebot.Abloese)} an {_angebot.VonVerein}  ·  "
+              + $"bisher {FmTheme.Gehalt(stand.AktuellesGehalt)} ({Gehaltsformat.PeriodeLabel})"
+            : $"{stand.Name}  ·  {stand.Position}, {stand.Alter} Jahre  ·  Stärke {stand.Staerke}  ·  "
+              + $"jetzt {FmTheme.Gehalt(stand.AktuellesGehalt)} ({Gehaltsformat.PeriodeLabel}), "
+              + $"Vertrag bis 30.06.{stand.VertragBis + 1}");
 
         var texte = Enumerable.Range(stand.MinLaufzeit, stand.MaxLaufzeit - stand.MinLaufzeit + 1)
             .Select(j => j == 1 ? "1 Jahr" : $"{j} Jahre").ToArray();
@@ -230,7 +258,7 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         if (_stand == null || !_stand.Laeuft) return;
         _bieten.Disabled = _annehmen.Disabled = true;
         var (stand, fehler) = await ApiClient.SendeAsync<Verhandlung>("POST",
-            $"vertrag/{_spieler.Id}/verhandlung/angebot", new { gehalt = wochengehalt, laufzeit });
+            $"vertrag/{_spielerId}/verhandlung/angebot", new { gehalt = wochengehalt, laufzeit });
         if (!IsInstanceValid(this)) return;
         if (stand == null)
         {
@@ -245,7 +273,7 @@ public partial class VertragsverhandlungDialog : Overlaykarte
     private async Task FrageNachEnde()
     {
         _fragtNach = true;
-        var (stand, _) = await ApiClient.SendeAsync<Verhandlung>("GET", $"vertrag/{_spieler.Id}/verhandlung");
+        var (stand, _) = await ApiClient.SendeAsync<Verhandlung>("GET", $"vertrag/{_spielerId}/verhandlung");
         if (!IsInstanceValid(this)) return;
         _fragtNach = false;
         if (stand != null) Uebernimm(stand);
@@ -279,32 +307,39 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         _rest = 0;
         ZeigeUhr();
         _beenden.Text = "Schließen";
+        string vertrag = $"{FmTheme.Gehalt(stand.NeuesGehalt ?? 0)} je {Gehaltsformat.PeriodeLabel}, "
+                         + $"bis 30.06.{(stand.NeuerVertragBis ?? 0) + 1}";
         switch (stand.Status)
         {
             case "EINIG":
-                _hinweis.Text = $"Vertrag verlängert: {FmTheme.Gehalt(stand.NeuesGehalt ?? 0)} je {Gehaltsformat.PeriodeLabel}, "
-                                + $"bis 30.06.{(stand.NeuerVertragBis ?? 0) + 1}.";
+                _hinweis.Text = Wechsel ? $"Einigung - {stand.Name} unterschreibt: {vertrag}." : $"Vertrag verlängert: {vertrag}.";
                 _hinweis.AddThemeColorOverride("font_color", FmTheme.Success);
-                _spieler.Gehalt = stand.NeuesGehalt ?? _spieler.Gehalt;
-                _spieler.VertragBis = stand.NeuerVertragBis ?? _spieler.VertragBis;
-                _geaendert?.Invoke();
+                if (_spieler != null)
+                {
+                    _spieler.Gehalt = stand.NeuesGehalt ?? _spieler.Gehalt;
+                    _spieler.VertragBis = stand.NeuerVertragBis ?? _spieler.VertragBis;
+                }
                 break;
             case "ABGELAUFEN":
-                _hinweis.Text = "Die Zeit ist abgelaufen - keine Einigung. In zwei Wochen kannst du es wieder versuchen.";
+                _hinweis.Text = Wechsel ? "Die Zeit ist abgelaufen - keine Einigung, der Wechsel ist geplatzt."
+                    : "Die Zeit ist abgelaufen - keine Einigung. In zwei Wochen kannst du es wieder versuchen.";
                 _hinweis.AddThemeColorOverride("font_color", FmTheme.Danger);
                 break;
             default:
-                _hinweis.Text = "Er hat das Gespräch abgebrochen. In zwei Wochen kannst du es wieder versuchen.";
+                _hinweis.Text = Wechsel ? "Er hat das Gespräch abgebrochen - der Wechsel ist geplatzt."
+                    : "Er hat das Gespräch abgebrochen. In zwei Wochen kannst du es wieder versuchen.";
                 _hinweis.AddThemeColorOverride("font_color", FmTheme.Danger);
                 break;
         }
+        // Bei einem Neuzugang ändert auch ein Scheitern etwas - das Angebot ist dann vom Tisch.
+        if (stand.Status == "EINIG" || Wechsel) _geaendert?.Invoke();
     }
 
     protected override void BeimSchliessen()
     {
         // Ein laufendes Gespräch ist mit dem Aufstehen vorbei.
         if (_stand?.Laeuft == true)
-            _ = ApiClient.SendeAsync("DELETE", $"vertrag/{_spieler.Id}/verhandlung");
+            _ = ApiClient.SendeAsync("DELETE", $"vertrag/{_spielerId}/verhandlung");
     }
 
     public override void _Process(double delta)
@@ -332,7 +367,7 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         long woche = ZuWoche(_gehalt.Value);
         double gegenJetzt = _stand.AktuellesGehalt > 0 ? (woche - _stand.AktuellesGehalt) * 100.0 / _stand.AktuellesGehalt : 0;
         _gehaltText.Text = FmTheme.Gehalt(woche) + (_stand.AktuellesGehalt > 0
-            ? $"  ·  {(gegenJetzt >= 0 ? "+" : "−")}{Math.Abs(gegenJetzt):0} % gegenüber jetzt"
+            ? $"  ·  {(gegenJetzt >= 0 ? "+" : "−")}{Math.Abs(gegenJetzt):0} % gegenüber {(Wechsel ? "bisher" : "jetzt")}"
             : "");
     }
 

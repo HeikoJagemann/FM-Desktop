@@ -122,9 +122,13 @@ public class TransferangebotModel
     /// <summary>Außerhalb des Fensters angenommen - gewechselt wird, sobald es öffnet.</summary>
     public bool Vereinbart => Status == "VEREINBART";
 
+    /// <summary>Der abgebende Verein ist einverstanden - jetzt fehlt der Vertrag mit dem Spieler.</summary>
+    public bool AbloeseGeklaert => Status == "ABLOESE_EINIG";
+
     public string StatusText => Status switch
     {
         "OFFEN"      => "wartet auf Antwort",
+        "ABLOESE_EINIG" => "Ablöse geklärt - Vertrag verhandeln",
         "ANGENOMMEN" => "angenommen",
         "VEREINBART" => "vereinbart - wechselt zum Fensterstart",
         "ABGELEHNT"  => "abgelehnt",

@@ -183,6 +183,7 @@ public static class TransferSpalten
         Farbe      = a => a.Status switch
         {
             "ANGENOMMEN" => FmTheme.Success,
+            "ABLOESE_EINIG" => FmTheme.Gold,
             "ABGELEHNT"  => FmTheme.Danger,
             _            => FmTheme.TextSecondary,
         },

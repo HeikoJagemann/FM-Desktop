@@ -127,6 +127,20 @@ public partial class GameState : Node
                         await gespraechsDialog.VorschauBiete(double.Parse(teile[2], System.Globalization.CultureInfo.InvariantCulture));
                 }
                 break;
+            case "zugang":
+                // zugang:<angebotId>[:<Anteil der Forderung>] - Vertragsgespräch mit einem Neuzugang
+                var eigeneAngebote = await ApiClient.GetAsync<System.Collections.Generic.List<Models.TransferangebotModel>>(
+                    $"transfer/ausgehend/{VereinId}");
+                var zugang = eigeneAngebote?.Find(a => a.Id == long.Parse(teile[1]));
+                if (zugang == null) { GD.PrintErr($"[Vorschau] Angebot {teile[1]} nicht gefunden."); break; }
+                UI.VertragsverhandlungDialog.ZeigeWechsel(szene, zugang);
+                if (teile.Length > 2)
+                {
+                    var zugangsDialog = FindeKnoten<UI.VertragsverhandlungDialog>(GetTree().Root);
+                    if (zugangsDialog != null)
+                        await zugangsDialog.VorschauBiete(double.Parse(teile[2], System.Globalization.CultureInfo.InvariantCulture));
+                }
+                break;
             case "scoutwoche":
                 // scoutwoche:<yyyy-MM-dd> - die Zusammenfassung einer Scoutingwoche
                 UI.Transfer.ScoutwocheOverlay.Zeige(szene, DateOnly.Parse(teile[1]));
