@@ -113,6 +113,23 @@ public partial class GameState : Node
                 if (szene is UI.SpielView spielView) spielView.OeffneWechsel();
                 else GD.PrintErr("[Vorschau] Wechsel nur über der Spielansicht.");
                 break;
+            case "ziehen":
+                // ziehen:<slot>:<x>:<y> - eine Plakette der Aufstellung an eine Stelle ziehen
+                var aufstellung = FindeKnoten<UI.Taktik.AufstellungView>(GetTree().Root);
+                if (aufstellung != null && teile.Length >= 4)
+                {
+                    var inv = System.Globalization.CultureInfo.InvariantCulture;
+                    await aufstellung.VorschauZiehen(teile[1],
+                        new Vector2(float.Parse(teile[2], inv), float.Parse(teile[3], inv)));
+                }
+                else GD.PrintErr("[Vorschau] Ziehen nur in der Aufstellung.");
+                break;
+            case "vorlage":
+                // vorlage:<name> - eine Formationsvorlage in der Aufstellung wählen
+                var ansicht = FindeKnoten<UI.Taktik.AufstellungView>(GetTree().Root);
+                if (ansicht != null && teile.Length >= 2) ansicht.VorschauVorlage(teile[1]);
+                else GD.PrintErr("[Vorschau] Vorlage nur in der Aufstellung.");
+                break;
             case "ueberspringen":
                 if (szene is UI.SpielView partie)
                 {
@@ -126,6 +143,17 @@ public partial class GameState : Node
                 GD.PrintErr($"[Vorschau] Unbekannter Dialog: {dialog}");
                 break;
         }
+    }
+
+    private static T? FindeKnoten<T>(Node wurzel) where T : Node
+    {
+        if (wurzel is T treffer) return treffer;
+        foreach (var kind in wurzel.GetChildren())
+        {
+            var gefunden = FindeKnoten<T>(kind);
+            if (gefunden != null) return gefunden;
+        }
+        return null;
     }
 
     public void SetVerein(long vereinId, string vereinName, long ligaId, string ligaName)

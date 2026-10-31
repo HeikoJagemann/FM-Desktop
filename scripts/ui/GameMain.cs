@@ -47,6 +47,7 @@ public partial class GameMain : Control
     private const string SceneSpielplan   = "res://scenes/liga/SpielplanView.tscn";
     private const string SceneStatistiken = "res://scenes/liga/StatistikenView.tscn";
     private const string SceneAufstellung = "res://scenes/taktik/AufstellungView.tscn";
+    private const string SceneTaktik      = "res://scenes/taktik/TaktikView.tscn";
     private const string SceneTraining     = "res://scenes/training/TrainingView.tscn";
     private const string SceneKalender     = "res://scenes/kalender/KalenderView.tscn";
     private const string SceneFinanzen     = "res://scenes/finanzen/FinanzenView.tscn";
@@ -65,7 +66,7 @@ public partial class GameMain : Control
     {
         ("Übersicht",  new[] { ("Dashboard", SceneDashboard) }),
         ("Mannschaft", new[] { ("Kader", SceneKader), ("Mitarbeiter", SceneMitarbeiter) }),
-        ("Taktik",     new[] { ("Aufstellung", SceneAufstellung) }),
+        ("Taktik",     new[] { ("Aufstellung", SceneAufstellung), ("Taktik", SceneTaktik) }),
         ("Training",   new[] { ("Trainingsplan", SceneTraining) }),
         ("Liga",       new[] { ("Tabelle", SceneTabelle), ("Spielplan", SceneSpielplan), ("Statistiken", SceneStatistiken) }),
         ("Kalender",   new[] { ("Termine", SceneKalender) }),
@@ -77,14 +78,19 @@ public partial class GameMain : Control
     public override async void _Ready()
     {
         BuildUI();
-        // Jeder Spielstart beginnt auf dem Dashboard - dort steht, was seit dem letzten Mal passiert ist.
-        LadeScene(GameState.Instance.StartAnsicht ?? SceneDashboard);
 
         _pollTimer = new Timer { WaitTime = 0.5, OneShot = false, Autostart = false };
         _pollTimer.Timeout += OnPollTimeout;
         AddChild(_pollTimer);
 
+        // Erst den Kalender, dann die Seite: Sie rechnet das Alter der Spieler mit dem Spieldatum.
+        // Vorher kam die Seite zuerst und rechnete mit dem heutigen Kalendertag - ein Spieler war
+        // auf der ersten Seite nach dem Start zwei Jahre aelter als auf jeder weiteren.
         await AktualisiereKalenderstand();
+        if (!IsInstanceValid(this)) return;
+
+        // Jeder Spielstart beginnt auf dem Dashboard - dort steht, was seit dem letzten Mal passiert ist.
+        LadeScene(GameState.Instance.StartAnsicht ?? SceneDashboard);
     }
 
     private void BuildUI()

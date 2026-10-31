@@ -41,6 +41,26 @@ public partial class PositionSlot : Button
 
     public event Action<PositionSlot, long, string>? PlayerDropped;
 
+    /// <summary>Während die Plakette über den Rasen gezogen wird - ihre Mitte im Rasen.</summary>
+    public event Action<PositionSlot, Vector2>? Zieht;
+
+    /// <summary>Die Plakette wurde an einer neuen Stelle losgelassen.</summary>
+    public event Action<PositionSlot>? Abgelegt;
+
+    /// <summary>Feldspieler lassen sich verschieben; der Torwart bleibt in seinem Tor.</summary>
+    public bool Verschiebbar { get; set; }
+
+    /// <summary>Position während des Ziehens - so zeigt die Plakette schon, was sie gleich wird.</summary>
+    private string? _vorschau;
+
+    private bool _gedrueckt;
+    private bool _zieht;
+    private Vector2 _griff;
+    private Vector2 _druckpunkt;
+
+    /// <summary>Ab so vielen Pixeln wird aus einem Klick ein Verschieben.</summary>
+    private const float Ziehschwelle = 4f;
+
     public const float PlaketteBreite = 96f;
     public const float PlaketteHoehe  = 80f;
 
@@ -49,6 +69,8 @@ public partial class PositionSlot : Button
         var slot = new PositionSlot { SlotName = slotName, Anzeige = anzeige, IstBank = bank };
         slot.CustomMinimumSize = bank ? new Vector2(0, 52) : new Vector2(PlaketteBreite, PlaketteHoehe);
         slot.FocusMode = FocusModeEnum.None;
+        // Links wird verschoben, rechts geleert - ein Linksklick allein darf nichts entfernen.
+        slot.ButtonMask = MouseButtonMask.Right;
         foreach (var zustand in new[] { "normal", "hover", "pressed", "focus", "disabled" })
             slot.AddThemeStyleboxOverride(zustand, new StyleBoxEmpty());
         slot.MouseEntered += slot.QueueRedraw;
@@ -90,7 +112,55 @@ public partial class PositionSlot : Button
 
     /// <summary>Mannschaftsteil: auf dem Feld der des Platzes, auf der Bank der des Spielers.</summary>
     private Positionsgruppe Gruppe => PositionsgruppeHelfer.Von(
-        IstBank ? SpielerPosition : SlotBezeichnung.Basis(SlotName));
+        IstBank ? SpielerPosition : _vorschau ?? SlotBezeichnung.Basis(SlotName));
+
+    /// <summary>Zeigt beim Ziehen die Position, die der Platz an dieser Stelle hätte.</summary>
+    public void ZeigeVorschau(string position)
+    {
+        if (_vorschau == position) return;
+        _vorschau = position;
+        Anzeige = position;
+        Refresh();
+    }
+
+    public override void _GuiInput(InputEvent @event)
+    {
+        if (!Verschiebbar || GetParent() is not Control rasen) return;
+
+        // Ereigniskoordinaten sind lokal zur Plakette; auf den Rasen umgerechnet über ihre Lage.
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left } knopf)
+        {
+            if (knopf.Pressed)
+            {
+                _gedrueckt = true;
+                _druckpunkt = Position + knopf.Position;
+                _griff = knopf.Position;
+            }
+            else if (_gedrueckt)
+            {
+                _gedrueckt = false;
+                if (_zieht)
+                {
+                    _zieht = false;
+                    Abgelegt?.Invoke(this);
+                }
+            }
+            AcceptEvent();
+        }
+        else if (@event is InputEventMouseMotion bewegung && _gedrueckt)
+        {
+            var maus = Position + bewegung.Position;
+            if (!_zieht && maus.DistanceTo(_druckpunkt) < Ziehschwelle) return;
+            _zieht = true;
+            var groesse = Size;
+            var neu = maus - _griff;
+            neu.X = Mathf.Clamp(neu.X, 0, rasen.Size.X - groesse.X);
+            neu.Y = Mathf.Clamp(neu.Y, 0, rasen.Size.Y - groesse.Y);
+            Position = neu;
+            Zieht?.Invoke(this, neu + groesse / 2);
+            AcceptEvent();
+        }
+    }
 
     private void Refresh()
     {
@@ -98,8 +168,8 @@ public partial class PositionSlot : Button
         TooltipText = SpielerId.HasValue && Staerke.HasValue && Grundstaerke.HasValue && Eingespieltheit.HasValue
             ? StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value)
             : SpielerId.HasValue
-                ? $"{SpielerName} - zum Entfernen anklicken"
-                : IstBank ? "Freier Bankplatz - Spieler hierher ziehen" : $"{Anzeige} - Spieler hierher ziehen";
+                ? IstBank ? $"{SpielerName} - Rechtsklick entfernt" : $"{SpielerName} - ziehen verschiebt, Rechtsklick entfernt"
+                : IstBank ? "Freier Bankplatz - Spieler hierher ziehen" : $"{Anzeige} - Spieler hierher ziehen, Platz verschieben mit der Maus";
         QueueRedraw();
     }
 
@@ -278,35 +348,7 @@ public partial class Rasen : Control
 // ---------------------------------------------------------------------------
 public partial class AufstellungView : Control
 {
-    private static readonly string[] FormationNames = { "4-4-2", "4-2-3-1", "4-3-3" };
-
     private const string EinstellungAmateureAnzeigen = "aufstellung_amateure_anzeigen";
-
-    private static readonly Dictionary<string, (string Slot, float X, float Y)[]> Formations = new()
-    {
-        ["4-4-2"] = new[]
-        {
-            ("TW",   0.50f, 0.895f),
-            ("LV",   0.13f, 0.71f), ("IV_1", 0.37f, 0.73f), ("IV_2", 0.63f, 0.73f), ("RV", 0.87f, 0.71f),
-            ("LM",   0.13f, 0.46f), ("ZM_1", 0.37f, 0.48f), ("ZM_2", 0.63f, 0.48f), ("RM", 0.87f, 0.46f),
-            ("ST_1", 0.37f, 0.15f), ("ST_2", 0.63f, 0.15f),
-        },
-        ["4-2-3-1"] = new[]
-        {
-            ("TW",   0.50f, 0.895f),
-            ("LV",   0.13f, 0.71f), ("IV_1", 0.37f, 0.73f), ("IV_2", 0.63f, 0.73f), ("RV", 0.87f, 0.71f),
-            ("DM_1", 0.37f, 0.535f), ("DM_2", 0.63f, 0.535f),
-            ("LM",   0.13f, 0.33f), ("OM",   0.50f, 0.345f), ("RM",   0.87f, 0.33f),
-            ("ST",   0.50f, 0.135f),
-        },
-        ["4-3-3"] = new[]
-        {
-            ("TW",   0.50f, 0.895f),
-            ("LV",   0.13f, 0.71f), ("IV_1", 0.37f, 0.73f), ("IV_2", 0.63f, 0.73f), ("RV", 0.87f, 0.71f),
-            ("ZM_1", 0.26f, 0.48f), ("ZM_2", 0.50f, 0.52f), ("ZM_3", 0.74f, 0.48f),
-            ("LA",   0.15f, 0.20f), ("ST",   0.50f, 0.14f), ("RA",   0.85f, 0.20f),
-        },
-    };
 
     // Spielfeld - passt samt zweireihiger Bank ins Fenster mit 900 Pixeln Höhe.
     private const float FieldW = 430f;
@@ -314,7 +356,13 @@ public partial class AufstellungView : Control
     private const float SlotW  = PositionSlot.PlaketteBreite;
     private const float SlotH  = PositionSlot.PlaketteHoehe;
 
-    private Segmentschalter _formationsSchalter = null!;
+    /// <summary>Die Formation, wie der Server sie aus den Plätzen liest - "4-2-3-1" oder "3-3-3-1".</summary>
+    private Label _formationsLabel = null!;
+    private OptionButton _vorlagenAuswahl = null!;
+    private List<FormationsVorlage> _vorlagen = new();
+
+    /// <summary>Wo jeder Platz liegt, normiert wie in der Engine: X vom eigenen Tor, Y von links.</summary>
+    private readonly Dictionary<string, Vector2> _plaetze = new();
     private readonly Dictionary<string, Button> _filterKnoepfe = new();
     private string _filter = "Alle";
     private Control         _fieldControl = null!;
@@ -391,13 +439,26 @@ public partial class AufstellungView : Control
         _statusLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         hbox.AddChild(_statusLabel);
 
-        // Formation als Segmentschalter: alle drei auf einen Blick, die gewählte in Bernstein.
-        _formationsSchalter = Segmentschalter.Neu(FormationNames,
-            System.Array.IndexOf(FormationNames, _currentFormation), new Vector2(76, 36), 17);
-        for (int i = 0; i < FormationNames.Length; i++)
-            _formationsSchalter.Knopf(i).TooltipText = $"Formation {FormationNames[i]}";
-        _formationsSchalter.Gewaehlt += index => OnFormationChanged(index);
-        hbox.AddChild(_formationsSchalter);
+        // Die Formation ergibt sich aus den Plätzen; die Vorlagen sind nur Startpunkte.
+        var formation = new VBoxContainer { SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        formation.AddThemeConstantOverride("separation", -4);
+        formation.AddChild(FmTheme.MakeLabel("FORMATION", 10, FmTheme.TextSecondary));
+        _formationsLabel = FmTheme.MakeZahl("–", 30);
+        _formationsLabel.TooltipText = "Ergibt sich daraus, wo die Spieler stehen. "
+                                     + "Ziehe sie auf dem Rasen an eine andere Stelle.";
+        _formationsLabel.MouseFilter = MouseFilterEnum.Pass;
+        formation.AddChild(_formationsLabel);
+        hbox.AddChild(formation);
+
+        _vorlagenAuswahl = new OptionButton
+        {
+            CustomMinimumSize = new Vector2(190, 44),
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+            TooltipText = "Stellt die Plätze nach einer Vorlage auf - jeder Spieler wandert auf den "
+                        + "nächstgelegenen Platz.",
+        };
+        _vorlagenAuswahl.ItemSelected += OnVorlageGewaehlt;
+        hbox.AddChild(_vorlagenAuswahl);
 
         _autoBtn = new Button
         {
@@ -416,8 +477,8 @@ public partial class AufstellungView : Control
         blitz.Position = new Vector2(16, 13);
         blitz.Size = new Vector2(18, 18);
         _autoBtn.AddChild(blitz);
-        _autoBtn.TooltipText = "Besetzt jede Position mit dem stärksten verfügbaren Spieler "
-                             + "und füllt die Ersatzbank.";
+        _autoBtn.TooltipText = "Besetzt jeden Platz der aktuellen Formation mit dem stärksten "
+                             + "verfügbaren Spieler und füllt die Ersatzbank.";
         _autoBtn.Pressed += async () => await AutomatischAufstellen();
         hbox.AddChild(_autoBtn);
 
@@ -426,9 +487,21 @@ public partial class AufstellungView : Control
         return hbox;
     }
 
-    /// <summary>Hebt die gewählte Formation im Segmentschalter hervor.</summary>
-    private void ZeigeFormationsAuswahl() =>
-        _formationsSchalter.Auswahl = System.Array.IndexOf(FormationNames, _currentFormation);
+    /// <summary>Zeigt die Formation und - wenn sie einer Vorlage entspricht - diese in der Auswahl.</summary>
+    private void ZeigeFormationsAuswahl()
+    {
+        _formationsLabel.Text = string.IsNullOrEmpty(_currentFormation) ? "–" : _currentFormation;
+        _vorlagenAuswahl.Clear();
+        _vorlagenAuswahl.AddItem("Vorlage wählen …");
+        _vorlagenAuswahl.SetItemDisabled(0, true);
+        int gewaehlt = 0;
+        for (int i = 0; i < _vorlagen.Count; i++)
+        {
+            _vorlagenAuswahl.AddItem(_vorlagen[i].Name);
+            if (_vorlagen[i].Name == _currentFormation) gewaehlt = i + 1;
+        }
+        _vorlagenAuswahl.Select(gewaehlt);
+    }
 
     /// <summary>Zeigt an, ob die Mannschaft so antreten kann.</summary>
     private void AktualisiereWarnung(AufstellungModel? aufstellung)
@@ -503,27 +576,43 @@ public partial class AufstellungView : Control
         _bankContainer.AddThemeConstantOverride("v_separation", 8);
         spalte.AddChild(_bankContainer);
 
-        BuildSlots(_currentFormation);
         return spalte;
     }
 
-    private void BuildSlots(string formation)
+    /// <summary>
+    /// Ein Platz der Engine auf dem Rasen: das eigene Tor unten, die Seite von links nach rechts.
+    /// Leicht gestaucht, damit auch ein Platz an der Seitenlinie noch ganz auf dem Rasen steht.
+    /// </summary>
+    private static Vector2 AufRasen(Vector2 platz) => new(
+        FieldW * (0.5f + (platz.Y - 0.5f) * 0.95f),
+        FieldH * (0.93f - 0.9f * platz.X));
+
+    /// <summary>Die Umkehrung von <see cref="AufRasen"/>, auf die erlaubten Grenzen geklemmt.</summary>
+    private static Vector2 VomRasen(Vector2 mitte) => new(
+        Mathf.Clamp((0.93f - mitte.Y / FieldH) / 0.9f, (float)Platzierung.XMin, (float)Platzierung.XMax),
+        Mathf.Clamp(0.5f + (mitte.X / FieldW - 0.5f) / 0.95f, (float)Platzierung.YMin, (float)Platzierung.YMax));
+
+    private void BuildSlots()
     {
         foreach (var slot in _slots.Values)
             slot.QueueFree();
         _slots.Clear();
 
-        var alleSlots = Formations[formation].Select(f => f.Item1).ToList();
-        foreach (var (slotName, xRatio, yRatio) in Formations[formation])
+        var alleSlots = _plaetze.Keys.ToList();
+        foreach (var (slotName, platz) in _plaetze)
         {
             var slot = PositionSlot.Create(slotName, SlotBezeichnung.Fuer(slotName, alleSlots));
+            var mitte = AufRasen(platz);
             slot.Position = new Vector2(
-                FieldW * xRatio - SlotW * 0.5f,
-                FieldH * yRatio - SlotH * 0.5f);
+                Mathf.Clamp(mitte.X - SlotW * 0.5f, 0, FieldW - SlotW),
+                Mathf.Clamp(mitte.Y - SlotH * 0.5f, 0, FieldH - SlotH));
             slot.Size = new Vector2(SlotW, SlotH);
+            slot.Verschiebbar = SlotBezeichnung.Basis(slotName) != "TW";
 
             slot.PlayerDropped += OnPlayerDropped;
             slot.Pressed       += () => OnSlotPressed(slot);
+            slot.Zieht         += (s, m) => { var p = VomRasen(m); s.ZeigeVorschau(Platzierung.PositionAus(p.X, p.Y)); };
+            slot.Abgelegt      += OnPlatzVerschoben;
             _slots[slotName] = slot;
             _fieldControl.AddChild(slot);
         }
@@ -584,7 +673,7 @@ public partial class AufstellungView : Control
         var titel = FmTheme.MakeAbschnitt("Kader", 20);
         titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         titelzeile.AddChild(titel);
-        var hinweis = FmTheme.MakeLabel("Auf eine Position ziehen · Plakette anklicken zum Entfernen", 12, FmTheme.TextSecondary);
+        var hinweis = FmTheme.MakeLabel("Auf einen Platz ziehen · Plätze auf dem Rasen verschieben · Rechtsklick entfernt", 12, FmTheme.TextSecondary);
         hinweis.SizeFlagsVertical = SizeFlags.ShrinkEnd;
         titelzeile.AddChild(hinweis);
         kopf.AddChild(titelzeile);
@@ -711,6 +800,7 @@ public partial class AufstellungView : Control
 
         var spielerTask     = ApiClient.GetAsync<List<Spieler>>($"verein/{vereinId}/spieler");
         var aufstellungTask = ApiClient.GetAsync<AufstellungModel>($"aufstellung/{vereinId}");
+        var vorlagenTask    = ApiClient.GetAsync<List<FormationsVorlage>>("aufstellung/vorlagen");
 
         _alleSpieler = await spielerTask ?? new List<Spieler>();
 
@@ -720,18 +810,22 @@ public partial class AufstellungView : Control
         FuelleSpielerListe(_alleSpieler);
 
         var aufstellung = await aufstellungTask;
+        _vorlagen = await vorlagenTask ?? new List<FormationsVorlage>();
 
         // Auch ohne gespeicherte Aufstellung liefert der Server die Bankgröße des Wettbewerbs.
         BaueBank(aufstellung?.MaxErsatzbank ?? 0);
 
-        if (aufstellung?.Formation != null && Formations.ContainsKey(aufstellung.Formation))
+        if (aufstellung != null && aufstellung.Koordinaten.Count > 0)
         {
-            _currentFormation = aufstellung.Formation;
-            ZeigeFormationsAuswahl();
-            BuildSlots(_currentFormation);
+            UebernimmPlaetze(aufstellung);
             WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
                 aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit);
             AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
+        }
+        else
+        {
+            // Noch nie aufgestellt: die erste Vorlage als Ausgangspunkt.
+            SetzeVorlage(_vorlagen.FirstOrDefault());
         }
         if (aufstellung != null)
         {
@@ -797,7 +891,7 @@ public partial class AufstellungView : Control
 
         var vereinId = GameState.Instance.VereinId;
         var ergebnis = await ApiClient.PostAsync<object, AufstellungModel>(
-            $"aufstellung/{vereinId}/automatisch?formation={_currentFormation}", new { });
+            $"aufstellung/{vereinId}/automatisch", new { });
 
         _autoBtn.Disabled = false;
 
@@ -814,14 +908,9 @@ public partial class AufstellungView : Control
     /// <summary>Überträgt eine komplette Aufstellung vom Server auf die Oberfläche.</summary>
     private void WendeAufstellungAn(AufstellungModel aufstellung)
     {
-        if (aufstellung.Formation != null && Formations.ContainsKey(aufstellung.Formation))
-        {
-            _currentFormation = aufstellung.Formation;
-            ZeigeFormationsAuswahl();
-        }
-
-        // Neu aufbauen, damit alte Zuweisungen nicht stehen bleiben.
-        BuildSlots(_currentFormation);
+        // Neu aufbauen, damit alte Zuweisungen nicht stehen bleiben - und weil der Server die
+        // Plätze nach dem Verschieben neu benannt hat.
+        UebernimmPlaetze(aufstellung);
         foreach (var slot in _bankSlots)
             slot.Clear();
 
@@ -831,6 +920,29 @@ public partial class AufstellungView : Control
         AktualisiereListenPositionen();
         AktualisiereWarnung(aufstellung);
         AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
+    }
+
+    /// <summary>Übernimmt Plätze und Formation vom Server und baut die Plaketten neu.</summary>
+    private void UebernimmPlaetze(AufstellungModel aufstellung)
+    {
+        _plaetze.Clear();
+        foreach (var (slot, k) in aufstellung.Koordinaten)
+            _plaetze[slot] = new Vector2((float)k.X, (float)k.Y);
+        _currentFormation = aufstellung.Formation ?? "";
+        ZeigeFormationsAuswahl();
+        BuildSlots();
+    }
+
+    /// <summary>Setzt die Plätze einer Vorlage, ohne Spieler.</summary>
+    private void SetzeVorlage(FormationsVorlage? vorlage)
+    {
+        if (vorlage == null) return;
+        _plaetze.Clear();
+        foreach (var p in vorlage.Plaetze)
+            _plaetze[p.Slot] = new Vector2((float)p.X, (float)p.Y);
+        _currentFormation = vorlage.Name;
+        ZeigeFormationsAuswahl();
+        BuildSlots();
     }
 
     private void WendeBankAn(List<long>? ersatzbank)
@@ -874,32 +986,118 @@ public partial class AufstellungView : Control
 
     // ── Event-Handler ────────────────────────────────────────────────────────
 
-    private void OnFormationChanged(long index)
+    /// <summary>
+    /// Stellt die Plätze nach einer Vorlage auf. Wer schon aufgestellt ist, bleibt es: Jeder wandert
+    /// auf einen nahen freien Platz der neuen Formation, bevorzugt auf seine gelernte Position; der
+    /// Torwart bleibt im Tor. Nur nach Nähe zu gehen tauschte gern einen Innenverteidiger mit dem
+    /// Sechser, der zufällig näher an der neuen Innenverteidigerstelle stand.
+    /// </summary>
+    private void OnVorlageGewaehlt(long index)
     {
-        var newFormation = FormationNames[(int)index];
-        if (newFormation == _currentFormation) return;
+        if (index <= 0 || index > _vorlagen.Count) return;
+        var vorlage = _vorlagen[(int)index - 1];
 
-        // Bestehende Zuweisungen retten, sofern Slot noch existiert
-        var alteZuweisungen = _slots
+        var aufgestellt = _slots
             .Where(kv => kv.Value.SpielerId.HasValue)
-            .ToDictionary(kv => kv.Key, kv => (kv.Value.SpielerId!.Value, kv.Value.SpielerName,
-                kv.Value.Staerke, kv.Value.Grundstaerke, kv.Value.Eingespieltheit));
+            .Select(kv => (Slot: kv.Key, Platz: _plaetze[kv.Key], Spieler: kv.Value.SpielerId!.Value,
+                Name: kv.Value.SpielerName))
+            .ToList();
 
-        _currentFormation = newFormation;
-        ZeigeFormationsAuswahl();
-        BuildSlots(_currentFormation);
+        SetzeVorlage(vorlage);
 
-        foreach (var (slotName, (spielerId, name, staerke, grundstaerke, eingespieltheit)) in alteZuweisungen)
+        // Gierig: das jeweils beste Paar aus Spieler und freiem Platz zuerst - nah und, wenn
+        // möglich, auf seiner gelernten Position.
+        const float FremdePosition = 0.2f;
+        var frei = new HashSet<string>(_plaetze.Keys);
+        var paare = new List<(float Abstand, int Spieler, string Platz)>();
+        for (int i = 0; i < aufgestellt.Count; i++)
         {
-            if (_slots.TryGetValue(slotName, out var slot))
-                slot.Assign(spielerId, name, staerke, grundstaerke, eingespieltheit);
+            bool torwart = SlotBezeichnung.Basis(aufgestellt[i].Slot) == "TW";
+            var gelernt = _alleSpieler.Find(sp => sp.Id == aufgestellt[i].Spieler)?.Position;
+            foreach (var (slot, platz) in _plaetze)
+            {
+                if ((SlotBezeichnung.Basis(slot) == "TW") != torwart) continue;
+                float kosten = aufgestellt[i].Platz.DistanceTo(platz)
+                             + (SlotBezeichnung.Basis(slot) == gelernt ? 0 : FremdePosition);
+                paare.Add((kosten, i, slot));
+            }
+        }
+        var kostenVon = paare.ToDictionary(p => (p.Spieler, p.Platz), p => p.Abstand);
+        var zuteilung = new Dictionary<int, string>();
+        foreach (var (_, i, slot) in paare.OrderBy(p => p.Abstand))
+        {
+            if (zuteilung.ContainsKey(i) || !frei.Contains(slot)) continue;
+            zuteilung[i] = slot;
+            frei.Remove(slot);
         }
 
+        // Gierig bleibt für den Letzten oft nur ein Platz am anderen Ende - der Linksverteidiger
+        // landete so im Sturm. Darum nachbessern: Zwei tauschen, solange sie zusammen besser stehen.
+        float Kosten(int spieler, string platz) =>
+            kostenVon.TryGetValue((spieler, platz), out var k) ? k : float.MaxValue;
+        bool besser = true;
+        while (besser)
+        {
+            besser = false;
+            var spieler = zuteilung.Keys.ToList();
+            foreach (var a in spieler)
+            foreach (var b in spieler)
+            {
+                if (a >= b) continue;
+                string pa = zuteilung[a], pb = zuteilung[b];
+                if (Kosten(a, pb) + Kosten(b, pa) < Kosten(a, pa) + Kosten(b, pb) - 1e-4f)
+                {
+                    zuteilung[a] = pb;
+                    zuteilung[b] = pa;
+                    besser = true;
+                }
+            }
+        }
+        foreach (var (i, slot) in zuteilung)
+            _slots[slot].Assign(aufgestellt[i].Spieler, aufgestellt[i].Name);
+
         AktualisiereListenPositionen();
-        // Auch der Formationswechsel muss uebernommen werden - vorher ging das nur
-        // ueber den inzwischen entfallenen Speichern-Knopf.
         _ = UebernehmeAenderung();
-        _statusLabel.Text = $"Formation: {_currentFormation}";
+        _statusLabel.Text = $"Vorlage {vorlage.Name}";
+    }
+
+    /// <summary>
+    /// Für den Vorschaumodus: zieht eine Plakette mit echten Mausereignissen an eine Stelle - so
+    /// lässt sich das Verschieben ohne Hand an der Maus prüfen.
+    /// </summary>
+    internal async System.Threading.Tasks.Task VorschauZiehen(string slot, Vector2 ziel)
+    {
+        if (!_slots.TryGetValue(slot, out var plakette)) { GD.PrintErr($"[Vorschau] Platz {slot} fehlt."); return; }
+        var start = plakette.GetGlobalRect().GetCenter();
+        var ende = _fieldControl.GetGlobalTransform() * AufRasen(ziel);
+        var vp = GetViewport();
+        vp.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true,
+            Position = start, GlobalPosition = start });
+        for (int i = 1; i <= 12; i++)
+        {
+            var p = start.Lerp(ende, i / 12f);
+            vp.PushInput(new InputEventMouseMotion { Position = p, GlobalPosition = p,
+                ButtonMask = MouseButtonMask.Left });
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        vp.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false,
+            Position = ende, GlobalPosition = ende });
+    }
+
+    /// <summary>Für den Vorschaumodus: wählt eine Vorlage, als hätte der Nutzer sie ausgesucht.</summary>
+    internal void VorschauVorlage(string name)
+    {
+        int index = _vorlagen.FindIndex(v => v.Name == name);
+        if (index < 0) { GD.PrintErr($"[Vorschau] Vorlage {name} fehlt."); return; }
+        OnVorlageGewaehlt(index + 1);
+    }
+
+    /// <summary>Ein Platz wurde verschoben: neue Stelle merken und übernehmen.</summary>
+    private void OnPlatzVerschoben(PositionSlot slot)
+    {
+        var mitte = slot.Position + slot.Size / 2;
+        _plaetze[slot.SlotName] = VomRasen(mitte);
+        _ = UebernehmeAenderung();
     }
 
     private void OnPlayerDropped(PositionSlot targetSlot, long spielerId, string spielerName)
@@ -949,6 +1147,8 @@ public partial class AufstellungView : Control
         {
             VereinId  = vereinId,
             Formation = _currentFormation,
+            Koordinaten = _plaetze.ToDictionary(kv => kv.Key,
+                kv => new PlatzKoordinate { X = kv.Value.X, Y = kv.Value.Y }),
             Positionen = _slots
                 .Where(kv => kv.Value.SpielerId.HasValue)
                 .ToDictionary(kv => kv.Key, kv => kv.Value.SpielerId!.Value),
@@ -964,17 +1164,8 @@ public partial class AufstellungView : Control
 
         if (result != null)
         {
-            AktualisiereWarnung(result);
-            AktualisiereSaerkeLabel(result.Gesamtstaerke);
-            foreach (var (slotName, staerke) in result.SlotStaerken)
-            {
-                if (_slots.TryGetValue(slotName, out var slot) && slot.SpielerId.HasValue)
-                {
-                    result.SlotGrundstaerken.TryGetValue(slotName, out var grundstaerke);
-                    result.SlotEingespieltheit.TryGetValue(slotName, out var eingespieltheit);
-                    slot.UpdateStaerke(staerke, grundstaerke, eingespieltheit);
-                }
-            }
+            // Der Server hat die Plätze aus ihrer Stelle neu benannt - also alles von ihm übernehmen.
+            WendeAufstellungAn(result);
         }
         else
         {

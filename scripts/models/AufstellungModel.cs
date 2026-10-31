@@ -8,6 +8,12 @@ public class AufstellungModel
     public long VereinId { get; set; }
     public string Formation { get; set; } = "4-4-2";
     public Dictionary<string, long> Positionen { get; set; } = new();
+
+    /// <summary>
+    /// Wo jeder Platz auf dem Rasen liegt - alle elf, auch unbesetzte. Der Server benennt die
+    /// Plätze daraus neu; Position und Formation folgen aus der Stelle.
+    /// </summary>
+    public Dictionary<string, PlatzKoordinate> Koordinaten { get; set; } = new();
     /// <summary>
     /// Durchschnittliche Stärke über alle Positionen der Formation – unbesetzte zählen 0.
     /// </summary>
