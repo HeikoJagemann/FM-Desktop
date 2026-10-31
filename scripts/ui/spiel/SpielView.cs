@@ -52,8 +52,6 @@ public partial class SpielView : Control
     private Wappen _heimWappen = null!;
     private Wappen _gastWappen = null!;
 
-    /// <summary>Die Tempo-Knöpfe, je Faktor - der gewählte steht in Bernstein.</summary>
-    private readonly System.Collections.Generic.Dictionary<double, Button> _tempoKnoepfe = new();
     private Panel _pausenschild = null!;
     private Label _pausenText = null!;
     private VBoxContainer _heimSpalte = null!;
@@ -453,26 +451,6 @@ public partial class SpielView : Control
         return tafel;
     }
 
-    /// <summary>Hebt das gewählte Tempo hervor.</summary>
-    private void ZeigeTempo()
-    {
-        foreach (var (tempo, knopf) in _tempoKnoepfe)
-        {
-            bool aktiv = tempo == _spielfeldTempo;
-            var stil = FmTheme.Flaeche(aktiv ? FmTheme.Accent : new Color(0, 0, 0, 0), 7);
-            var schwebend = FmTheme.Flaeche(aktiv ? FmTheme.Accent : FmTheme.BgHover, 7);
-            foreach (var zustand in new[] { "normal", "pressed", "focus" })
-                knopf.AddThemeStyleboxOverride(zustand, stil);
-            knopf.AddThemeStyleboxOverride("hover", schwebend);
-            var farbe = aktiv ? FmTheme.AccentText : FmTheme.TextNav;
-            knopf.AddThemeColorOverride("font_color", farbe);
-            knopf.AddThemeColorOverride("font_pressed_color", farbe);
-            knopf.AddThemeColorOverride("font_hover_color", aktiv ? FmTheme.AccentText : FmTheme.TextPrimary);
-            knopf.AddThemeFontOverride("font", FmTheme.SchriftAnzeige);
-            knopf.AddThemeFontSizeOverride("font_size", 16);
-        }
-    }
-
     private void BenenneMannschaften(LiveSpiel spiel)
     {
         _heimNameLabel.Text = (spiel.HeimVerein ?? "").ToUpperInvariant();
@@ -602,32 +580,14 @@ public partial class SpielView : Control
         // viereinhalb. Wer gar nicht zusehen will, nimmt "Ueberspringen" in der Fußleiste.
         // Als Segmentschalter wie die Formation in der Aufstellung: Das gewählte Tempo ist auf
         // einen Blick zu erkennen. Vorher sahen alle drei Knöpfe gleich aus.
-        var segment = new PanelContainer { SizeFlagsVertical = SizeFlags.ShrinkCenter };
-        var segmentStil = FmTheme.Flaeche(FmTheme.BgPanel, 10, FmTheme.Border);
-        segmentStil.SetContentMarginAll(3);
-        segment.AddThemeStyleboxOverride("panel", segmentStil);
-        var segmente = new HBoxContainer();
-        segmente.AddThemeConstantOverride("separation", 3);
-        segment.AddChild(segmente);
-        foreach (double tempo in new[] { 1.0, 5.0, 20.0 })
-        {
-            var knopf = new Button
-            {
-                Text = $"{tempo:0}x",
-                CustomMinimumSize = new Vector2(48, 30),
-                FocusMode = FocusModeEnum.None,
-                TooltipText = tempo == 1.0 ? "Echtzeit" : $"{tempo:0}-fache Geschwindigkeit",
-            };
-            knopf.Pressed += () =>
-            {
-                _spielfeldTempo = tempo;
-                ZeigeTempo();
-            };
-            _tempoKnoepfe[tempo] = knopf;
-            segmente.AddChild(knopf);
-        }
+        double[] tempi = { 1.0, 5.0, 20.0 };
+        var segment = Segmentschalter.Neu(
+            System.Array.ConvertAll(tempi, t => $"{t:0}x"),
+            System.Array.IndexOf(tempi, _spielfeldTempo), new Vector2(48, 30));
+        for (int i = 0; i < tempi.Length; i++)
+            segment.Knopf(i).TooltipText = tempi[i] == 1.0 ? "Echtzeit" : $"{tempi[i]:0}-fache Geschwindigkeit";
+        segment.Gewaehlt += i => _spielfeldTempo = tempi[i];
         kopf.AddChild(segment);
-        ZeigeTempo();
 
         // Platz und Halbzeitschild liegen uebereinander: Waehrend der Pause steht das Schild
         // mitten auf dem Rasen, damit die Halbzeit nicht nur eine Zeile im Verlauf ist.
@@ -958,6 +918,9 @@ public partial class SpielView : Control
 
     // ── Auswechseln ──────────────────────────────────────────────────────────
 
+    /// <summary>Öffnet den Wechseldialog - auch für den Vorschau-Modus.</summary>
+    internal void OeffneWechsel() => OnWechselnPressed();
+
     private void OnWechselnPressed()
     {
         if (_abgepfiffen || _spiel == null) return;
@@ -1094,123 +1057,11 @@ public partial class SpielView : Control
         noten.AddThemeConstantOverride("separation", 18);
         inhalt.AddChild(noten);
 
-        noten.AddChild(BaueNotenSpalte(bericht.HeimVerein ?? "Heim", bericht.HeimAufstellung,
+        noten.AddChild(Notenliste.Spalte(bericht.HeimVerein ?? "Heim", bericht.HeimAufstellung,
             bericht.HeimVereinId == _spiel?.EigenerVereinId));
-        noten.AddChild(BaueNotenSpalte(bericht.GastVerein ?? "Gast", bericht.GastAufstellung,
+        noten.AddChild(Notenliste.Spalte(bericht.GastVerein ?? "Gast", bericht.GastAufstellung,
             bericht.GastVereinId == _spiel?.EigenerVereinId));
     }
-
-    private static Control BaueNotenSpalte(string verein, List<AufstellungsSpieler> spieler,
-                                           bool eigener)
-    {
-        var panel = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(14));
-
-        var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 16, 12);
-        panel.AddChild(margin);
-
-        var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 6);
-        margin.AddChild(vbox);
-
-        var kopf = new HBoxContainer();
-        kopf.AddThemeConstantOverride("separation", 10);
-        kopf.AddChild(Wappen.Neu(verein, 32, eigener ? FmTheme.Accent : FmTheme.BorderStark));
-        var name = FmTheme.MakeAbschnitt(verein, 18);
-        name.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-        kopf.AddChild(name);
-        vbox.AddChild(kopf);
-
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        vbox.AddChild(sep);
-
-        foreach (var s in spieler)
-        {
-            vbox.AddChild(BaueNotenZeile(s));
-        }
-        return panel;
-    }
-
-    private static Control BaueNotenZeile(AufstellungsSpieler s)
-    {
-        var zeile = new HBoxContainer();
-        zeile.AddThemeConstantOverride("separation", 8);
-
-        var slot = FmTheme.MakeLabel(s.Slot, 11, FmTheme.TextSecondary);
-        slot.CustomMinimumSize = new Vector2(44, 0);
-        zeile.AddChild(slot);
-
-        var name = FmTheme.MakeLabel(s.Name, 12,
-            s.Startelf ? FmTheme.TextPrimary : FmTheme.TextSecondary);
-        name.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        zeile.AddChild(name);
-
-        // Tore, Vorlagen und Karten als Symbole - eine Zahlenspalte je Kategorie wäre in einer
-        // Notenübersicht mehr Tabelle als Information.
-        var marken = Marken(s);
-        marken.CustomMinimumSize = new Vector2(70, 0);
-        zeile.AddChild(marken);
-
-        var einsatz = FmTheme.MakeLabel(EinsatzText(s), 11, FmTheme.TextSecondary,
-            HorizontalAlignment.Right);
-        einsatz.CustomMinimumSize = new Vector2(62, 0);
-        einsatz.TooltipText = "Einsatzzeit";
-        zeile.AddChild(einsatz);
-
-        var note = FmTheme.MakeLabel(NoteText(s.Note), 14, NotenFarbe(s.Note),
-            HorizontalAlignment.Right);
-        note.CustomMinimumSize = new Vector2(38, 0);
-        note.TooltipText = "Note von 1 bis 10 - höher ist besser, 6 ist ein durchschnittlicher Auftritt.";
-        zeile.AddChild(note);
-
-        return zeile;
-    }
-
-    /// <summary>Tore, Vorlagen und Karten als kleine Zeichen - gezeichnet, nicht als Emoji.</summary>
-    private static Control Marken(AufstellungsSpieler s)
-    {
-        var reihe = new HBoxContainer { MouseFilter = MouseFilterEnum.Pass };
-        reihe.AddThemeConstantOverride("separation", 2);
-        for (int i = 0; i < s.Tore; i++)        reihe.AddChild(Symbol.Neu(Symbol.Art.Ball, FmTheme.TextPrimary, 16));
-        for (int i = 0; i < s.Vorlagen; i++)
-        {
-            var vorlage = FmTheme.MakeLabel("V", 11, FmTheme.TextSecondary);
-            vorlage.AddThemeFontOverride("font", FmTheme.SchriftUi(700));
-            reihe.AddChild(vorlage);
-        }
-        for (int i = 0; i < s.GelbeKarten; i++) reihe.AddChild(Symbol.Neu(Symbol.Art.Gelb, FmTheme.TextPrimary, 16));
-        for (int i = 0; i < s.RoteKarten; i++)  reihe.AddChild(Symbol.Neu(Symbol.Art.Rot, FmTheme.TextPrimary, 16));
-
-        var teile = new List<string>();
-        if (s.Tore > 0) teile.Add(s.Tore == 1 ? "1 Tor" : $"{s.Tore} Tore");
-        if (s.Vorlagen > 0) teile.Add(s.Vorlagen == 1 ? "1 Vorlage" : $"{s.Vorlagen} Vorlagen");
-        if (s.GelbeKarten > 0) teile.Add("Gelbe Karte");
-        if (s.RoteKarten > 0) teile.Add("Rote Karte");
-        reihe.TooltipText = string.Join(", ", teile);
-        return reihe;
-    }
-
-    /// <summary>Einsatzzeit als Spanne; wer durchspielt, bekommt nur die Dauer.</summary>
-    private static string EinsatzText(AufstellungsSpieler s)
-    {
-        int bis = s.BisMinute ?? Spielminuten;
-        if (s.VonMinute == 0 && s.BisMinute == null) return "90'";
-        return $"{s.VonMinute}'–{bis}'";
-    }
-
-    private static string NoteText(double note) =>
-        note.ToString("0.0", CultureInfo.GetCultureInfo("de-DE"));
-
-    /// <summary>Die Note läuft von 1 bis 10, wobei 6 ein durchschnittlicher Auftritt ist.</summary>
-    private static Color NotenFarbe(double note) => note switch
-    {
-        >= 7.5 => FmTheme.Success,
-        >= 6.5 => FmTheme.Gold,
-        >= 5.0 => FmTheme.TextPrimary,
-        _      => FmTheme.Danger,
-    };
 
     // ── Protokoll ────────────────────────────────────────────────────────────
 

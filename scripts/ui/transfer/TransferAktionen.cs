@@ -18,11 +18,11 @@ public static class TransferAktionen
     public static void Zeige(Control caller, TransferSpieler spieler, bool fensterOffen, Action<string> meldung)
     {
         var menu = new PopupMenu();
-        menu.AddItem($"💶  Angebot für {spieler.Name} abgeben …", 0);
+        menu.AddItem($"Angebot für {spieler.Name} abgeben …", 0);
         menu.SetItemDisabled(0, !fensterOffen);
         if (!fensterOffen) menu.SetItemTooltip(0, "Das Transferfenster ist geschlossen.");
-        menu.AddItem("🔭  Gezielt beobachten lassen …", 1);
-        menu.AddItem($"📋  Scoutbericht ({spieler.Kenntnis} %)", 2);
+        menu.AddItem("Gezielt beobachten lassen …", 1);
+        menu.AddItem($"Scoutbericht ({spieler.Kenntnis} %)", 2);
 
         caller.AddChild(menu);
         menu.IdPressed += id =>

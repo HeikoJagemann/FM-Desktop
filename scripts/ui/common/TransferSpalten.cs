@@ -17,7 +17,8 @@ public static class TransferSpalten
     public static GridSpalte<TransferSpieler> Name => new()
     {
         Titel = "Name", Breite = 150, Expand = true, ExpandGewicht = 3,
-        Text       = s => s.AufTransferliste ? $"{s.Name}  🏷" : s.Name,
+        Text       = s => s.AufTransferliste ? $"{s.Name}  ·  gelistet" : s.Name,
+        Farbe      = s => s.AufTransferliste ? FmTheme.Gold : FmTheme.TextPrimary,
         Tooltip    = s => s.AufTransferliste ? "Steht auf der Transferliste." : "Steht nicht zum Verkauf - abwerben.",
         Sortierung = s => s.Name,
     };

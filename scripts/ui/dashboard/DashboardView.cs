@@ -233,10 +233,7 @@ public partial class DashboardView : Control
             var zeile = new HBoxContainer();
             zeile.AddThemeConstantOverride("separation", 10);
 
-            var symbol = FmTheme.MakeLabel(m.Symbol, 16, FmTheme.TextPrimary);
-            symbol.CustomMinimumSize = new Vector2(24, 0);
-            symbol.SizeFlagsVertical = SizeFlags.ShrinkBegin;
-            zeile.AddChild(symbol);
+            zeile.AddChild(Rubrikschild(m.Rubrik));
 
             var text = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
             text.AddThemeConstantOverride("separation", 1);
@@ -331,6 +328,23 @@ public partial class DashboardView : Control
         var label = FmTheme.MakeLabel(text, 13, farbe);
         label.CustomMinimumSize = new Vector2(breite, 0);
         return label;
+    }
+
+    /// <summary>Kleines Schild mit der Rubrik einer Meldung - gleich breit, damit die Texte untereinander stehen.</summary>
+    private static Control Rubrikschild(string rubrik)
+    {
+        var schild = new PanelContainer
+        {
+            CustomMinimumSize = new Vector2(78, 0),
+            SizeFlagsVertical = SizeFlags.ShrinkBegin,
+        };
+        var stil = FmTheme.Flaeche(FmTheme.BgHover, 6);
+        stil.ContentMarginTop = stil.ContentMarginBottom = 2;
+        schild.AddThemeStyleboxOverride("panel", stil);
+        var text = FmTheme.MakeLabel(rubrik.ToUpperInvariant(), 10, FmTheme.TextNav, HorizontalAlignment.Center);
+        text.AddThemeFontOverride("font", FmTheme.SchriftUi(700));
+        schild.AddChild(text);
+        return schild;
     }
 
     private static string Zahl(double wert) => wert.ToString("0.0", Deutsch);

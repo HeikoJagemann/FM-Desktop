@@ -58,14 +58,6 @@ public class Ereignis
     public bool IstWochenstart => Art == "WOCHENSTART";
 
     public string ZeitText => $"{Datum:dd.MM.} {Uhrzeit:HH\\:mm}";
-
-    /// <summary>Symbol für die Toolbar - je Ereignisart eines.</summary>
-    public string Symbol => Art switch
-    {
-        "SPIEL"       => "⚽",
-        "WOCHENSTART" => "🗓",
-        _             => "•",
-    };
 }
 
 /// <summary>Ein Eintrag im Kalender: eine Partie oder ein Abschnitt der Saison.</summary>

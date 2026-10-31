@@ -17,6 +17,10 @@ public partial class Symbol : Control
         Abspielen, Zurueck, Zahnrad, Blitz, Haken, Warnung, Kreuz,
         // Spielereignisse - die Karten tragen ihre eigene Farbe.
         Ball, Gelb, Rot, GelbRot, Pause, Abpfiff,
+        // Auswechslung: wer kommt, wer geht, und beides zusammen.
+        Rein, Raus, Wechsel,
+        // Ausgewählt - ein gefüllter Punkt.
+        Punkt,
     }
 
     private static readonly Color KarteGelb = new("F5D33B");
@@ -55,6 +59,18 @@ public partial class Symbol : Control
         var stil = new StyleBoxFlat { BgColor = farbe };
         stil.SetCornerRadiusAll(Mathf.Max(1, Mathf.RoundToInt(s / 12f)));
         DrawStyleBox(stil, new Rect2(oben, new Vector2(s * 0.42f, s * 0.6f)));
+    }
+
+    /// <summary>Ein Pfeil von <paramref name="von"/> nach <paramref name="nach"/> mit offener Spitze.</summary>
+    private void Pfeil(Vector2 von, Vector2 nach, float strich, Color? farbe = null)
+    {
+        var f = farbe ?? _farbe;
+        var richtung = (nach - von).Normalized();
+        var quer = new Vector2(-richtung.Y, richtung.X);
+        float spitze = (nach - von).Length() * 0.38f;
+        DrawLine(von, nach, f, strich, true);
+        DrawPolyline(new[] { nach - richtung * spitze + quer * spitze * 0.8f, nach,
+                             nach - richtung * spitze - quer * spitze * 0.8f }, f, strich, true);
     }
 
     public override void _Draw()
@@ -114,6 +130,20 @@ public partial class Symbol : Control
                 break;
             case Art.Abpfiff:
                 DrawRect(new Rect2(P(6, 6), new Vector2(s * 0.5f, s * 0.5f)), _farbe);
+                break;
+            case Art.Rein:
+                Pfeil(P(12, 20), P(12, 4), strich);
+                break;
+            case Art.Raus:
+                Pfeil(P(12, 4), P(12, 20), strich);
+                break;
+            case Art.Wechsel:
+                // Links hinein, rechts hinaus - in den Farben der Seiten, nicht des Symbols.
+                Pfeil(P(8, 20), P(8, 4), strich, FmTheme.Success);
+                Pfeil(P(16, 4), P(16, 20), strich, FmTheme.Danger);
+                break;
+            case Art.Punkt:
+                DrawCircle(P(12, 12), s * 0.26f, _farbe);
                 break;
             case Art.Zahnrad:
                 for (int i = 0; i < 8; i++)

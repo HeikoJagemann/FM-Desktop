@@ -108,7 +108,7 @@ public partial class TransferView : Control
         _nurBezahlbar.TooltipText = "Blendet Spieler aus, deren Preis den Kontostand übersteigt.";
         zeile.AddChild(_nurBezahlbar);
 
-        var suchen = new Button { Text = "🔍  Suchen" };
+        var suchen = new Button { Text = "Suchen" };
         FmTheme.ApplyButton(suchen, FmTheme.BgPanel);
         suchen.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
         suchen.Pressed += async () => await Suche();

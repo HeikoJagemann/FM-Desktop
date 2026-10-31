@@ -314,7 +314,7 @@ public partial class AufstellungView : Control
     private const float SlotW  = PositionSlot.PlaketteBreite;
     private const float SlotH  = PositionSlot.PlaketteHoehe;
 
-    private readonly Dictionary<string, Button> _formationsKnoepfe = new();
+    private Segmentschalter _formationsSchalter = null!;
     private readonly Dictionary<string, Button> _filterKnoepfe = new();
     private string _filter = "Alle";
     private Control         _fieldControl = null!;
@@ -392,30 +392,12 @@ public partial class AufstellungView : Control
         hbox.AddChild(_statusLabel);
 
         // Formation als Segmentschalter: alle drei auf einen Blick, die gewählte in Bernstein.
-        var segment = new PanelContainer { SizeFlagsVertical = SizeFlags.ShrinkCenter };
-        var segmentStil = FmTheme.Flaeche(FmTheme.BgPanel, 12, FmTheme.Border);
-        segmentStil.SetContentMarginAll(4);
-        segment.AddThemeStyleboxOverride("panel", segmentStil);
-        var segmente = new HBoxContainer();
-        segmente.AddThemeConstantOverride("separation", 4);
-        segment.AddChild(segmente);
+        _formationsSchalter = Segmentschalter.Neu(FormationNames,
+            System.Array.IndexOf(FormationNames, _currentFormation), new Vector2(76, 36), 17);
         for (int i = 0; i < FormationNames.Length; i++)
-        {
-            var name = FormationNames[i];
-            var knopf = new Button
-            {
-                Text = name,
-                FocusMode = FocusModeEnum.None,
-                CustomMinimumSize = new Vector2(76, 36),
-                TooltipText = $"Formation {name}",
-            };
-            int index = i;
-            knopf.Pressed += () => OnFormationChanged(index);
-            _formationsKnoepfe[name] = knopf;
-            segmente.AddChild(knopf);
-        }
-        hbox.AddChild(segment);
-        ZeigeFormationsAuswahl();
+            _formationsSchalter.Knopf(i).TooltipText = $"Formation {FormationNames[i]}";
+        _formationsSchalter.Gewaehlt += index => OnFormationChanged(index);
+        hbox.AddChild(_formationsSchalter);
 
         _autoBtn = new Button
         {
@@ -445,24 +427,8 @@ public partial class AufstellungView : Control
     }
 
     /// <summary>Hebt die gewählte Formation im Segmentschalter hervor.</summary>
-    private void ZeigeFormationsAuswahl()
-    {
-        foreach (var (name, knopf) in _formationsKnoepfe)
-        {
-            bool aktiv = name == _currentFormation;
-            var stil = FmTheme.Flaeche(aktiv ? FmTheme.Accent : new Color(0, 0, 0, 0), 8);
-            var schwebend = FmTheme.Flaeche(aktiv ? FmTheme.Accent : FmTheme.BgHover, 8);
-            foreach (var zustand in new[] { "normal", "pressed", "focus" })
-                knopf.AddThemeStyleboxOverride(zustand, stil);
-            knopf.AddThemeStyleboxOverride("hover", schwebend);
-            var farbe = aktiv ? FmTheme.AccentText : FmTheme.TextNav;
-            knopf.AddThemeColorOverride("font_color", farbe);
-            knopf.AddThemeColorOverride("font_pressed_color", farbe);
-            knopf.AddThemeColorOverride("font_hover_color", aktiv ? FmTheme.AccentText : FmTheme.TextPrimary);
-            knopf.AddThemeFontOverride("font", FmTheme.SchriftAnzeige);
-            knopf.AddThemeFontSizeOverride("font_size", 17);
-        }
-    }
+    private void ZeigeFormationsAuswahl() =>
+        _formationsSchalter.Auswahl = System.Array.IndexOf(FormationNames, _currentFormation);
 
     /// <summary>Zeigt an, ob die Mannschaft so antreten kann.</summary>
     private void AktualisiereWarnung(AufstellungModel? aufstellung)

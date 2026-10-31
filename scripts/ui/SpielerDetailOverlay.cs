@@ -1,148 +1,82 @@
 #nullable enable
 using Godot;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using FMDesktop.Api;
 using FMDesktop.Models;
 
 namespace FMDesktop.UI;
 
-/// <summary>Modales Overlay mit allen Stammdaten, Fähigkeiten und Statistiken eines Spielers.</summary>
-public partial class SpielerDetailOverlay : Control
+/// <summary>
+/// Alles über einen eigenen Spieler: oben die Kennzahlen als Tafeln, darunter links die
+/// Fähigkeiten, rechts Positionen, Torwartwerte und Stammdaten.
+///
+/// <para>Zwei Spalten statt einer langen Liste - so passt der Spieler ohne Bildlauf auf den
+/// Schirm, und die Fähigkeiten stehen neben dem, was sie bewirken.</para>
+/// </summary>
+public partial class SpielerDetailOverlay : Overlaykarte
 {
-    private static SpielerDetailOverlay? _aktuelleInstanz;
-
     /// Über wie viele Spieltage die Veränderung neben den Fähigkeiten zusammengefasst wird.
     private const int Spieltagsfenster = 10;
 
     private Spieler _s = null!;
 
-    /// Entwicklung der letzten Spieltage; wird vor dem Aufbau der Karte nachgeladen.
+    /// Entwicklung der letzten Spieltage; wird nachgeladen, die Karte steht vorher schon.
     private SpielerVerlauf? _verlauf;
+    private VBoxContainer _inhalt = null!;
+
+    public SpielerDetailOverlay() : base("", 960) { }
+
+    private SpielerDetailOverlay(Spieler spieler) : base(spieler.Name, 960)
+    {
+        _s = spieler;
+    }
 
     public static void Zeige(Node caller, Spieler spieler)
     {
-        if (_aktuelleInstanz != null && IsInstanceValid(_aktuelleInstanz))
-        {
-            if (_aktuelleInstanz._s.Id == spieler.Id) return; // schon offen für diesen Spieler
-            _aktuelleInstanz.QueueFree();
-        }
-
-        var overlay = new SpielerDetailOverlay { _s = spieler };
-        _aktuelleInstanz = overlay;
-        var scene = caller.GetTree().CurrentScene ?? caller.GetTree().Root;
-        scene.AddChild(overlay);
+        Oeffne(caller, new SpielerDetailOverlay(spieler), spieler.Id.ToString());
     }
 
-    public override void _ExitTree()
+    protected override void BaueInhalt(VBoxContainer inhalt)
     {
-        if (_aktuelleInstanz == this) _aktuelleInstanz = null;
+        string vertrag = _s.Gehalt > 0 ? $"  ·  Vertrag bis {_s.VertragBis + 1}" : "";
+        SetzeUntertitel($"{KaderLabel(_s.Kader)}  ·  {_s.Nationalitaet}  ·  {_s.Alter} Jahre{vertrag}");
+
+        _inhalt = new VBoxContainer();
+        _inhalt.AddThemeConstantOverride("separation", 16);
+        _inhalt.AddChild(FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary));
+        inhalt.AddChild(_inhalt);
+        _ = Lade();
     }
 
-    public override async void _Ready()
+    private async Task Lade()
     {
-        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        MouseFilter = MouseFilterEnum.Stop;
-
-        var bg = new ColorRect { Color = new Color(0, 0, 0, 0.55f) };
-        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        bg.MouseFilter = MouseFilterEnum.Stop;
-        bg.GuiInput += OnHintergrundInput;
-        AddChild(bg);
-
-        var center = new CenterContainer();
-        center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        center.MouseFilter = MouseFilterEnum.Ignore;
-        AddChild(center);
-
-        // Der Verlauf wird nachgeladen, bevor die Karte entsteht - der abgedunkelte Hintergrund
-        // steht dabei schon, das Fenster erscheint also nicht spuerbar spaeter.
         _verlauf = await ApiClient.GetAsync<SpielerVerlauf>(
             $"training/spieler/{_s.Id}/verlauf?spieltage={Spieltagsfenster}");
+        if (!IsInstanceValid(this)) return;
+        foreach (Node kind in _inhalt.GetChildren()) kind.QueueFree();
 
-        if (!IsInstanceValid(this) || !IsInstanceValid(center)) return;
-        center.AddChild(BuildCard());
-    }
+        _inhalt.AddChild(Kennzahlen());
 
-    public override void _Input(InputEvent @event)
-    {
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
-        {
-            QueueFree();
-            GetViewport().SetInputAsHandled();
-        }
-    }
-
-    private void OnHintergrundInput(InputEvent ev)
-    {
-        if (ev is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
-            QueueFree();
-    }
-
-    private Control BuildCard()
-    {
-        var panel = new PanelContainer
-        {
-            CustomMinimumSize = new Vector2(620, 0),
-        };
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(10));
-
-        var outerMargin = new MarginContainer();
-        FmTheme.SetMargin(outerMargin, 22);
-        panel.AddChild(outerMargin);
-
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        outerMargin.AddChild(root);
-
-        root.AddChild(BuildHeader());
-
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        root.AddChild(sep);
-
+        // So hoch, wie das Fenster erlaubt - im Vollbild ohne Bildlauf, im kleinen Fenster mit.
         var scroll = new ScrollContainer
         {
-            CustomMinimumSize = new Vector2(0, 460),
-            SizeFlagsVertical = SizeFlags.ExpandFill,
+            CustomMinimumSize = new Vector2(0, Mathf.Clamp(GetViewportRect().Size.Y - 400, 280, 500)),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
         };
-        root.AddChild(scroll);
+        _inhalt.AddChild(scroll);
 
-        var inhalt = new VBoxContainer();
-        inhalt.AddThemeConstantOverride("separation", 14);
-        inhalt.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        scroll.AddChild(inhalt);
+        var spalten = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        spalten.AddThemeConstantOverride("separation", 16);
+        scroll.AddChild(spalten);
 
-        inhalt.AddChild(BuildStammdatenCard());
-        inhalt.AddChild(BuildStatistikenCard());
-        inhalt.AddChild(BuildFaehigkeitenCard());
-        if (_s.Position == "TW")
-            inhalt.AddChild(BuildTorwartCard());
+        spalten.AddChild(Faehigkeiten());
 
-        return panel;
-    }
-
-    private Control BuildHeader()
-    {
-        var hbox = new HBoxContainer();
-        hbox.AddThemeConstantOverride("separation", 12);
-
-        var titelBox = new VBoxContainer();
-        titelBox.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        titelBox.AddChild(FmTheme.MakeLabel(_s.Name, 20, FmTheme.TextPrimary));
-        titelBox.AddChild(FmTheme.MakeLabel(
-            $"{_s.Position}  •  {KaderLabel(_s.Kader)}  •  {_s.Nationalitaet}  •  {_s.Alter} Jahre",
-            13, FmTheme.TextSecondary));
-        hbox.AddChild(titelBox);
-
-        var close = new Button { Text = "✕", CustomMinimumSize = new Vector2(32, 32) };
-        FmTheme.ApplyButton(close, FmTheme.BgPanel);
-        close.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
-        close.Pressed += QueueFree;
-        hbox.AddChild(close);
-
-        return hbox;
+        var rechts = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        rechts.AddThemeConstantOverride("separation", 16);
+        rechts.AddChild(Positionen());
+        if (_s.IstTorwart) rechts.AddChild(Torwart());
+        rechts.AddChild(Stammdaten());
+        spalten.AddChild(rechts);
     }
 
     private static string KaderLabel(string kader) => kader switch
@@ -153,92 +87,285 @@ public partial class SpielerDetailOverlay : Control
         _         => kader,
     };
 
-    private Control BuildStammdatenCard() => BaueCard("📋  Stammdaten", new VBoxContainer().Also(v =>
+    // ── Kennzahlen ───────────────────────────────────────────────────────────
+
+    /// <summary>Position, Stärke, Talent, Potenzial, Frische und Marktwert als Reihe von Tafeln.</summary>
+    private Control Kennzahlen()
     {
+        var reihe = new HBoxContainer();
+        reihe.AddThemeConstantOverride("separation", 10);
+
+        reihe.AddChild(Positionstafel());
+        reihe.AddChild(Tafel("Stärke", _s.BestPositionStaerke.ToString(), FmTheme.TextPrimary,
+            Veraenderung(_verlauf?.StaerkeDifferenz ?? 0), _s.BestPositionErklaerung));
+        reihe.AddChild(Tafel("Talent", _s.Talent.ToString(), FmTheme.TextPrimary, _s.TalentSterneText));
+        // Das Potenzial nur als Spanne - den exakten Wert liefert das Backend nicht aus, kein
+        // Manager kennt das Maximum eines Spielers auf den Punkt.
+        reihe.AddChild(Tafel("Potenzial", _s.PotenzialText, FmTheme.TextPrimary, _s.PotenzialSterneText,
+            "Geschätzt - wie weit er sich noch entwickeln kann."));
+        reihe.AddChild(Tafel("Frische", _s.Frische.ToString(), FmTheme.FrischeFarbe(_s.Frische), "",
+            "Startwert der Kondition im nächsten Spiel."));
+        reihe.AddChild(Tafel("Marktwert", FmTheme.Geld(_s.Wert), FmTheme.TextPrimary, ""));
+        return reihe;
+    }
+
+    /// <summary>Die Hauptposition als Chip in der Farbe ihres Mannschaftsteils.</summary>
+    private Control Positionstafel()
+    {
+        var gruppe = _s.Gruppe;
+        var tafel = new PanelContainer { CustomMinimumSize = new Vector2(92, 0) };
+        var stil = FmTheme.Flaeche(FmTheme.GruppeChip(gruppe), 10, FmTheme.GruppeFarbe(gruppe).Darkened(0.35f));
+        stil.SetContentMarginAll(10);
+        tafel.AddThemeStyleboxOverride("panel", stil);
+
+        var box = new VBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        box.AddThemeConstantOverride("separation", 0);
+        box.AddChild(FmTheme.MakeLabel("POSITION", 10, FmTheme.TextFuerGruppe(gruppe), HorizontalAlignment.Center));
+        box.AddChild(FmTheme.MakeZahl(_s.HauptPosition, 30, FmTheme.TextFuerGruppe(gruppe)).Also(l =>
+            l.HorizontalAlignment = HorizontalAlignment.Center));
+        tafel.AddChild(box);
+        return tafel;
+    }
+
+    private static Control Tafel(string titel, string wert, Color farbe, string zusatz, string tooltip = "")
+    {
+        var tafel = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, TooltipText = tooltip };
+        var stil = FmTheme.Flaeche(FmTheme.BgDark, 10, FmTheme.Border);
+        stil.ContentMarginLeft = stil.ContentMarginRight = 14;
+        stil.ContentMarginTop = stil.ContentMarginBottom = 10;
+        tafel.AddThemeStyleboxOverride("panel", stil);
+
+        var box = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        box.AddThemeConstantOverride("separation", 0);
+        box.AddChild(FmTheme.MakeLabel(titel.ToUpperInvariant(), 10, FmTheme.TextSecondary));
+
+        var zeile = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        zeile.AddThemeConstantOverride("separation", 8);
+        zeile.AddChild(FmTheme.MakeZahl(wert, 30, farbe));
+        if (zusatz != "")
+        {
+            var z = FmTheme.MakeLabel(zusatz, 12, ZusatzFarbe(zusatz));
+            z.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+            zeile.AddChild(z);
+        }
+        box.AddChild(zeile);
+        tafel.AddChild(box);
+        return tafel;
+    }
+
+    /// <summary>Veränderungen grün oder rot, Sterne in Gold.</summary>
+    private static Color ZusatzFarbe(string zusatz) =>
+        zusatz.StartsWith('+') ? FmTheme.Success
+      : zusatz.StartsWith('−') ? FmTheme.Danger
+      : FmTheme.Gold;
+
+    /// <summary>"+3", "−2" oder leer.</summary>
+    private static string Veraenderung(int differenz) =>
+        differenz > 0 ? $"+{differenz}" : differenz < 0 ? $"−{-differenz}" : "";
+
+    // ── Fähigkeiten ──────────────────────────────────────────────────────────
+
+    private Control Faehigkeiten()
+    {
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 7);
+        v.AddChild(Legende());
+        v.AddChild(Fertigkeit("Pass", _s.Pass, "PASS"));
+        v.AddChild(Fertigkeit("Ballkontrolle", _s.Ballkontrolle, "BALLKONTROLLE"));
+        v.AddChild(Fertigkeit("Schusstechnik", _s.Schusstechnik, "SCHUSSTECHNIK"));
+        v.AddChild(Fertigkeit("Schussstärke", _s.Schussstaerke, "SCHUSSSTAERKE"));
+        v.AddChild(Fertigkeit("Dribbling", _s.Dribbling, "DRIBBLING"));
+        v.AddChild(Fertigkeit("Kopfball", _s.Kopfball, "KOPFBALL"));
+        v.AddChild(Fertigkeit("Zweikampf", _s.Zweikampf, "ZWEIKAMPF"));
+        v.AddChild(Fertigkeit("Stellungsspiel", _s.Stellungsspiel, "STELLUNGSSPIEL"));
+        v.AddChild(Fertigkeit("Entscheidungen", _s.Entscheidungen, "ENTSCHEIDUNGEN"));
+        v.AddChild(Fertigkeit("Führungsqualität", _s.Fuehrungsqualitaet, "FUEHRUNGSQUALITAET"));
+        v.AddChild(Fertigkeit("Disziplin", _s.Disziplin, "DISZIPLIN"));
+        v.AddChild(Fertigkeit("Schnelligkeit", _s.Schnelligkeit, "SCHNELLIGKEIT"));
+        v.AddChild(Fertigkeit("Ausdauer", _s.Ausdauer, "AUSDAUER"));
+        v.AddChild(AttributZeile("Linker Fuß", _s.LinkerFuss));
+        v.AddChild(AttributZeile("Rechter Fuß", _s.RechterFuss));
+        if (_verlauf != null && _verlauf.BisSpieltag > 0)
+        {
+            v.AddChild(FmTheme.MakeLabel($"Veränderungen seit dem {_verlauf.VonSpieltag}. Spieltag",
+                11, FmTheme.TextGedimmt));
+        }
+
+        var karte = Karte("Fähigkeiten", v);
+        karte.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        karte.SizeFlagsStretchRatio = 1.25f;
+        return karte;
+    }
+
+    private Control Torwart()
+    {
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 7);
+        v.AddChild(AttributZeile("Talent (TW)", _s.TalentTW));
+        v.AddChild(Fertigkeit("Strafraumbeherrschung", _s.Strafraumbeherrschung, "STRAFRAUMBEHERRSCHUNG"));
+        v.AddChild(Fertigkeit("Fangsicherheit", _s.Fangsicherheit, "FANGSICHERHEIT"));
+        v.AddChild(Fertigkeit("Reflexe", _s.Reflexe, "REFLEXE"));
+        return Karte("Torwart", v);
+    }
+
+    /// <summary>Was die Punkte vor den Fähigkeiten bedeuten.</summary>
+    private Control Legende()
+    {
+        var reihe = new HBoxContainer();
+        reihe.AddThemeConstantOverride("separation", 4);
+        reihe.AddChild(Symbol.Neu(Symbol.Art.Punkt, FmTheme.Accent, 14));
+        reihe.AddChild(FmTheme.MakeLabel($"entscheidend als {_s.HauptPosition}", 11, FmTheme.TextSecondary));
+        reihe.AddChild(new Control { CustomMinimumSize = new Vector2(10, 0) });
+        reihe.AddChild(Symbol.Neu(Symbol.Art.Punkt, FmTheme.TextSecondary, 14));
+        reihe.AddChild(FmTheme.MakeLabel("spielt mit", 11, FmTheme.TextSecondary));
+        return reihe;
+    }
+
+    /// <summary>Eine trainierbare Fähigkeit - mit Rolle für die Position und Veränderung.</summary>
+    private Control Fertigkeit(string name, int wert, string schluessel) =>
+        AttributZeile(name, wert, _verlauf?.DifferenzFuer(schluessel) ?? 0, _s.RolleVon(name));
+
+    /// <param name="differenz">
+    /// Veränderung über die letzten Spieltage. Ungleich 0 steht sie hinter dem Wert - so ist auf
+    /// einen Blick erkennbar, woran der Spieler zuletzt gewachsen ist.
+    /// </param>
+    private static Control AttributZeile(string label, int wert, int differenz = 0,
+                                         Attributrolle rolle = Attributrolle.Nebensaechlich)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 10);
+
+        // Primäre Fähigkeiten hervorheben, nebensächliche zurücknehmen: So ist auf einen Blick zu
+        // sehen, worauf es bei diesem Spieler ankommt.
+        row.AddChild(rolle == Attributrolle.Nebensaechlich
+            ? new Control { CustomMinimumSize = new Vector2(12, 12) }
+            : Symbol.Neu(Symbol.Art.Punkt,
+                rolle == Attributrolle.Primaer ? FmTheme.Accent : FmTheme.TextSecondary, 12));
+
+        var l = FmTheme.MakeLabel(label, 13, rolle switch
+        {
+            Attributrolle.Primaer   => FmTheme.TextPrimary,
+            Attributrolle.Sekundaer => FmTheme.TextNav,
+            _                       => FmTheme.TextGedimmt,
+        });
+        l.CustomMinimumSize = new Vector2(158, 0);
+        row.AddChild(l);
+
+        var bar = new ProgressBar
+        {
+            MinValue = 0, MaxValue = 100, Value = wert,
+            ShowPercentage = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ShrinkCenter,
+            CustomMinimumSize = new Vector2(0, 8),
+        };
+        bar.AddThemeStyleboxOverride("fill", FmTheme.Flaeche(FarbeFuerWert(wert), 4));
+        bar.AddThemeStyleboxOverride("background", FmTheme.Flaeche(FmTheme.BgHover, 4));
+        row.AddChild(bar);
+
+        var wertLabel = FmTheme.MakeZahl(wert.ToString(), 17, FmTheme.TextPrimary);
+        wertLabel.HorizontalAlignment = HorizontalAlignment.Right;
+        wertLabel.CustomMinimumSize = new Vector2(28, 0);
+        row.AddChild(wertLabel);
+
+        // Die Spalte bleibt auch ohne Veränderung stehen, damit die Werte nicht springen.
+        var trend = FmTheme.MakeZahl(Veraenderung(differenz), 15,
+            differenz > 0 ? FmTheme.Success : FmTheme.Danger);
+        trend.HorizontalAlignment = HorizontalAlignment.Right;
+        trend.CustomMinimumSize = new Vector2(30, 0);
+        row.AddChild(trend);
+
+        return row;
+    }
+
+    private static Color FarbeFuerWert(int wert) => wert switch
+    {
+        >= 80 => FmTheme.Gold,
+        >= 65 => FmTheme.Success,
+        >= 50 => FmTheme.TextNav,
+        _     => FmTheme.TextGedimmt,
+    };
+
+    // ── Positionen und Stammdaten ────────────────────────────────────────────
+
+    /// <summary>Die drei besten Positionen mit Stärke; ~ und ? zeigen, wie vertraut sie ihm sind.</summary>
+    private Control Positionen()
+    {
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 6);
+        if (_s.Top3Positionen is { Count: > 0 } positionen)
+        {
+            foreach (var p in positionen)
+            {
+                var zeile = new HBoxContainer { TooltipText = p.Erklaerung };
+                zeile.AddThemeConstantOverride("separation", 10);
+                var gruppe = PositionsgruppeHelfer.Von(p.Position);
+                var chip = FmTheme.MakeLabel(p.Position, 12, FmTheme.TextFuerGruppe(gruppe), HorizontalAlignment.Center);
+                chip.AddThemeFontOverride("font", FmTheme.SchriftUi(700));
+                chip.AddThemeStyleboxOverride("normal", FmTheme.Flaeche(FmTheme.GruppeChip(gruppe), 5));
+                chip.CustomMinimumSize = new Vector2(40, 22);
+                chip.VerticalAlignment = VerticalAlignment.Center;
+                chip.MouseFilter = MouseFilterEnum.Pass;
+                zeile.AddChild(chip);
+                var vertraut = FmTheme.MakeLabel(Vertrautheit(p.Zeichen), 13, FmTheme.TextSecondary);
+                vertraut.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+                vertraut.MouseFilter = MouseFilterEnum.Pass;
+                zeile.AddChild(vertraut);
+                var staerke = FmTheme.MakeZahl(p.Staerke.ToString(), 18, FmTheme.TextPrimary);
+                staerke.MouseFilter = MouseFilterEnum.Pass;
+                zeile.AddChild(staerke);
+                v.AddChild(zeile);
+            }
+        }
+        else
+        {
+            v.AddChild(InfoZeile(_s.Position, _s.Staerke.ToString()));
+        }
+        return Karte("Beste Positionen", v);
+    }
+
+    private static string Vertrautheit(string zeichen) => zeichen switch
+    {
+        "~" => "teilweise vertraut",
+        "?" => "ungewohnt",
+        _   => "vertraut",
+    };
+
+    private Control Stammdaten()
+    {
+        var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 6);
         v.AddChild(InfoZeile("Geburtsdatum", _s.Geburtsdatum.ToString("dd.MM.yyyy")));
         v.AddChild(InfoZeile("Nationalität", _s.Nationalitaet));
-        v.AddChild(InfoZeile("Marktwert", FmTheme.Geld(_s.Wert)));
         v.AddChild(InfoZeile("Kader", KaderLabel(_s.Kader)));
-        v.AddChild(InfoZeile("Beste Positionen", _s.Top3PositionenText));
+        v.AddChild(InfoZeile("Spiele in dieser Saison", _s.SpieleInSaison.ToString()));
         if (_s.Gehalt > 0)
         {
             v.AddChild(InfoZeile(FmTheme.GehaltTitel, FmTheme.Gehalt(_s.Gehalt)));
             v.AddChild(InfoZeile("Vertrag bis", $"Saison {_s.VertragBis}/{_s.VertragBis + 1}"));
         }
-    }));
+        if (!string.IsNullOrEmpty(_s.IndividualFokus))
+            v.AddChild(InfoZeile("Trainingsschwerpunkt", _s.IndividualFokus));
+        return Karte("Stammdaten", v);
+    }
 
-    private Control BuildStatistikenCard() => BaueCard("📊  Statistiken", new VBoxContainer().Also(v =>
-    {
-        v.AddThemeConstantOverride("separation", 6);
-        // Frische steht unten als eigene Zeile - sie zählt hier bewusst nicht mit, das ist die
-        // statische Stärke außerhalb eines laufenden Spiels.
-        v.AddChild(AttributZeile("Gesamtstärke", _s.BestPositionStaerke,
-                                 differenz: _verlauf?.StaerkeDifferenz ?? 0,
-                                 tooltip: _s.BestPositionErklaerung));
-        v.AddChild(AttributZeile("Talent", _s.Talent));
-        // Das Potenzial wird bewusst nur als Spanne gezeigt - den exakten Wert liefert das
-        // Backend nicht aus, kein Manager kennt das Maximum eines Spielers auf den Punkt.
-        v.AddChild(InfoZeile("Potenzial (geschätzt)", $"{_s.PotenzialText}   {_s.PotenzialSterneText}"));
-        v.AddChild(AttributZeile("Frische", _s.Frische));
-        v.AddChild(InfoZeile("Spiele in dieser Saison", _s.SpieleInSaison.ToString()));
-        if (_verlauf != null && _verlauf.BisSpieltag > 0)
-        {
-            v.AddChild(InfoZeile("Pfeile zeigen",
-                $"Veränderung ab Spieltag {_verlauf.VonSpieltag}"));
-        }
-    }));
+    // ── Bausteine ────────────────────────────────────────────────────────────
 
-    private Control BuildFaehigkeitenCard() => BaueCard("⚙️  Fähigkeiten", new VBoxContainer().Also(v =>
-    {
-        v.AddThemeConstantOverride("separation", 6);
-        v.AddChild(FmTheme.MakeLabel(
-            $"●  primär für {_s.HauptPosition}      ○  sekundär", 11, FmTheme.TextSecondary));
-        v.AddChild(AttributZeile("Pass", _s.Pass, differenz: Diff("PASS"), rolle: _s.RolleVon("Pass")));
-        v.AddChild(AttributZeile("Ballkontrolle", _s.Ballkontrolle, differenz: Diff("BALLKONTROLLE"), rolle: _s.RolleVon("Ballkontrolle")));
-        v.AddChild(AttributZeile("Schusstechnik", _s.Schusstechnik, differenz: Diff("SCHUSSTECHNIK"), rolle: _s.RolleVon("Schusstechnik")));
-        v.AddChild(AttributZeile("Schussstärke", _s.Schussstaerke, differenz: Diff("SCHUSSSTAERKE"), rolle: _s.RolleVon("Schussstärke")));
-        v.AddChild(AttributZeile("Dribbling", _s.Dribbling, differenz: Diff("DRIBBLING"), rolle: _s.RolleVon("Dribbling")));
-        v.AddChild(AttributZeile("Kopfball", _s.Kopfball, differenz: Diff("KOPFBALL"), rolle: _s.RolleVon("Kopfball")));
-        v.AddChild(AttributZeile("Zweikampf", _s.Zweikampf, differenz: Diff("ZWEIKAMPF"), rolle: _s.RolleVon("Zweikampf")));
-        v.AddChild(AttributZeile("Stellungsspiel", _s.Stellungsspiel, differenz: Diff("STELLUNGSSPIEL"), rolle: _s.RolleVon("Stellungsspiel")));
-        v.AddChild(AttributZeile("Entscheidungen", _s.Entscheidungen, differenz: Diff("ENTSCHEIDUNGEN"), rolle: _s.RolleVon("Entscheidungen")));
-        v.AddChild(AttributZeile("Führungsqualität", _s.Fuehrungsqualitaet, differenz: Diff("FUEHRUNGSQUALITAET"), rolle: _s.RolleVon("Führungsqualität")));
-        v.AddChild(AttributZeile("Disziplin", _s.Disziplin, differenz: Diff("DISZIPLIN"), rolle: _s.RolleVon("Disziplin")));
-        v.AddChild(AttributZeile("Linker Fuß", _s.LinkerFuss));
-        v.AddChild(AttributZeile("Rechter Fuß", _s.RechterFuss));
-        v.AddChild(AttributZeile("Schnelligkeit", _s.Schnelligkeit, differenz: Diff("SCHNELLIGKEIT"), rolle: _s.RolleVon("Schnelligkeit")));
-        v.AddChild(AttributZeile("Ausdauer", _s.Ausdauer, differenz: Diff("AUSDAUER"), rolle: _s.RolleVon("Ausdauer")));
-    }));
-
-    private Control BuildTorwartCard() => BaueCard("🧤  Torwart", new VBoxContainer().Also(v =>
-    {
-        v.AddThemeConstantOverride("separation", 6);
-        v.AddChild(AttributZeile("Talent (TW)", _s.TalentTW));
-        v.AddChild(AttributZeile("Strafraumbeherrschung", _s.Strafraumbeherrschung, differenz: Diff("STRAFRAUMBEHERRSCHUNG"), rolle: _s.RolleVon("Strafraumbeherrschung")));
-        v.AddChild(AttributZeile("Fangsicherheit", _s.Fangsicherheit, differenz: Diff("FANGSICHERHEIT"), rolle: _s.RolleVon("Fangsicherheit")));
-        v.AddChild(AttributZeile("Reflexe", _s.Reflexe, differenz: Diff("REFLEXE"), rolle: _s.RolleVon("Reflexe")));
-    }));
-
-    private static Control BaueCard(string titel, Control inhalt)
+    private static PanelContainer Karte(string titel, Control inhalt)
     {
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
 
         var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 14);
+        FmTheme.SetMargin(margin, 16, 14);
         panel.AddChild(margin);
 
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 8);
+        vbox.AddThemeConstantOverride("separation", 10);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel(titel, 14, FmTheme.TextPrimary));
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        vbox.AddChild(sep);
+        vbox.AddChild(FmTheme.MakeAbschnitt(titel, 18));
         vbox.AddChild(inhalt);
-
         return panel;
     }
 
@@ -251,81 +378,6 @@ public partial class SpielerDetailOverlay : Control
         row.AddChild(FmTheme.MakeLabel(wert, 13, FmTheme.TextPrimary));
         return row;
     }
-
-    /// <summary>Veränderung einer Fähigkeit über das Auswertungsfenster, oder 0.</summary>
-    private int Diff(string attribut) => _verlauf?.DifferenzFuer(attribut) ?? 0;
-
-    /// <param name="differenz">
-    /// Veränderung über die letzten Spieltage. Ungleich 0 setzt Pfeil und Betrag hinter den Wert -
-    /// so ist auf einen Blick erkennbar, woran der Spieler zuletzt gewachsen ist.
-    /// </param>
-    private static Control AttributZeile(string label, int wert, int max = 100, int differenz = 0,
-                                         Attributrolle rolle = Attributrolle.Nebensaechlich,
-                                         string tooltip = "")
-    {
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 10);
-        if (tooltip != "") row.TooltipText = tooltip;
-
-        // Primäre Fähigkeiten hervorheben, nebensächliche zurücknehmen: So ist auf einen Blick zu
-        // sehen, worauf es bei diesem Spieler ankommt.
-        var l = FmTheme.MakeLabel($"{RollenZeichen(rolle)} {label}", 13, RollenFarbe(rolle));
-        l.CustomMinimumSize = new Vector2(150, 0);
-        row.AddChild(l);
-
-        var bar = new ProgressBar
-        {
-            MinValue        = 0,
-            MaxValue        = max,
-            Value           = wert,
-            ShowPercentage  = false,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-            CustomMinimumSize   = new Vector2(0, 14),
-        };
-        var farbe = FarbeFuerWert(wert);
-        bar.AddThemeStyleboxOverride("fill", new StyleBoxFlat { BgColor = farbe, CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3 });
-        bar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = FmTheme.BgToolbar, CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3 });
-        row.AddChild(bar);
-
-        var wertLabel = FmTheme.MakeLabel(wert.ToString(), 13, FmTheme.TextPrimary, HorizontalAlignment.Right);
-        wertLabel.CustomMinimumSize = new Vector2(32, 0);
-        row.AddChild(wertLabel);
-
-        // Die Spalte bleibt auch ohne Veränderung stehen, damit die Werte darüber und darunter
-        // nicht springen.
-        var trend = FmTheme.MakeLabel(
-            differenz == 0 ? "" : $"{(differenz > 0 ? "▲" : "▼")}{System.Math.Abs(differenz)}",
-            12,
-            differenz > 0 ? FmTheme.Success : differenz < 0 ? FmTheme.Danger : FmTheme.TextSecondary,
-            HorizontalAlignment.Right);
-        trend.CustomMinimumSize = new Vector2(34, 0);
-        row.AddChild(trend);
-
-        return row;
-    }
-
-    /// <summary>● primär, ○ sekundär, nichts bei nebensächlich.</summary>
-    private static string RollenZeichen(Attributrolle rolle) => rolle switch
-    {
-        Attributrolle.Primaer   => "●",
-        Attributrolle.Sekundaer => "○",
-        _                       => "  ",
-    };
-
-    private static Color RollenFarbe(Attributrolle rolle) => rolle switch
-    {
-        Attributrolle.Primaer   => FmTheme.TextPrimary,
-        Attributrolle.Sekundaer => FmTheme.TextSecondary,
-        _                       => FmTheme.Border,
-    };
-
-    private static Color FarbeFuerWert(int wert) => wert switch
-    {
-        >= 80 => FmTheme.Gold,
-        >= 65 => FmTheme.Success,
-        >= 50 => FmTheme.TextPrimary,
-        _     => FmTheme.TextSecondary,
-    };
 }
 
 file static class NodeExtensions

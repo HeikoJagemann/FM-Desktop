@@ -138,7 +138,7 @@ public partial class ScoutingView : Control
         _nurListe.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
         zeile.AddChild(_nurListe);
 
-        var suchen = new Button { Text = "🔍  Filtern" };
+        var suchen = new Button { Text = "Filtern" };
         FmTheme.ApplyButton(suchen, FmTheme.BgPanel);
         suchen.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
         suchen.Pressed += async () => await LadeBerichte();
@@ -231,8 +231,8 @@ public partial class ScoutingView : Control
         menu.AddItem($"{scout.Name} entlassen?", -1);
         menu.SetItemDisabled(0, true);
         menu.AddSeparator();
-        menu.AddItem($"✔  Ja - Abfindung {FmTheme.Geld(abfindung)}", 1);
-        menu.AddItem("✖  Nein", 0);
+        menu.AddItem($"Ja - Abfindung {FmTheme.Geld(abfindung)}", 1);
+        menu.AddItem("Nein", 0);
         AddChild(menu);
         menu.IdPressed += async id =>
         {

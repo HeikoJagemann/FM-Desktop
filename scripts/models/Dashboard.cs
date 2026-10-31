@@ -33,13 +33,14 @@ public class Meldung
     public string   Text  { get; set; } = "";
     public bool     Neu   { get; set; }
 
-    public string Symbol => Art switch
+    /// <summary>Die Rubrik als Wort - steht als kleines Schild vor der Meldung.</summary>
+    public string Rubrik => Art switch
     {
-        "TRANSFER" => "💶",
-        "SCOUTING" => "🔭",
-        "FINANZEN" => "🏦",
-        "SAISON"   => "📅",
-        _          => "•",
+        "TRANSFER" => "Transfer",
+        "SCOUTING" => "Scouting",
+        "FINANZEN" => "Finanzen",
+        "SAISON"   => "Saison",
+        _          => "",
     };
 }
 

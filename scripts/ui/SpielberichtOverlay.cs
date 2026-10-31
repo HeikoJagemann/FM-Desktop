@@ -1,193 +1,250 @@
 #nullable enable
 using Godot;
+using System.Threading.Tasks;
 using FMDesktop.Api;
 using FMDesktop.Models;
 
 namespace FMDesktop.UI;
 
-/// <summary>Modales Overlay mit Ergebnis und Minutenverlauf eines Spiels.</summary>
-public partial class SpielberichtOverlay : Control
+/// <summary>
+/// Der Bericht eines beliebigen Spiels: oben die Anzeigetafel, darunter als Reiter der Verlauf,
+/// die Kennzahlen und die Noten beider Mannschaften - dieselben Bausteine wie nach dem Abpfiff
+/// in der Spielansicht.
+/// </summary>
+public partial class SpielberichtOverlay : Overlaykarte
 {
-    private static SpielberichtOverlay? _aktuelleInstanz;
-
     private long _spielId;
+    private int _startReiter;
     private VBoxContainer _inhalt = null!;
-    private Label _titel = null!;
-    private Label _untertitel = null!;
 
-    public static void Zeige(Node caller, long spielId)
+    public SpielberichtOverlay() : base("Spielbericht", 900) { }
+
+    /// <param name="startReiter">0 Verlauf, 1 Statistik, 2 Noten.</param>
+    public static void Zeige(Node caller, long spielId, int startReiter = 0)
     {
-        if (_aktuelleInstanz != null && IsInstanceValid(_aktuelleInstanz))
-        {
-            if (_aktuelleInstanz._spielId == spielId) return;
-            _aktuelleInstanz.QueueFree();
-        }
-
-        var overlay = new SpielberichtOverlay { _spielId = spielId };
-        _aktuelleInstanz = overlay;
-        var scene = caller.GetTree().CurrentScene ?? caller.GetTree().Root;
-        scene.AddChild(overlay);
+        Oeffne(caller, new SpielberichtOverlay { _spielId = spielId, _startReiter = startReiter },
+            spielId.ToString());
     }
 
-    public override void _ExitTree()
+    protected override void BaueInhalt(VBoxContainer inhalt)
     {
-        if (_aktuelleInstanz == this) _aktuelleInstanz = null;
-    }
-
-    public override async void _Ready()
-    {
-        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        MouseFilter = MouseFilterEnum.Stop;
-
-        var bg = new ColorRect { Color = new Color(0, 0, 0, 0.55f) };
-        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        bg.MouseFilter = MouseFilterEnum.Stop;
-        bg.GuiInput += OnHintergrundInput;
-        AddChild(bg);
-
-        var center = new CenterContainer();
-        center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        center.MouseFilter = MouseFilterEnum.Ignore;
-        AddChild(center);
-
-        center.AddChild(BuildCard());
-
-        await LadeBericht();
-    }
-
-    public override void _Input(InputEvent @event)
-    {
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
-        {
-            QueueFree();
-            GetViewport().SetInputAsHandled();
-        }
-    }
-
-    private void OnHintergrundInput(InputEvent ev)
-    {
-        if (ev is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
-            QueueFree();
-    }
-
-    private Control BuildCard()
-    {
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(560, 0) };
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(10));
-
-        var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 22);
-        panel.AddChild(margin);
-
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 14);
-        margin.AddChild(root);
-
-        // Kopfzeile
-        var kopf = new HBoxContainer();
-        kopf.AddThemeConstantOverride("separation", 12);
-
-        var titelBox = new VBoxContainer();
-        titelBox.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        _titel = FmTheme.MakeLabel("Lade …", 20, FmTheme.TextPrimary);
-        _untertitel = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
-        titelBox.AddChild(_titel);
-        titelBox.AddChild(_untertitel);
-        kopf.AddChild(titelBox);
-
-        var close = new Button { Text = "✕", CustomMinimumSize = new Vector2(32, 32) };
-        FmTheme.ApplyButton(close, FmTheme.BgPanel);
-        close.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
-        close.Pressed += QueueFree;
-        kopf.AddChild(close);
-
-        root.AddChild(kopf);
-
-        var sep = new HSeparator();
-        sep.AddThemeColorOverride("color", FmTheme.Border);
-        root.AddChild(sep);
-
-        var scroll = new ScrollContainer
-        {
-            CustomMinimumSize = new Vector2(0, 340),
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-        };
-        root.AddChild(scroll);
-
         _inhalt = new VBoxContainer();
-        _inhalt.AddThemeConstantOverride("separation", 6);
-        _inhalt.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        scroll.AddChild(_inhalt);
-
-        return panel;
+        _inhalt.AddThemeConstantOverride("separation", 16);
+        _inhalt.AddChild(FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary));
+        inhalt.AddChild(_inhalt);
+        _ = LadeBericht();
     }
 
-    private async System.Threading.Tasks.Task LadeBericht()
+    private async Task LadeBericht()
     {
         var bericht = await ApiClient.GetAsync<SpielBericht>($"spiel/{_spielId}/bericht");
+        if (!IsInstanceValid(this)) return;
+        foreach (Node kind in _inhalt.GetChildren()) kind.QueueFree();
+
         if (bericht == null)
         {
-            _titel.Text = "Spielbericht nicht verfügbar";
+            _inhalt.AddChild(FmTheme.MakeLabel("Der Spielbericht konnte nicht geladen werden.", 13, FmTheme.Danger));
             return;
         }
 
-        _titel.Text = $"{bericht.HeimVerein}  {bericht.Ergebnis}  {bericht.GastVerein}";
-        _untertitel.Text = $"Saison {bericht.Saison} · Spieltag {bericht.Spieltag}";
+        SetzeUntertitel($"Saison {bericht.Saison}/{bericht.Saison + 1}  ·  {bericht.Spieltag}. Spieltag");
+        _inhalt.AddChild(Anzeigetafel(bericht));
 
         if (!bericht.Gespielt)
         {
             _inhalt.AddChild(FmTheme.MakeLabel("Dieses Spiel wurde noch nicht ausgetragen.",
-                13, FmTheme.TextSecondary));
+                13, FmTheme.TextSecondary, HorizontalAlignment.Center));
             return;
         }
 
-        if (bericht.Ereignisse.Count == 0)
-        {
-            _inhalt.AddChild(FmTheme.MakeLabel("Ein ereignisloses Spiel – keine Tore, keine Karten.",
-                13, FmTheme.TextSecondary));
-            return;
-        }
-
-        foreach (var ereignis in bericht.Ereignisse)
-            _inhalt.AddChild(BaueZeile(bericht, ereignis));
+        // So hoch, wie das Fenster erlaubt - im Vollbild stehen beide Notenlisten ohne Bildlauf da.
+        float hoehe = Mathf.Clamp(GetViewportRect().Size.Y - 480, 260, 460);
+        var reiter = new TabContainer();
+        reiter.AddChild(Rollbereich("Verlauf", Verlauf(bericht), hoehe));
+        reiter.AddChild(Rollbereich("Statistik", Statistik(bericht), hoehe));
+        reiter.AddChild(Rollbereich("Noten", Noten(bericht), hoehe));
+        _inhalt.AddChild(reiter);
+        reiter.CurrentTab = Mathf.Clamp(_startReiter, 0, reiter.GetTabCount() - 1);
     }
 
-    private static Control BaueZeile(SpielBericht bericht, SpielEreignis ereignis)
+    private static long EigenerVerein => GameState.Instance.VereinId;
+
+    // ── Anzeigetafel ─────────────────────────────────────────────────────────
+
+    /// <summary>Vereine mit Wappen und das Ergebnis in der Zahlenschrift - der eigene Verein mit Bernstein-Ring.</summary>
+    private static Control Anzeigetafel(SpielBericht b)
     {
-        var zeile = new HBoxContainer();
-        zeile.AddThemeConstantOverride("separation", 10);
+        var tafel = new PanelContainer();
+        var stil = FmTheme.Flaeche(FmTheme.BgDark, 12, FmTheme.Border);
+        stil.ContentMarginTop = stil.ContentMarginBottom = 14;
+        stil.ContentMarginLeft = stil.ContentMarginRight = 20;
+        tafel.AddThemeStyleboxOverride("panel", stil);
 
-        var minute = FmTheme.MakeLabel($"{ereignis.Minute}'", 13, FmTheme.TextSecondary,
-            HorizontalAlignment.Right);
-        minute.CustomMinimumSize = new Vector2(38, 0);
-        zeile.AddChild(minute);
+        var reihe = new HBoxContainer();
+        reihe.AddThemeConstantOverride("separation", 16);
+        tafel.AddChild(reihe);
 
-        var symbol = FmTheme.MakeLabel(ereignis.Symbol, 13, FmTheme.TextPrimary);
-        symbol.CustomMinimumSize = new Vector2(30, 0);
-        zeile.AddChild(symbol);
+        var heim = FmTheme.MakeTitel(b.HeimVerein ?? "Heim", 24);
+        heim.HorizontalAlignment = HorizontalAlignment.Right;
+        heim.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        heim.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        heim.ClipText = true;
+        reihe.AddChild(heim);
+        reihe.AddChild(Wappen.Neu(b.HeimVerein ?? "", 48,
+            b.HeimVereinId == EigenerVerein ? FmTheme.Accent : FmTheme.BorderStark));
 
-        // Tore der eigenen Mannschaft hervorheben, damit der Verlauf schnell lesbar ist.
-        bool eigenes = ereignis.VereinId == GameState.Instance.VereinId;
-        var farbe = ereignis.IstTor
-            ? (eigenes ? FmTheme.Accent : FmTheme.TextPrimary)
-            : FmTheme.TextSecondary;
+        var stand = FmTheme.MakeZahl(b.Gespielt ? $"{b.HeimTore} : {b.GastTore}" : "– : –", 44);
+        stand.HorizontalAlignment = HorizontalAlignment.Center;
+        stand.CustomMinimumSize = new Vector2(130, 0);
+        reihe.AddChild(stand);
 
-        var text = FmTheme.MakeLabel(ereignis.Beschreibung ?? "", 13, farbe);
-        text.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        zeile.AddChild(text);
+        reihe.AddChild(Wappen.Neu(b.GastVerein ?? "", 48,
+            b.GastVereinId == EigenerVerein ? FmTheme.Accent : FmTheme.BorderStark));
+        var gast = FmTheme.MakeTitel(b.GastVerein ?? "Gast", 24);
+        gast.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        gast.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        gast.ClipText = true;
+        reihe.AddChild(gast);
 
-        // Zwischenstand nur bei Toren
-        if (ereignis.IstTor)
+        return tafel;
+    }
+
+    /// <summary>Ein Reiter mit Bildlauf; der Name des Knotens ist die Reiterbeschriftung.</summary>
+    private static Control Rollbereich(string titel, Control inhalt, float hoehe)
+    {
+        var scroll = new ScrollContainer
         {
-            var verein = ereignis.VereinId == bericht.HeimVereinId
-                ? bericht.HeimVerein
-                : bericht.GastVerein;
-            var seite = FmTheme.MakeLabel(verein ?? "", 12, FmTheme.TextSecondary,
-                HorizontalAlignment.Right);
-            seite.CustomMinimumSize = new Vector2(150, 0);
-            zeile.AddChild(seite);
+            Name = titel,
+            CustomMinimumSize = new Vector2(0, hoehe),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        var rand = new MarginContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        FmTheme.SetMargin(rand, 4, 14, 14, 4);
+        rand.AddChild(inhalt);
+        scroll.AddChild(rand);
+        return scroll;
+    }
+
+    // ── Verlauf ──────────────────────────────────────────────────────────────
+
+    private static Control Verlauf(SpielBericht b)
+    {
+        var liste = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        liste.AddThemeConstantOverride("separation", 8);
+
+        if (b.Ereignisse.Count == 0)
+        {
+            liste.AddChild(FmTheme.MakeLabel("Ein ereignisloses Spiel – keine Tore, keine Karten, keine Wechsel.",
+                13, FmTheme.TextSecondary));
+            return liste;
         }
 
+        // Bei Toren steht der Zwischenstand dabei - so liest sich der Verlauf wie eine Tafel.
+        int heimTore = 0, gastTore = 0;
+        foreach (var e in b.Ereignisse)
+        {
+            string? stand = null;
+            if (e.IstTor)
+            {
+                if (e.VereinId == b.HeimVereinId) heimTore++; else gastTore++;
+                stand = $"{heimTore} : {gastTore}";
+            }
+            liste.AddChild(Ereigniszeile(b, e, stand));
+        }
+        return liste;
+    }
+
+    private static Control Ereigniszeile(SpielBericht b, SpielEreignis e, string? stand)
+    {
+        var zeile = new HBoxContainer();
+        zeile.AddThemeConstantOverride("separation", 12);
+
+        var minute = FmTheme.MakeZahl($"{e.Minute}'", 16, FmTheme.TextSecondary);
+        minute.HorizontalAlignment = HorizontalAlignment.Right;
+        minute.CustomMinimumSize = new Vector2(40, 0);
+        zeile.AddChild(minute);
+
+        var zeichen = Zeichen(e.Typ);
+        zeile.AddChild(zeichen.HasValue
+            ? Symbol.Neu(zeichen.Value, FmTheme.TextPrimary, 18)
+            : new Control { CustomMinimumSize = new Vector2(18, 18) });
+
+        bool heim = e.VereinId == b.HeimVereinId;
+        zeile.AddChild(Wappen.Neu((heim ? b.HeimVerein : b.GastVerein) ?? "", 22,
+            e.VereinId == EigenerVerein ? FmTheme.Accent : FmTheme.BorderStark));
+
+        // Tore des eigenen Vereins in Bernstein, damit der Verlauf schnell lesbar ist.
+        var farbe = e.IstTor
+            ? (e.VereinId == EigenerVerein ? FmTheme.Accent : FmTheme.TextPrimary)
+            : FmTheme.TextSecondary;
+        var text = FmTheme.MakeLabel(e.Beschreibung ?? "", 13, farbe);
+        text.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        text.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        zeile.AddChild(text);
+
+        var zwischenstand = FmTheme.MakeZahl(stand ?? "", 16, FmTheme.TextPrimary);
+        zwischenstand.HorizontalAlignment = HorizontalAlignment.Right;
+        zwischenstand.CustomMinimumSize = new Vector2(52, 0);
+        zeile.AddChild(zwischenstand);
+
         return zeile;
+    }
+
+    /// <summary>Das gezeichnete Zeichen eines Ereignisses; keins für Unbekanntes.</summary>
+    private static Symbol.Art? Zeichen(string typ) => typ switch
+    {
+        "TOR"             => Symbol.Art.Ball,
+        "GELBE_KARTE"     => Symbol.Art.Gelb,
+        "GELB_ROTE_KARTE" => Symbol.Art.GelbRot,
+        "ROTE_KARTE"      => Symbol.Art.Rot,
+        "WECHSEL"         => Symbol.Art.Wechsel,
+        _                 => null,
+    };
+
+    // ── Statistik und Noten ──────────────────────────────────────────────────
+
+    private static Control Statistik(SpielBericht b)
+    {
+        var box = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        box.AddThemeConstantOverride("separation", 12);
+
+        if (b.HeimStatistik == null || b.GastStatistik == null)
+        {
+            box.AddChild(FmTheme.MakeLabel("Für dieses Spiel wurden noch keine Kennzahlen erfasst.",
+                13, FmTheme.TextSecondary));
+            return box;
+        }
+
+        var kopf = new HBoxContainer();
+        var heim = FmTheme.MakeAbschnitt(b.HeimVerein ?? "Heim", 16);
+        heim.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        kopf.AddChild(heim);
+        var gast = FmTheme.MakeAbschnitt(b.GastVerein ?? "Gast", 16);
+        gast.HorizontalAlignment = HorizontalAlignment.Right;
+        gast.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        kopf.AddChild(gast);
+        box.AddChild(kopf);
+
+        var tafel = new StatistikTafel { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        box.AddChild(tafel);
+        tafel.Zeige(b.HeimStatistik, b.GastStatistik);
+        return box;
+    }
+
+    private static Control Noten(SpielBericht b)
+    {
+        if (b.HeimAufstellung.Count == 0 && b.GastAufstellung.Count == 0)
+        {
+            return FmTheme.MakeLabel("Für dieses Spiel liegen keine Aufstellungen vor.",
+                13, FmTheme.TextSecondary);
+        }
+
+        var noten = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        noten.AddThemeConstantOverride("separation", 14);
+        noten.AddChild(Notenliste.Spalte(b.HeimVerein ?? "Heim", b.HeimAufstellung,
+            b.HeimVereinId == EigenerVerein));
+        noten.AddChild(Notenliste.Spalte(b.GastVerein ?? "Gast", b.GastAufstellung,
+            b.GastVereinId == EigenerVerein));
+        return noten;
     }
 }

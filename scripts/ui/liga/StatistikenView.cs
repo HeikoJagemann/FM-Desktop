@@ -50,7 +50,7 @@ public partial class StatistikenView : Control
         // ── Gesamt ───────────────────────────────────────────
         int gesamt  = ergebnisse.Count;
         int tore    = ergebnisse.Sum(s => (s.HeimTore ?? 0) + (s.GastTore ?? 0));
-        _root.AddChild(BaueStatCard("📋  Gesamt", new[] {
+        _root.AddChild(BaueStatCard("Gesamt", new[] {
             ("Gespielte Spiele", gesamt.ToString()),
             ("Erzielte Tore",    tore.ToString()),
             ("Ø Tore / Spiel",   $"{(double)tore / gesamt:F2}"),
@@ -75,8 +75,8 @@ public partial class StatistikenView : Control
             .Take(5)
             .ToList();
 
-        _root.AddChild(BaueStatCard("⚽  Treffsicherste Vereine",
-            torschuetzen.Select((x, i) => ($"{i + 1}. {x.Name}", $"{x.Tore} Tore")).ToArray()));
+        _root.AddChild(BaueStatCard("Treffsicherste Vereine",
+            torschuetzen.Select((x, i) => ($"{i + 1}. {x.Name}", x.Tore == 1 ? "1 Tor" : $"{x.Tore} Tore")).ToArray()));
 
         // ── Beste Abwehren ────────────────────────────────────
         var abwehren = ergebnisse
@@ -90,7 +90,7 @@ public partial class StatistikenView : Control
             .Take(5)
             .ToList();
 
-        _root.AddChild(BaueStatCard("🛡  Beste Abwehren",
+        _root.AddChild(BaueStatCard("Beste Abwehren",
             abwehren.Select((x, i) => ($"{i + 1}. {x.Name}", $"{x.Gegentore} Gegentore")).ToArray()));
 
         // ── Meiste Siege ──────────────────────────────────────
@@ -108,7 +108,7 @@ public partial class StatistikenView : Control
             .Take(5)
             .ToList();
 
-        _root.AddChild(BaueStatCard("🥇  Meiste Siege",
+        _root.AddChild(BaueStatCard("Meiste Siege",
             siege.Select((x, i) => ($"{i + 1}. {x.Name}", $"{x.Siege} Siege")).ToArray()));
     }
 
@@ -152,7 +152,7 @@ public partial class StatistikenView : Control
             verein.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             row.AddChild(verein);
 
-            var tore = FmTheme.MakeLabel($"{t.Tore} Tore", 13, FmTheme.TextPrimary,
+            var tore = FmTheme.MakeLabel(t.Tore == 1 ? "1 Tor" : $"{t.Tore} Tore", 13, FmTheme.TextPrimary,
                 HorizontalAlignment.Right);
             tore.CustomMinimumSize = new Vector2(70, 0);
             row.AddChild(tore);
@@ -182,7 +182,7 @@ public partial class StatistikenView : Control
         vbox.AddThemeConstantOverride("separation", 8);
         margin.AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeLabel(titel, 15, FmTheme.TextPrimary));
+        vbox.AddChild(FmTheme.MakeAbschnitt(titel, 20));
 
         var sep = new HSeparator();
         sep.AddThemeColorOverride("color", FmTheme.Border);

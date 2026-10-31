@@ -91,11 +91,11 @@ public partial class AngeboteView : Control
     private void ZeigeAngebotsmenue(TransferangebotModel angebot)
     {
         var menu = new PopupMenu();
-        menu.AddItem($"📄  {angebot.SpielerName} → {angebot.NachVerein}", -1);
+        menu.AddItem($"{angebot.SpielerName} → {angebot.NachVerein}", -1);
         menu.SetItemDisabled(0, true);
         menu.AddSeparator();
-        menu.AddItem($"✔  Annehmen ({FmTheme.Geld(angebot.Abloese)})", 0);
-        menu.AddItem("✖  Ablehnen", 1);
+        menu.AddItem($"Annehmen ({FmTheme.Geld(angebot.Abloese)})", 0);
+        menu.AddItem("Ablehnen", 1);
         if (!_fensterOffen) menu.SetItemDisabled(2, true);
 
         AddChild(menu);

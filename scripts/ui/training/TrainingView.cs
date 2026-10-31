@@ -280,7 +280,7 @@ public partial class TrainingView : Control
         if (_plan == null) return;
 
         var menu = new PopupMenu();
-        menu.AddItem($"👤  {spieler.Name}", -1);
+        menu.AddItem(spieler.Name, -1);
         menu.SetItemDisabled(0, true);
         menu.AddSeparator("Persönlicher Schwerpunkt");
         menu.AddItem("– keiner –", 0);

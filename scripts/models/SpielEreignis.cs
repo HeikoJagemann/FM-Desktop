@@ -13,15 +13,5 @@ public class SpielEreignis
     public long?   VereinId          { get; set; }
     public string? Beschreibung      { get; set; }
 
-    public string Symbol => Typ switch
-    {
-        "TOR"             => "⚽",
-        "GELBE_KARTE"     => "🟨",
-        "GELB_ROTE_KARTE" => "🟨🟥",
-        "ROTE_KARTE"      => "🟥",
-        "WECHSEL"         => "🔄",
-        _                 => "•",
-    };
-
     public bool IstTor => Typ == "TOR";
 }

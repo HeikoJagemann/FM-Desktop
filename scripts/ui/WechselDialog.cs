@@ -11,8 +11,11 @@ namespace FMDesktop.UI;
 /// Auswechslungen zusammenstellen: links wer geht, rechts wer kommt. Mehrere Paare lassen sich
 /// sammeln und gemeinsam ausführen – das zählt nach FIFA-Regel als ein Wechselfenster.
 /// Die Spieluhr steht währenddessen still.
+///
+/// <para>Ein Klick neben die Karte schließt hier nicht: Er würde die Zusammenstellung
+/// verwerfen. Abbrechen, das Kreuz oder Escape tun das bewusst.</para>
 /// </summary>
-public partial class WechselDialog : Control
+public partial class WechselDialog : Overlaykarte
 {
     private LiveSpiel _spiel = null!;
     private Action<List<(long Raus, long Rein)>>? _beiBestaetigung;
@@ -31,200 +34,140 @@ public partial class WechselDialog : Control
     private Button _bestaetigen = null!;
     private Button _rueckgaengig = null!;
 
+    public WechselDialog() : base("Auswechslung", 880)
+    {
+        SchliesstBeiKlickDaneben = false;
+    }
+
     public static void Zeige(Node caller, LiveSpiel spiel,
                              Action<List<(long Raus, long Rein)>> beiBestaetigung,
                              Action? beiAbbruch = null)
     {
-        var dialog = new WechselDialog
+        Oeffne(caller, new WechselDialog
         {
             _spiel = spiel,
             _beiBestaetigung = beiBestaetigung,
             _beiAbbruch = beiAbbruch,
-        };
-        var scene = caller.GetTree().CurrentScene ?? caller.GetTree().Root;
-        scene.AddChild(dialog);
+        });
     }
 
-    public override void _Ready()
+    protected override void BaueInhalt(VBoxContainer inhalt)
     {
-        SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        MouseFilter = MouseFilterEnum.Stop;
+        SetzeUntertitel("Erst wer geht, dann wer kommt. Mehrere Wechsel auf einmal zählen als ein Fenster.");
 
         foreach (var s in _spiel.EigeneAufDemPlatz) _nachId[s.SpielerId] = s;
         foreach (var s in _spiel.EigeneBank)        _nachId[s.SpielerId] = s;
 
-        var bg = new ColorRect { Color = new Color(0, 0, 0, 0.72f) };
-        bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        bg.MouseFilter = MouseFilterEnum.Stop;
-        AddChild(bg);
+        inhalt.AddChild(BaueLage());
 
-        var center = new CenterContainer();
-        center.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        center.MouseFilter = MouseFilterEnum.Ignore;
-        AddChild(center);
-        center.AddChild(BuildCard());
+        // Zwei Spalten mit dem Wechselzeichen dazwischen
+        var spalten = new HBoxContainer();
+        spalten.AddThemeConstantOverride("separation", 14);
+        inhalt.AddChild(spalten);
+
+        spalten.AddChild(BaueSpalte("Auf dem Platz", out _platzListe));
+        var mitte = new CenterContainer { CustomMinimumSize = new Vector2(30, 0) };
+        mitte.AddChild(Symbol.Neu(Symbol.Art.Wechsel, FmTheme.TextSecondary, 26));
+        spalten.AddChild(mitte);
+        spalten.AddChild(BaueSpalte("Ersatzbank", out _bankListe));
+
+        inhalt.AddChild(BauePlan());
+        inhalt.AddChild(BaueLeiste());
 
         ZeichneListen();
     }
 
-    public override void _Input(InputEvent @event)
-    {
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
-        {
-            Abbrechen();
-            GetViewport().SetInputAsHandled();
-        }
-    }
+    protected override void BeimSchliessen() => _beiAbbruch?.Invoke();
 
     // ── Aufbau ───────────────────────────────────────────────────────────────
 
-    private Control BuildCard()
+    /// <summary>Minute, verbliebene Wechsel und Fenster als Schilder.</summary>
+    private Control BaueLage()
     {
-        var panel = new PanelContainer { CustomMinimumSize = new Vector2(860, 0) };
-        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle(12));
-
-        var margin = new MarginContainer();
-        FmTheme.SetMargin(margin, 28, 24);
-        panel.AddChild(margin);
-
-        var root = new VBoxContainer();
-        root.AddThemeConstantOverride("separation", 16);
-        margin.AddChild(root);
-
-        root.AddChild(BuildKopf());
-
-        var trenner = new HSeparator();
-        trenner.AddThemeColorOverride("color", FmTheme.Border);
-        root.AddChild(trenner);
-
-        // Zwei Spalten mit Pfeil dazwischen
-        var spalten = new HBoxContainer();
-        spalten.AddThemeConstantOverride("separation", 14);
-        root.AddChild(spalten);
-
-        spalten.AddChild(BuildSpalte("AUF DEM PLATZ", out _platzListe));
-
-        var pfeil = new CenterContainer { CustomMinimumSize = new Vector2(34, 0) };
-        pfeil.AddChild(FmTheme.MakeLabel("→", 22, FmTheme.TextSecondary));
-        spalten.AddChild(pfeil);
-
-        spalten.AddChild(BuildSpalte("ERSATZBANK", out _bankListe));
-
-        root.AddChild(BuildPlan());
-        root.AddChild(BuildLeiste());
-
-        return panel;
-    }
-
-    private Control BuildKopf()
-    {
-        var kopf = new HBoxContainer();
-        kopf.AddThemeConstantOverride("separation", 12);
-
-        var links = new VBoxContainer();
-        links.AddThemeConstantOverride("separation", 2);
-        links.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        links.AddChild(FmTheme.MakeLabel("Auswechslung", 20, FmTheme.TextPrimary));
-        links.AddChild(FmTheme.MakeLabel(
-            "Erst wer geht, dann wer kommt.  ◉ markiert  ·  ↓↑ vorgemerkt  ·  "
-            + "mehrere Wechsel zählen als ein Fenster.",
-            12, FmTheme.TextSecondary));
-        kopf.AddChild(links);
-
-        kopf.AddChild(Chip($"{_spiel.Minute}. Minute", FmTheme.TextPrimary));
-        kopf.AddChild(Chip($"{_spiel.WechselUebrig} Wechsel",
+        var reihe = new HBoxContainer();
+        reihe.AddThemeConstantOverride("separation", 8);
+        reihe.AddChild(Schild($"{_spiel.Minute}. Minute", FmTheme.TextPrimary));
+        reihe.AddChild(Schild(_spiel.WechselUebrig == 1 ? "1 Wechsel übrig" : $"{_spiel.WechselUebrig} Wechsel übrig",
             _spiel.WechselUebrig > 0 ? FmTheme.Success : FmTheme.Danger));
-        kopf.AddChild(Chip($"{_spiel.FensterUebrig} Fenster",
+        reihe.AddChild(Schild(_spiel.FensterUebrig == 1 ? "1 Fenster übrig" : $"{_spiel.FensterUebrig} Fenster übrig",
             _spiel.FensterUebrig > 0 ? FmTheme.Success : FmTheme.Danger));
-
-        return kopf;
+        return reihe;
     }
 
-    private static Control Chip(string text, Color farbe)
+    private static Control Schild(string text, Color farbe)
     {
         var panel = new PanelContainer();
-        var style = new StyleBoxFlat
-        {
-            BgColor = FmTheme.BgToolbar,
-            BorderColor = FmTheme.Border,
-            CornerRadiusTopLeft = 12, CornerRadiusTopRight = 12,
-            CornerRadiusBottomLeft = 12, CornerRadiusBottomRight = 12,
-        };
-        style.SetBorderWidthAll(1);
-        style.SetContentMarginAll(0);
-        panel.AddThemeStyleboxOverride("panel", style);
-
-        var m = new MarginContainer();
-        FmTheme.SetMargin(m, 12, 5);
-        m.AddChild(FmTheme.MakeLabel(text, 12, farbe));
-        panel.AddChild(m);
+        var stil = FmTheme.Flaeche(FmTheme.BgDark, 14, FmTheme.Border);
+        stil.ContentMarginLeft = stil.ContentMarginRight = 12;
+        stil.ContentMarginTop = stil.ContentMarginBottom = 4;
+        panel.AddThemeStyleboxOverride("panel", stil);
+        var label = FmTheme.MakeLabel(text, 12, farbe);
+        label.AddThemeFontOverride("font", FmTheme.SchriftUi(600));
+        panel.AddChild(label);
         return panel;
     }
 
-    private Control BuildSpalte(string titel, out VBoxContainer liste)
+    private static Control BaueSpalte(string titel, out VBoxContainer liste)
     {
-        var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 6);
-        vbox.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-
-        vbox.AddChild(FmTheme.MakeLabel(titel, 11, FmTheme.TextSecondary));
+        var vbox = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        vbox.AddThemeConstantOverride("separation", 8);
+        vbox.AddChild(FmTheme.MakeAbschnitt(titel, 17));
 
         var rahmen = new PanelContainer();
-        var style = new StyleBoxFlat { BgColor = FmTheme.BgDark, BorderColor = FmTheme.Border };
-        style.SetBorderWidthAll(1);
-        style.SetContentMarginAll(0);
-        rahmen.AddThemeStyleboxOverride("panel", style);
+        var stil = FmTheme.Flaeche(FmTheme.BgDark, 10, FmTheme.Border);
+        stil.SetContentMarginAll(6);
+        rahmen.AddThemeStyleboxOverride("panel", stil);
         vbox.AddChild(rahmen);
 
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(330, 280) };
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(0, 290),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
         rahmen.AddChild(scroll);
 
-        liste = new VBoxContainer();
-        liste.AddThemeConstantOverride("separation", 2);
-        liste.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        liste = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        liste.AddThemeConstantOverride("separation", 4);
         scroll.AddChild(liste);
 
         return vbox;
     }
 
-    private Control BuildPlan()
+    private Control BauePlan()
     {
         var vbox = new VBoxContainer();
-        vbox.AddThemeConstantOverride("separation", 5);
+        vbox.AddThemeConstantOverride("separation", 6);
 
-        _planTitel = FmTheme.MakeLabel("GEPLANTE WECHSEL", 11, FmTheme.TextSecondary);
+        _planTitel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
         vbox.AddChild(_planTitel);
 
-        _planListe = new VBoxContainer();
-        _planListe.AddThemeConstantOverride("separation", 3);
-        _planListe.CustomMinimumSize = new Vector2(0, 62);
+        _planListe = new VBoxContainer { CustomMinimumSize = new Vector2(0, 62) };
+        _planListe.AddThemeConstantOverride("separation", 4);
         vbox.AddChild(_planListe);
 
         return vbox;
     }
 
-    private Control BuildLeiste()
+    private Control BaueLeiste()
     {
         var leiste = new HBoxContainer();
-        leiste.AddThemeConstantOverride("separation", 8);
+        leiste.AddThemeConstantOverride("separation", 10);
 
-        _rueckgaengig = new Button { Text = "↩  Rückgängig", CustomMinimumSize = new Vector2(160, 40) };
-        FmTheme.ApplyButton(_rueckgaengig, FmTheme.BgPanel);
-        _rueckgaengig.AddThemeColorOverride("font_color", FmTheme.TextPrimary);
+        _rueckgaengig = new Button { Text = "Rückgängig", CustomMinimumSize = new Vector2(130, 40) };
+        FmTheme.ApplySecondaryButton(_rueckgaengig);
         _rueckgaengig.TooltipText = "Nimmt die letzte Auswahl bzw. den zuletzt geplanten Wechsel zurück.";
         _rueckgaengig.Pressed += Rueckgaengig;
         leiste.AddChild(_rueckgaengig);
 
         leiste.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
 
-        var abbrechen = new Button { Text = "Abbrechen", CustomMinimumSize = new Vector2(140, 40) };
-        FmTheme.ApplyButton(abbrechen, FmTheme.BgPanel);
-        abbrechen.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
-        abbrechen.Pressed += Abbrechen;
+        var abbrechen = new Button { Text = "Abbrechen", CustomMinimumSize = new Vector2(130, 40) };
+        FmTheme.ApplySecondaryButton(abbrechen);
+        abbrechen.Pressed += Schliessen;
         leiste.AddChild(abbrechen);
 
         _bestaetigen = new Button { CustomMinimumSize = new Vector2(220, 40), Disabled = true };
-        FmTheme.ApplyButton(_bestaetigen, FmTheme.Accent);
+        FmTheme.ApplyPrimaryButton(_bestaetigen);
         _bestaetigen.Pressed += Bestaetigen;
         leiste.AddChild(_bestaetigen);
 
@@ -251,9 +194,9 @@ public partial class WechselDialog : Control
         _bestaetigen.Disabled = _plan.Count == 0;
         _rueckgaengig.Disabled = _plan.Count == 0 && _gewaehltRaus == null && _gewaehltRein == null;
         _planTitel.Text = _plan.Count == 0
-            ? "GEPLANTE WECHSEL – noch keiner ausgewählt"
-            : $"GEPLANTE WECHSEL – {_plan.Count} von {_spiel.WechselUebrig} möglichen"
-              + (offen == 0 ? " (Maximum erreicht)" : "");
+            ? "GEPLANTE WECHSEL  ·  noch keiner"
+            : $"GEPLANTE WECHSEL  ·  {_plan.Count} von {_spiel.WechselUebrig} möglichen"
+              + (offen == 0 ? ", mehr geht nicht" : "");
     }
 
     /// <summary>Wie eine Zeile gerade dasteht.</summary>
@@ -267,7 +210,7 @@ public partial class WechselDialog : Control
         if (spieler.Count == 0)
         {
             liste.AddChild(FmTheme.MakeLabel(
-                aufDemPlatz ? "  Kein Spieler verfügbar" : "  Bank leer", 12, FmTheme.TextSecondary));
+                aufDemPlatz ? "Kein Spieler verfügbar" : "Die Bank ist leer", 12, FmTheme.TextSecondary));
             return;
         }
 
@@ -296,101 +239,98 @@ public partial class WechselDialog : Control
 
         var btn = new Button
         {
-            CustomMinimumSize = new Vector2(0, 38),
+            CustomMinimumSize = new Vector2(0, 40),
             Disabled = !aktiv,
-            Flat = true,
+            FocusMode = FocusModeEnum.None,
         };
 
-        var grundfarbe = FmTheme.FuerGruppe(gruppe);
-        var style = new StyleBoxFlat
-        {
-            BgColor = markiert ? grundfarbe.Lightened(0.22f)
-                    : verplant ? grundfarbe.Darkened(0.35f)
-                    : grundfarbe,
-            BorderColor = markiert ? FmTheme.Accent
-                        : verplant ? (aufDemPlatz ? FmTheme.Danger : FmTheme.Success)
-                        : FmTheme.Border,
-            CornerRadiusTopLeft = 4, CornerRadiusTopRight = 4,
-            CornerRadiusBottomLeft = 4, CornerRadiusBottomRight = 4,
-        };
-        style.SetBorderWidthAll(markiert || verplant ? 2 : 1);
-        style.SetContentMarginAll(0);
-        btn.AddThemeStyleboxOverride("normal", style);
-        btn.AddThemeStyleboxOverride("hover", MitRand(style, FmTheme.AccentHover));
-        btn.AddThemeStyleboxOverride("pressed", style);
-        btn.AddThemeStyleboxOverride("focus", style);
-        btn.AddThemeStyleboxOverride("disabled", style);
+        var grund = markiert ? FmTheme.AuswahlZeile
+                  : verplant ? FmTheme.BgDark
+                  : FmTheme.FuerGruppe(gruppe);
+        var rand = markiert ? FmTheme.Accent
+                 : verplant ? (aufDemPlatz ? FmTheme.Danger : FmTheme.Success).Darkened(0.3f)
+                 : FmTheme.Border;
+        var stil = FmTheme.Flaeche(grund, 8, rand, markiert ? 2 : 1);
+        btn.AddThemeStyleboxOverride("normal", stil);
+        btn.AddThemeStyleboxOverride("hover", FmTheme.Flaeche(grund.Lightened(0.05f), 8,
+            markiert ? FmTheme.Accent : FmTheme.TextGedimmt, markiert ? 2 : 1));
+        btn.AddThemeStyleboxOverride("pressed", stil);
+        btn.AddThemeStyleboxOverride("focus", stil);
+        btn.AddThemeStyleboxOverride("disabled", stil);
 
         var id = s.SpielerId;
         btn.Pressed += () => { if (aufDemPlatz) WaehleRaus(id); else WaehleRein(id); };
 
         // Inhalt als eigene Zeile über dem Button, damit Spalten sauber ausgerichtet sind.
         var inhalt = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-        inhalt.AddThemeConstantOverride("separation", 8);
-        inhalt.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        inhalt.AddThemeConstantOverride("separation", 10);
+        var abstand = new MarginContainer { MouseFilter = MouseFilterEnum.Ignore };
+        FmTheme.SetMargin(abstand, 10, 0);
+        abstand.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        abstand.AddChild(inhalt);
+        btn.AddChild(abstand);
 
-        var rand = new MarginContainer { MouseFilter = MouseFilterEnum.Ignore };
-        FmTheme.SetMargin(rand, 10, 0);
-        rand.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        rand.AddChild(inhalt);
-        btn.AddChild(rand);
+        // Markierung ganz links: Auswahlpunkt oder Pfeil, wohin der Spieler geht.
+        inhalt.AddChild(markiert ? Symbol.Neu(Symbol.Art.Punkt, FmTheme.Accent, 16)
+                      : verplant ? Symbol.Neu(aufDemPlatz ? Symbol.Art.Raus : Symbol.Art.Rein,
+                                              aufDemPlatz ? FmTheme.Danger : FmTheme.Success, 16)
+                      : new Control { CustomMinimumSize = new Vector2(16, 16), MouseFilter = MouseFilterEnum.Ignore });
 
-        // Markierungsspalte ganz links: leer, Auswahlpunkt oder Wechselpfeil.
-        var marke = FmTheme.MakeLabel(
-            markiert ? "◉" : verplant ? (aufDemPlatz ? "↓" : "↑") : "",
-            13,
-            markiert ? FmTheme.Accent : aufDemPlatz ? FmTheme.Danger : FmTheme.Success,
-            HorizontalAlignment.Center);
-        marke.CustomMinimumSize = new Vector2(16, 0);
-        marke.VerticalAlignment = VerticalAlignment.Center;
-        inhalt.AddChild(marke);
+        inhalt.AddChild(Positionschip(aufDemPlatz ? s.Slot : s.Position, gruppe));
 
-        var pos = FmTheme.MakeLabel(aufDemPlatz ? s.Slot : s.Position, 11,
-            FmTheme.TextFuerGruppe(gruppe));
-        pos.CustomMinimumSize = new Vector2(44, 0);
-        pos.VerticalAlignment = VerticalAlignment.Center;
-        inhalt.AddChild(pos);
-
-        var name = FmTheme.MakeLabel(s.Name, 12,
-            verplant ? FmTheme.TextSecondary : FmTheme.TextPrimary);
+        var name = FmTheme.MakeLabel(s.Name, 13, verplant ? FmTheme.TextGedimmt : FmTheme.TextPrimary);
         name.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         name.VerticalAlignment = VerticalAlignment.Center;
+        name.ClipText = true;
         inhalt.AddChild(name);
 
-        var staerke = FmTheme.MakeLabel(s.Staerke.ToString(), 12, FmTheme.TextSecondary,
-            HorizontalAlignment.Right);
-        staerke.CustomMinimumSize = new Vector2(26, 0);
+        var staerke = FmTheme.MakeZahl(s.Staerke.ToString(), 18,
+            verplant ? FmTheme.TextGedimmt : FmTheme.TextPrimary);
+        staerke.HorizontalAlignment = HorizontalAlignment.Right;
         staerke.VerticalAlignment = VerticalAlignment.Center;
+        staerke.CustomMinimumSize = new Vector2(26, 0);
+        staerke.MouseFilter = MouseFilterEnum.Pass;
         staerke.TooltipText = aufDemPlatz
             ? s.Erklaerung
             : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.Staerke);
         inhalt.AddChild(staerke);
 
+        // Auf dem Platz die Kondition - nach ihr wird meist gewechselt. Auf der Bank ein
+        // gleich breiter Platzhalter, damit die Stärken beider Spalten auf einer Linie stehen.
         if (aufDemPlatz)
         {
             var frische = new ProgressBar
             {
                 MinValue = 0, MaxValue = 100, Value = s.Kondition,
                 ShowPercentage = false,
-                CustomMinimumSize = new Vector2(52, 8),
+                CustomMinimumSize = new Vector2(52, 6),
                 SizeFlagsVertical = SizeFlags.ShrinkCenter,
-                MouseFilter = MouseFilterEnum.Ignore,
+                MouseFilter = MouseFilterEnum.Pass,
+                TooltipText = $"Kondition {s.Kondition:0}",
             };
             frische.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.FrischeFarbe(s.Kondition)));
-            frische.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgDark));
+            frische.AddThemeStyleboxOverride("background", FmTheme.KonditionsBalken(FmTheme.BgHover));
             inhalt.AddChild(frische);
         }
         else
         {
-            var platzhalter = new Control
-            {
-                CustomMinimumSize = new Vector2(52, 0),
-                MouseFilter = MouseFilterEnum.Ignore,
-            };
-            inhalt.AddChild(platzhalter);
+            inhalt.AddChild(new Control { CustomMinimumSize = new Vector2(52, 0), MouseFilter = MouseFilterEnum.Ignore });
         }
 
         return btn;
+    }
+
+    /// <summary>Position oder Slot als Chip in der Farbe des Mannschaftsteils.</summary>
+    private static Control Positionschip(string text, Positionsgruppe gruppe)
+    {
+        var chip = FmTheme.MakeLabel(text, 11, FmTheme.TextFuerGruppe(gruppe), HorizontalAlignment.Center);
+        chip.AddThemeFontOverride("font", FmTheme.SchriftUi(700));
+        chip.AddThemeStyleboxOverride("normal", FmTheme.Flaeche(FmTheme.GruppeChip(gruppe), 5));
+        chip.CustomMinimumSize = new Vector2(44, 20);
+        chip.VerticalAlignment = VerticalAlignment.Center;
+        chip.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        chip.MouseFilter = MouseFilterEnum.Ignore;
+        return chip;
     }
 
     private void ZeichnePlan()
@@ -400,7 +340,7 @@ public partial class WechselDialog : Control
         if (_plan.Count == 0)
         {
             _planListe.AddChild(FmTheme.MakeLabel(
-                "  Wähle links einen Spieler und rechts seinen Ersatz.", 12, FmTheme.TextSecondary));
+                "Wähle links einen Spieler und rechts seinen Ersatz.", 13, FmTheme.TextSecondary));
             return;
         }
 
@@ -409,19 +349,28 @@ public partial class WechselDialog : Control
             var zeile = new HBoxContainer();
             zeile.AddThemeConstantOverride("separation", 8);
 
-            zeile.AddChild(FmTheme.MakeLabel("↓", 13, FmTheme.Danger));
-            var rausLabel = FmTheme.MakeLabel(NameVon(raus), 12, FmTheme.TextSecondary);
-            rausLabel.CustomMinimumSize = new Vector2(210, 0);
+            zeile.AddChild(Symbol.Neu(Symbol.Art.Raus, FmTheme.Danger, 16));
+            var rausLabel = FmTheme.MakeLabel(NameVon(raus), 13, FmTheme.TextSecondary);
+            rausLabel.CustomMinimumSize = new Vector2(230, 0);
             zeile.AddChild(rausLabel);
 
-            zeile.AddChild(FmTheme.MakeLabel("↑", 13, FmTheme.Success));
-            var reinLabel = FmTheme.MakeLabel(NameVon(rein), 12, FmTheme.TextPrimary);
+            zeile.AddChild(Symbol.Neu(Symbol.Art.Rein, FmTheme.Success, 16));
+            var reinLabel = FmTheme.MakeLabel(NameVon(rein), 13, FmTheme.TextPrimary);
             reinLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             zeile.AddChild(reinLabel);
 
-            var entfernen = new Button { Text = "✕", CustomMinimumSize = new Vector2(28, 26) };
-            FmTheme.ApplyButton(entfernen, FmTheme.BgPanel);
-            entfernen.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
+            var entfernen = new Button
+            {
+                CustomMinimumSize = new Vector2(28, 28),
+                FocusMode = FocusModeEnum.None,
+                TooltipText = "Diesen Wechsel streichen",
+            };
+            entfernen.AddThemeStyleboxOverride("normal", FmTheme.Flaeche(new Color(0, 0, 0, 0), 6));
+            entfernen.AddThemeStyleboxOverride("hover", FmTheme.Flaeche(FmTheme.BgHover, 6));
+            entfernen.AddThemeStyleboxOverride("pressed", FmTheme.Flaeche(FmTheme.Border, 6));
+            var kreuz = Symbol.Neu(Symbol.Art.Kreuz, FmTheme.TextSecondary, 14);
+            kreuz.SetAnchorsAndOffsetsPreset(LayoutPreset.Center);
+            entfernen.AddChild(kreuz);
             var paar = (raus, rein);
             entfernen.Pressed += () => { _plan.Remove(paar); ZeichneListen(); };
             zeile.AddChild(entfernen);
@@ -477,28 +426,9 @@ public partial class WechselDialog : Control
         if (_plan.Count == 0) return;
         var beiBestaetigung = _beiBestaetigung;
         var paare = new List<(long, long)>(_plan);
-        _beiBestaetigung = null;
+        // Kein Abbruch - Schließen meldet sonst, es sei nichts gewechselt worden.
         _beiAbbruch = null;
-        QueueFree();
+        Schliessen();
         beiBestaetigung?.Invoke(paare);
     }
-
-    private void Abbrechen()
-    {
-        var beiAbbruch = _beiAbbruch;
-        _beiBestaetigung = null;
-        _beiAbbruch = null;
-        QueueFree();
-        beiAbbruch?.Invoke();
-    }
-
-    // ── Stil ─────────────────────────────────────────────────────────────────
-
-    private static StyleBoxFlat MitRand(StyleBoxFlat vorlage, Color randfarbe)
-    {
-        var s = (StyleBoxFlat)vorlage.Duplicate();
-        s.BorderColor = randfarbe;
-        return s;
-    }
-
 }

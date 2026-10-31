@@ -34,7 +34,8 @@ public partial class GameState : Node
         int vorschau = Array.IndexOf(argumente, "--vorschau");
         if (vorschau >= 0 && argumente.Length >= vorschau + 5 && long.TryParse(argumente[vorschau + 2], out var verein))
         {
-            _ = Vorschau(argumente[vorschau + 1], verein, argumente[vorschau + 3], argumente[vorschau + 4]);
+            _ = Vorschau(argumente[vorschau + 1], verein, argumente[vorschau + 3], argumente[vorschau + 4],
+                argumente.Length > vorschau + 5 ? argumente[vorschau + 5] : null);
         }
 
         // Fenstermodus vom letzten Start wiederherstellen - liegt lokal, nicht im Spielstand.
@@ -51,8 +52,13 @@ public partial class GameState : Node
     /// <c>-- --vorschau save_x 192 res://scenes/taktik/AufstellungView.tscn C:/pfad/bild.png</c>.
     /// Liest nur - außer bei der Spielansicht, die beim Öffnen eine Partie anpfeift; die
     /// gehört deshalb in einen Wegwerf-Spielstand.
+    ///
+    /// <para>Ein sechstes Argument öffnet zusätzlich einen Dialog über der Ansicht:
+    /// <c>einstellungen</c>, <c>spieler:&lt;id&gt;</c> (aus dem eigenen Kader),
+    /// <c>bericht:&lt;spielId&gt;[:reiter]</c> oder <c>wechsel</c> (nur über der Spielansicht).</para>
     /// </summary>
-    private async System.Threading.Tasks.Task Vorschau(string schema, long vereinId, string ansicht, string datei)
+    private async System.Threading.Tasks.Task Vorschau(string schema, long vereinId, string ansicht, string datei,
+                                                       string? dialog)
     {
         SetSchema(schema);
         var verein = await ApiClient.GetAsync<Models.Verein>($"verein/{vereinId}");
@@ -70,10 +76,45 @@ public partial class GameState : Node
 
         // Den Ansichten Zeit lassen, ihre Daten zu holen und sich aufzubauen.
         await ToSignal(GetTree().CreateTimer(5.0), SceneTreeTimer.SignalName.Timeout);
+        if (dialog != null)
+        {
+            await OeffneVorschaudialog(dialog);
+            await ToSignal(GetTree().CreateTimer(2.5), SceneTreeTimer.SignalName.Timeout);
+        }
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         GetViewport().GetTexture().GetImage().SavePng(datei);
         GD.Print($"[Vorschau] gespeichert: {datei}");
         GetTree().Quit();
+    }
+
+    private async System.Threading.Tasks.Task OeffneVorschaudialog(string dialog)
+    {
+        var szene = GetTree().CurrentScene;
+        var teile = dialog.Split(':');
+        switch (teile[0])
+        {
+            case "einstellungen":
+                UI.EinstellungenDialog.Zeige(szene);
+                break;
+            case "bericht":
+                UI.SpielberichtOverlay.Zeige(szene, long.Parse(teile[1]),
+                    teile.Length > 2 ? int.Parse(teile[2]) : 0);
+                break;
+            case "spieler":
+                var kader = await ApiClient.GetAsync<System.Collections.Generic.List<Models.Spieler>>(
+                    $"verein/{VereinId}/spieler");
+                var spieler = kader?.Find(s => s.Id == long.Parse(teile[1]));
+                if (spieler != null) UI.SpielerDetailOverlay.Zeige(szene, spieler);
+                else GD.PrintErr($"[Vorschau] Spieler {teile[1]} nicht im Kader.");
+                break;
+            case "wechsel":
+                if (szene is UI.SpielView spielView) spielView.OeffneWechsel();
+                else GD.PrintErr("[Vorschau] Wechsel nur über der Spielansicht.");
+                break;
+            default:
+                GD.PrintErr($"[Vorschau] Unbekannter Dialog: {dialog}");
+                break;
+        }
     }
 
     public void SetVerein(long vereinId, string vereinName, long ligaId, string ligaName)

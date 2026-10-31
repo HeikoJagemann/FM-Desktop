@@ -25,16 +25,16 @@ public static class SpielerKontextmenue
     public static void Zeige(Control caller, Spieler spieler)
     {
         var menu = new PopupMenu();
-        menu.AddItem("👤  Spielerdetails anzeigen", 0);
+        menu.AddItem("Spielerdetails anzeigen", 0);
 
         // Nur Profis und Amateure haben einen Vertrag - Jugendspieler noch nicht.
         bool hatVertrag = spieler.Kader is "Profi" or "Amateur";
         if (hatVertrag)
         {
-            menu.AddItem("📄  Vertrag um 2 Jahre verlängern", 1);
+            menu.AddItem("Vertrag um 2 Jahre verlängern", 1);
             menu.AddItem(spieler.AufTransferliste
-                ? "🏷  Von der Transferliste nehmen"
-                : "🏷  Auf die Transferliste setzen", 2);
+                ? "Von der Transferliste nehmen"
+                : "Auf die Transferliste setzen", 2);
         }
 
         menu.AddSeparator("Verschieben nach");
