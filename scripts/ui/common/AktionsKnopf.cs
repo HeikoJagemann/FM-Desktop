@@ -12,6 +12,21 @@ public partial class AktionsKnopf : Button
     private Label _titel = null!;
     private Label _unterzeile = null!;
     private Symbol _symbol = null!;
+    private string _titelText = "";
+    private string _unterzeileText = "";
+    private bool _ohneUnterzeile;
+
+    /// <summary>Blendet die Unterzeile aus, wo der Platz knapp ist - sie gehört dann in den Tooltip.</summary>
+    public bool OhneUnterzeile
+    {
+        get => _ohneUnterzeile;
+        set
+        {
+            if (_ohneUnterzeile == value) return;
+            _ohneUnterzeile = value;
+            Setze(_titelText, _unterzeileText);
+        }
+    }
 
     public static AktionsKnopf Neu(Symbol.Art symbol, string titel, string unterzeile = "")
     {
@@ -60,6 +75,9 @@ public partial class AktionsKnopf : Button
 
     public void Setze(string titel, string unterzeile = "")
     {
+        _titelText = titel;
+        _unterzeileText = unterzeile;
+        if (_ohneUnterzeile) unterzeile = "";
         _titel.Text = titel;
         _unterzeile.Text = unterzeile;
         _unterzeile.Visible = unterzeile != "";

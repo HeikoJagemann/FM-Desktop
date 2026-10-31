@@ -16,7 +16,6 @@ namespace FMDesktop.UI.Common;
 /// </summary>
 public partial class FmGrid<T> : VBoxContainer
 {
-    private const int ZeilenHoehe = 34;
 
     private readonly List<GridSpalte<T>> _spalten;
     private readonly List<GridZeile<T>>  _zeilen = new();
@@ -31,6 +30,9 @@ public partial class FmGrid<T> : VBoxContainer
 
     private GridSpalte<T>? _sortSpalte;
     private bool           _sortAbsteigend;
+
+    /// <summary>Höhe einer Zeile; kompakte Tabellen wie auf der Übersicht kommen mit weniger aus.</summary>
+    public int Zeilenhoehe { get; init; } = 34;
 
     /// <summary>Hintergrund einer Zeile; das zweite Argument wechselt für den Zebrastreifen.</summary>
     public Func<T, bool, Color>? Zeilenfarbe { get; set; }
@@ -228,7 +230,7 @@ public partial class FmGrid<T> : VBoxContainer
                 if (!Equals(jetzt, letzteZebragruppe)) { wechsel = false; letzteZebragruppe = jetzt; }
             }
 
-            var zeile = new GridZeile<T>(_spalten, eintrag, ZeilenHoehe,
+            var zeile = new GridZeile<T>(_spalten, eintrag, Zeilenhoehe,
                 ZeilenZusatz?.Invoke(eintrag), ZiehDaten);
             zeile.Hintergrund = Zeilenfarbe?.Invoke(eintrag, wechsel)
                                 ?? (wechsel ? FmTheme.RowAlt : FmTheme.BgPanel);

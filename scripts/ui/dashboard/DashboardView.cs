@@ -12,9 +12,9 @@ namespace FMDesktop.UI.Dashboard;
 /// <summary>
 /// Die Startseite: Hier landet der Manager beim Spielstart und nach jedem Kalenderschritt.
 ///
-/// <para>Links, was ansteht und was passiert ist - die nächste Partie mit dem Kräfteverhältnis
-/// und die Meldungen. Rechts, wo der Verein steht - Tabelle und letzter Spieltag. Darunter, wer
-/// sich im Training entwickelt.</para>
+/// <para>Drei Spalten über die ganze Fensterhöhe, ohne Bildlauf der Seite: links, was ansteht und
+/// was passiert ist - die nächste Partie mit dem Kräfteverhältnis und die Meldungen. In der Mitte
+/// die Tabelle. Rechts der letzte Spieltag und wer sich im Training entwickelt.</para>
 ///
 /// <para>Die Stärke des Gegners ist eine Spanne aus den Scoutberichten, gemittelt über seine
 /// voraussichtliche Elf. Wer ihn beobachten lässt oder gegen ihn spielt, sieht ihn genauer.</para>
@@ -45,45 +45,58 @@ public partial class DashboardView : Control
 
     private void BuildUI()
     {
-        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
-        scroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        AddChild(scroll);
+        // Keine Bildlaufleiste: Die Seite teilt sich die Fensterhöhe auf. Nur die Meldungen haben
+        // mehr, als je auf eine Seite passt - sie laufen in ihrer eigenen Karte.
+        var seite = new VBoxContainer();
+        seite.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        seite.AddThemeConstantOverride("separation", 12);
+        AddChild(seite);
 
-        var vbox = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        vbox.AddThemeConstantOverride("separation", 12);
-        scroll.AddChild(vbox);
-
-        vbox.AddChild(FmTheme.MakeTitel("Übersicht"));
+        // Verein, Liga, Datum und Kontostand stehen schon in der Kopfleiste - hier nur der Titel.
+        var kopf = new HBoxContainer();
+        kopf.AddThemeConstantOverride("separation", 16);
+        seite.AddChild(kopf);
+        kopf.AddChild(FmTheme.MakeTitel("Übersicht"));
         _kopfLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
-        vbox.AddChild(_kopfLabel);
+        _kopfLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        kopf.AddChild(_kopfLabel);
 
-        var spalten = new HBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var spalten = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         spalten.AddThemeConstantOverride("separation", 12);
-        vbox.AddChild(spalten);
+        seite.AddChild(spalten);
 
-        // Linke Spalte: was ansteht und was passiert ist.
-        var links = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsStretchRatio = 1.3f };
-        links.AddThemeConstantOverride("separation", 12);
-        spalten.AddChild(links);
+        // Links: was ansteht und was passiert ist.
+        var links = Saeule(spalten, 1.25f);
 
         _naechstesSpiel = new VBoxContainer();
         _naechstesSpiel.AddThemeConstantOverride("separation", 8);
         links.AddChild(Karte("Nächstes Spiel", _naechstesSpiel));
 
-        _meldungen = new VBoxContainer();
-        _meldungen.AddThemeConstantOverride("separation", 8);
-        links.AddChild(Karte("Ereignisse", _meldungen));
+        _meldungen = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _meldungen.AddThemeConstantOverride("separation", 10);
+        var meldungsScroll = new ScrollContainer
+        {
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        // Rechts Luft für die Bildlaufleiste, sonst läge sie über den Daten.
+        var meldungsRand = new MarginContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        FmTheme.SetMargin(meldungsRand, 0, 14, 0, 0);
+        meldungsRand.AddChild(_meldungen);
+        meldungsScroll.AddChild(meldungsRand);
+        links.AddChild(Karte("Ereignisse", meldungsScroll, fuellen: true));
 
-        // Rechte Spalte: wo der Verein steht.
-        var rechts = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        rechts.AddThemeConstantOverride("separation", 12);
-        spalten.AddChild(rechts);
-
+        // Mitte: wo der Verein steht.
+        var mitte = Saeule(spalten, 1f);
         _tabelle = new FmGrid<TabellenEintrag>(TabellenSpalten.Kompakt)
         {
-            CustomMinimumSize = new Vector2(0, 470),
+            Zeilenhoehe = 28,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        rechts.AddChild(Karte("Tabelle", _tabelle));
+        mitte.AddChild(Karte("Tabelle", _tabelle, fuellen: true));
+
+        // Rechts: der letzte Spieltag und wer sich im Training entwickelt.
+        var rechts = Saeule(spalten, 1f);
 
         var spieltag = new VBoxContainer();
         spieltag.AddThemeConstantOverride("separation", 4);
@@ -94,31 +107,51 @@ public partial class DashboardView : Control
         spieltag.AddChild(_ergebnisse);
         rechts.AddChild(Karte("Letzter Spieltag", spieltag));
 
-        // Unten: Training.
-        var training = new HBoxContainer();
-        training.AddThemeConstantOverride("separation", 12);
-        vbox.AddChild(training);
-
+        // Woche und Saison teilen sich eine Karte - nebeneinander oder untereinander kosteten sie
+        // den Platz, den die Seite nicht hat.
+        var training = new VBoxContainer();
+        training.AddThemeConstantOverride("separation", 4);
         var woche = new VBoxContainer();
         woche.AddThemeConstantOverride("separation", 4);
         _trainingWocheLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary);
         woche.AddChild(_trainingWocheLabel);
         _trainingWoche = new VBoxContainer();
         woche.AddChild(_trainingWoche);
-        var wocheKarte = Karte("Trainingsfortschritt – letzte Woche", woche);
-        wocheKarte.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        training.AddChild(wocheKarte);
+        training.AddChild(woche);
+        _trainingSaison = new VBoxContainer { Visible = false };
+        training.AddChild(_trainingSaison);
 
-        _trainingSaison = new VBoxContainer();
-        var saisonKarte = Karte("Trainingsfortschritt – Saison", _trainingSaison);
-        saisonKarte.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        training.AddChild(saisonKarte);
+        var zeitraum = Segmentschalter.Neu(new[] { "Woche", "Saison" }, 0, new Vector2(70, 28), 13);
+        zeitraum.Gewaehlt += i =>
+        {
+            woche.Visible = i == 0;
+            _trainingSaison.Visible = i == 1;
+        };
+        rechts.AddChild(Karte("Trainingsfortschritt", training, zeitraum, fuellen: true));
     }
 
-    /// <summary>Ein Abschnitt mit Überschrift auf eigener Fläche.</summary>
-    private static PanelContainer Karte(string titel, Control inhalt)
+    /// <summary>Eine Spalte der Seite; das Gewicht bestimmt ihren Anteil an der Breite.</summary>
+    private static VBoxContainer Saeule(HBoxContainer spalten, float gewicht)
+    {
+        var saeule = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsStretchRatio = gewicht,
+        };
+        saeule.AddThemeConstantOverride("separation", 12);
+        spalten.AddChild(saeule);
+        return saeule;
+    }
+
+    /// <summary>
+    /// Ein Abschnitt mit Überschrift auf eigener Fläche. Mit <paramref name="fuellen"/> nimmt er
+    /// die restliche Höhe seiner Spalte ein, und ein Inhalt mit ExpandFill wächst mit.
+    /// </summary>
+    private static PanelContainer Karte(string titel, Control inhalt, Control? kopfZusatz = null,
+                                        bool fuellen = false)
     {
         var panel = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        if (fuellen) panel.SizeFlagsVertical = SizeFlags.ExpandFill;
         panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
         var rand = new MarginContainer();
         FmTheme.SetMargin(rand, 16, 12);
@@ -127,7 +160,16 @@ public partial class DashboardView : Control
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 10);
         rand.AddChild(box);
-        box.AddChild(FmTheme.MakeLabel(titel, 15, FmTheme.TextPrimary));
+
+        var kopf = new HBoxContainer();
+        var ueberschrift = FmTheme.MakeAbschnitt(titel, 18);
+        ueberschrift.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        ueberschrift.ClipText = true;
+        ueberschrift.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        ueberschrift.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        kopf.AddChild(ueberschrift);
+        if (kopfZusatz != null) kopf.AddChild(kopfZusatz);
+        box.AddChild(kopf);
         box.AddChild(inhalt);
         return panel;
     }
@@ -145,8 +187,7 @@ public partial class DashboardView : Control
             return;
         }
 
-        _kopfLabel.Text = $"{dashboard.Verein}  ·  {dashboard.Liga}  ·  {dashboard.Datum:dd.MM.yyyy}, "
-                          + $"{dashboard.Phase}  ·  Kontostand {FmTheme.Geld(dashboard.Kontostand)}";
+        _kopfLabel.Visible = false;
         ZeigeNaechstesSpiel(dashboard.NaechstesSpiel);
         ZeigeMeldungen(dashboard.Meldungen);
         ZeigeTabelle(dashboard.Tabelle, vereinId);
@@ -239,14 +280,22 @@ public partial class DashboardView : Control
             text.AddThemeConstantOverride("separation", 1);
             var kopf = new HBoxContainer();
             kopf.AddThemeConstantOverride("separation", 8);
-            kopf.AddChild(FmTheme.MakeLabel(m.Titel, 13, m.Neu ? FmTheme.TextPrimary : FmTheme.TextSecondary));
+            // Gekürzt statt umbrochen: Im schmalen Fenster darf der Titel die Spalte nicht verbreitern.
+            var titel = FmTheme.MakeLabel(m.Titel, 13, m.Neu ? FmTheme.TextPrimary : FmTheme.TextSecondary);
+            titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            titel.ClipText = true;
+            titel.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+            kopf.AddChild(titel);
             if (m.Neu) kopf.AddChild(FmTheme.MakeLabel("NEU", 10, FmTheme.Accent));
-            kopf.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
             kopf.AddChild(FmTheme.MakeLabel(m.Datum.ToString("dd.MM.", Deutsch), 11, FmTheme.TextGedimmt));
             text.AddChild(kopf);
 
+            // Einzeilig, damit viele Meldungen auf die Karte passen; der ganze Text im Tooltip.
             var inhalt = FmTheme.MakeLabel(m.Text, 12, FmTheme.TextGedimmt);
-            inhalt.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            inhalt.ClipText = true;
+            inhalt.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+            inhalt.TooltipText = m.Text;
+            inhalt.MouseFilter = MouseFilterEnum.Pass;
             text.AddChild(inhalt);
             zeile.AddChild(text);
 
@@ -274,6 +323,7 @@ public partial class DashboardView : Control
             heim.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             heim.HorizontalAlignment = HorizontalAlignment.Right;
             heim.ClipText = true;
+            heim.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
             zeile.AddChild(heim);
 
             var tore = FmTheme.MakeZahl(e.ToreText, 13, farbe);
@@ -284,6 +334,7 @@ public partial class DashboardView : Control
             var gast = FmTheme.MakeLabel(e.Gast, 12, farbe);
             gast.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             gast.ClipText = true;
+            gast.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
             zeile.AddChild(gast);
 
             _ergebnisse.AddChild(zeile);

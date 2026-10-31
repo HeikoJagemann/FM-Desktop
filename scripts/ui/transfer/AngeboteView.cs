@@ -11,6 +11,7 @@ namespace FMDesktop.UI.Transfer;
 /// <summary>
 /// Angebote in beide Richtungen: was andere Vereine für eigene Spieler bieten, und wie die
 /// abgefragten Vereine auf die eigenen Angebote geantwortet haben - samt Begründung einer Absage.
+/// Vereinbarte Wechsel stehen in beiden Listen, bis sie mit dem Fensterstart vollzogen sind.
 /// </summary>
 public partial class AngeboteView : Control
 {
@@ -76,9 +77,12 @@ public partial class AngeboteView : Control
 
         _eingehend.Zeige(eingehend ?? new List<TransferangebotModel>());
         _ausgehend.Zeige(ausgehend ?? new List<TransferangebotModel>());
-        _eingehendLabel.Text = eingehend is { Count: > 0 }
-            ? $"Angebote für eigene Spieler ({eingehend.Count}) - Rechtsklick zum Entscheiden"
-            : "Angebote für eigene Spieler - derzeit keine";
+        int offen = eingehend?.FindAll(a => !a.Vereinbart).Count ?? 0;
+        _eingehendLabel.Text = eingehend is not { Count: > 0 }
+            ? "Angebote für eigene Spieler - derzeit keine"
+            : offen > 0
+                ? $"Angebote für eigene Spieler ({offen}) - Rechtsklick zum Entscheiden"
+                : "Angebote für eigene Spieler - nur vereinbarte Abgänge";
         _ausgehendLabel.Text = ausgehend is { Count: > 0 }
             ? $"Eigene Angebote ({ausgehend.Count}) - offene und die Antworten der letzten vier Wochen"
             : "Eigene Angebote - keine. Geboten wird aus der Transferliste oder den Scoutberichten.";
@@ -90,13 +94,17 @@ public partial class AngeboteView : Control
     /// <summary>Eingehende Angebote annehmen oder ablehnen.</summary>
     private void ZeigeAngebotsmenue(TransferangebotModel angebot)
     {
+        // Vereinbart ist entschieden - es wartet nur noch auf das Fenster.
+        if (angebot.Vereinbart) return;
+
         var menu = new PopupMenu();
         menu.AddItem($"{angebot.SpielerName} → {angebot.NachVerein}", -1);
         menu.SetItemDisabled(0, true);
         menu.AddSeparator();
         menu.AddItem($"Annehmen ({FmTheme.Geld(angebot.Abloese)})", 0);
         menu.AddItem("Ablehnen", 1);
-        if (!_fensterOffen) menu.SetItemDisabled(2, true);
+        if (!_fensterOffen)
+            menu.SetItemTooltip(2, "Das Transferfenster ist geschlossen - er wechselt mit seiner Öffnung.");
 
         AddChild(menu);
         menu.IdPressed += async id =>
@@ -116,9 +124,12 @@ public partial class AngeboteView : Control
 
         _statusLabel.Text = !antwort.Ok
             ? antwort.Fehler ?? $"Das Angebot für {angebot.SpielerName} konnte nicht bearbeitet werden."
-            : aktion == "annehmen"
-                ? $"{angebot.SpielerName} wechselt für {FmTheme.Geld(angebot.Abloese)} zu {angebot.NachVerein}."
-                : $"Angebot für {angebot.SpielerName} abgelehnt.";
+            : aktion != "annehmen"
+                ? $"Angebot für {angebot.SpielerName} abgelehnt."
+                : _fensterOffen
+                    ? $"{angebot.SpielerName} wechselt für {FmTheme.Geld(angebot.Abloese)} zu {angebot.NachVerein}."
+                    : $"Einigung: {angebot.SpielerName} wechselt für {FmTheme.Geld(angebot.Abloese)} zu "
+                      + $"{angebot.NachVerein}, sobald das Transferfenster öffnet.";
         await Lade();
     }
 }

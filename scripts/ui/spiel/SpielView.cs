@@ -77,6 +77,10 @@ public partial class SpielView : Control
     private int _feldHeimTore;
     private int _feldGastTore;
 
+    /// <summary>Wie viele Tore und Karten der Verlauf schon zeigt - beim Überspringen kommt nur der Rest nach.</summary>
+    private int _geschriebeneTore;
+    private int _geschriebeneKarten;
+
     /// <summary>Bis zu welcher Minute die Partie schon gerechnet ist.</summary>
     private int _gerechneteMinute;
 
@@ -198,6 +202,8 @@ public partial class SpielView : Control
     private void SchreibeVorfall(SpielfeldVorfall v)
     {
         bool eigenes = v.Heim == (_spiel?.EigenesHeimspiel ?? true);
+        if (v.Art is "TOR" or "EIGENTOR") _geschriebeneTore++;
+        if (v.Art is "GELB" or "GELBROT" or "ROT") _geschriebeneKarten++;
         switch (v.Art)
         {
             case "TOR":
@@ -921,6 +927,8 @@ public partial class SpielView : Control
     /// <summary>Öffnet den Wechseldialog - auch für den Vorschau-Modus.</summary>
     internal void OeffneWechsel() => OnWechselnPressed();
 
+    internal void Ueberspringe() => OnAktionPressed();
+
     private void OnWechselnPressed()
     {
         if (_abgepfiffen || _spiel == null) return;
@@ -965,6 +973,7 @@ public partial class SpielView : Control
         if (zustand != null)
         {
             Aktualisiere(zustand);
+            TrageRestNach(zustand);
         }
 
         SchreibeZeile(Spielminuten,
@@ -972,6 +981,8 @@ public partial class SpielView : Control
             FmTheme.TextPrimary, Symbol.Art.Abpfiff);
         _uhr.Value = Spielminuten;
         _uhr.AddThemeStyleboxOverride("fill", FmTheme.KonditionsBalken(FmTheme.Accent));
+        _minuteLabel.Text = $"{Spielminuten}'";
+        _halbzeitLabel.Text = "Abpfiff";
         _pausenschild.Visible = false;
 
         // Der restliche Spieltag läuft im Hintergrund - erst danach sind Tabelle und
@@ -985,6 +996,50 @@ public partial class SpielView : Control
         _spieltagLaeuft = false;
 
         await ZeigeZusammenfassung();
+    }
+
+    /// <summary>
+    /// Nach dem Überspringen: Den Rest der Partie hat der Server in einem Zug gerechnet, das
+    /// Spielfeld hat ihn nie gezeigt. Tore und Karten daraus kommen in den Verlauf, die
+    /// Anzeigetafel springt auf den Endstand.
+    ///
+    /// <para>Vorher blieb die Tafel auf dem Stand beim Klick stehen, und im Verlauf fehlte alles
+    /// danach - es sah aus, als sei die Partie dort abgebrochen und der Zwischenstand gewertet
+    /// worden, obwohl Tabelle und Bericht das ganze Spiel enthielten.</para>
+    /// </summary>
+    private void TrageRestNach(LiveSpiel ende)
+    {
+        int tore = 0, karten = 0;
+        bool angekuendigt = false;
+        foreach (var e in ende.Ereignisse)
+        {
+            bool tor = e.Typ == "TOR";
+            bool karte = e.Typ is "GELBE_KARTE" or "GELB_ROTE_KARTE" or "ROTE_KARTE";
+            // Was der Verlauf schon zeigt, steht in derselben Reihenfolge vorn in der Liste.
+            if (tor && ++tore <= _geschriebeneTore) continue;
+            if (karte && ++karten <= _geschriebeneKarten) continue;
+            if (!tor && !karte) continue;
+
+            if (!angekuendigt)
+            {
+                SchreibeZeile(_gerechneteMinute, "Übersprungen - der Rest der Partie im Schnelldurchlauf",
+                    FmTheme.TextSecondary);
+                angekuendigt = true;
+            }
+            bool eigenes = e.VereinId == ende.EigenerVereinId;
+            var (farbe, zeichen) = e.Typ switch
+            {
+                "TOR"         => (eigenes ? FmTheme.Success : FmTheme.Danger, Symbol.Art.Ball),
+                "GELBE_KARTE" => (FmTheme.Gold, Symbol.Art.Gelb),
+                "ROTE_KARTE"  => (FmTheme.Danger, Symbol.Art.Rot),
+                _             => (FmTheme.Danger, Symbol.Art.GelbRot),
+            };
+            SchreibeZeile(e.Minute, e.Beschreibung ?? "", farbe, zeichen);
+        }
+
+        _feldHeimTore = ende.HeimTore;
+        _feldGastTore = ende.GastTore;
+        _ergebnisLabel.Text = $"{ende.HeimTore} : {ende.GastTore}";
     }
 
     private async Task WarteAufSpieltag()

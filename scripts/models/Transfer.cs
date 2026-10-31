@@ -57,13 +57,23 @@ public class TransferSpieler
 
     public string VertragText => VertragBis > 0 ? $"bis {VertragBis}/{VertragBis + 1}" : "–";
     public string StaerkeText => Spanne(StaerkeVon, StaerkeBis);
-    public string TalentText  => TalentBis == 0 ? "?" : Spanne(TalentVon, TalentBis);
+    public string TalentText  => TalentBis == 0 ? "?" : SterneSpanne(TalentVon, TalentBis);
     public int    StaerkeMitte => (StaerkeVon + StaerkeBis) / 2;
 
     /// <summary>Was ein Angebot ohne eigene Angabe bietet: der Preis, sonst der Marktwert.</summary>
     public long   Vorschlag => Preis > 0 ? Preis : Wert;
 
     public static string Spanne(int von, int bis) => von == bis ? von.ToString() : $"{von}–{bis}";
+
+    /// <summary>
+    /// Eine Talentschätzung als Sterne: eindeutig volle fünf Felder, sonst die Spanne der Sterne
+    /// ("★★–★★★★"). Die Zahl selbst zeigt das Spiel nicht.
+    /// </summary>
+    public static string SterneSpanne(int von, int bis)
+    {
+        int a = Spieler.Sterne(von), b = Spieler.Sterne(bis);
+        return a == b ? Spieler.SterneText(a) : new string('★', a) + "–" + new string('★', b);
+    }
 
     /// <summary>Der Scoutingfortschritt als kleiner Balken aus fünf Feldern samt Prozentzahl.</summary>
     public string KenntnisText
@@ -109,10 +119,14 @@ public class TransferangebotModel
 
     public string StaerkeText => TransferSpieler.Spanne(StaerkeVon, StaerkeBis);
 
+    /// <summary>Außerhalb des Fensters angenommen - gewechselt wird, sobald es öffnet.</summary>
+    public bool Vereinbart => Status == "VEREINBART";
+
     public string StatusText => Status switch
     {
         "OFFEN"      => "wartet auf Antwort",
         "ANGENOMMEN" => "angenommen",
+        "VEREINBART" => "vereinbart - wechselt zum Fensterstart",
         "ABGELEHNT"  => "abgelehnt",
         _            => Status,
     };

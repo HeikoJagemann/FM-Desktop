@@ -17,6 +17,15 @@ public partial class GameMain : Control
     private Button  _trainingButton = null!;
     private AktionsKnopf _simulierenButton = null!;
     private HBoxContainer _unterreiter = null!;
+    private HBoxContainer _kopfleiste = null!;
+    private Control _vereinBlock = null!;
+    private Control _zeitBlock = null!;
+
+    /// <summary>Ob der Stand gerade "Training planen" anbietet - unabhängig davon, ob Platz dafür ist.</summary>
+    private bool _trainingAngeboten;
+
+    /// <summary>Innenabstand der Reiter; im schmalen Fenster rücken sie zusammen.</summary>
+    private int _reiterRand = 14;
     private Timer   _pollTimer = null!;
     private KalenderStand? _kalenderStand;
 
@@ -32,6 +41,7 @@ public partial class GameMain : Control
 
     private const string SceneDashboard   = "res://scenes/dashboard/DashboardView.tscn";
     private const string SceneKader       = "res://scenes/mannschaft/KaderView.tscn";
+    private const string SceneMitarbeiter = "res://scenes/mitarbeiter/MitarbeiterView.tscn";
     private const string SceneJugend      = "res://scenes/jugend/JugendView.tscn";
     private const string SceneTabelle     = "res://scenes/liga/TabelleView.tscn";
     private const string SceneSpielplan   = "res://scenes/liga/SpielplanView.tscn";
@@ -54,7 +64,7 @@ public partial class GameMain : Control
     private static readonly (string Bereich, (string Seite, string Scene)[] Seiten)[] Bereiche =
     {
         ("Übersicht",  new[] { ("Dashboard", SceneDashboard) }),
-        ("Mannschaft", new[] { ("Kader", SceneKader) }),
+        ("Mannschaft", new[] { ("Kader", SceneKader), ("Mitarbeiter", SceneMitarbeiter) }),
         ("Taktik",     new[] { ("Aufstellung", SceneAufstellung) }),
         ("Training",   new[] { ("Trainingsplan", SceneTraining) }),
         ("Liga",       new[] { ("Tabelle", SceneTabelle), ("Spielplan", SceneSpielplan), ("Statistiken", SceneStatistiken) }),
@@ -119,6 +129,7 @@ public partial class GameMain : Control
         var hbox = new HBoxContainer();
         hbox.AddThemeConstantOverride("separation", 12);
         margin.AddChild(hbox);
+        _kopfleiste = hbox;
 
         // Zurück zum Hauptmenü
         var zurueck = SymbolKnopf(Symbol.Art.Zurueck, "Hauptmenü", flach: true);
@@ -134,6 +145,7 @@ public partial class GameMain : Control
         _vereinUnterzeile = FmTheme.MakeLabel(GameState.Instance.LigaName, 12, FmTheme.TextSecondary);
         verein.AddChild(_vereinUnterzeile);
         hbox.AddChild(verein);
+        _vereinBlock = verein;
 
         // Bereiche
         var reiter = new HBoxContainer();
@@ -165,6 +177,7 @@ public partial class GameMain : Control
         _kontoLabel = FmTheme.MakeLabel("", 12, FmTheme.TextSecondary, HorizontalAlignment.Right);
         zeit.AddChild(_kontoLabel);
         hbox.AddChild(zeit);
+        _zeitBlock = zeit;
 
         // Nur am Wochenstart: Abkürzung zur Trainingsplanung, denn genau dafür hält er an.
         _trainingButton = new Button
@@ -188,7 +201,51 @@ public partial class GameMain : Control
         einstellungen.Pressed += () => EinstellungenDialog.Zeige(this, () => LadeScene(_aktuelleScene));
         hbox.AddChild(einstellungen);
 
+        GetViewport().SizeChanged += PasseKopfleisteAn;
         return panel;
+    }
+
+    public override void _ExitTree() => GetViewport().SizeChanged -= PasseKopfleisteAn;
+
+    /// <summary>
+    /// Im schmalen Fenster verzichtet die Menüzeile Stück für Stück auf Entbehrliches, statt
+    /// breiter als das Fenster zu werden und alles darunter mitzuziehen: zuerst "Training planen"
+    /// (der Bereich Training bleibt), dann die Unterzeile des Weiter-Knopfs (sie steht auch im
+    /// Tooltip), der Vereinsname neben dem Wappen, der Abstand der Reiter und zuletzt das Datum.
+    /// </summary>
+    private void PasseKopfleisteAn()
+    {
+        if (_kopfleiste == null || !IsInstanceValid(_kopfleiste)) return;
+        // Ränder der Menüzeile: 12 links, 16 rechts.
+        float verfuegbar = GetViewportRect().Size.X - 28;
+
+        _trainingButton.Visible = _trainingAngeboten;
+        _simulierenButton.OhneUnterzeile = false;
+        _vereinBlock.Visible = true;
+        SetzeReiterRand(14);
+        _zeitBlock.Visible = true;
+
+        var verzichte = new System.Action[]
+        {
+            () => _trainingButton.Visible = false,
+            () => _simulierenButton.OhneUnterzeile = true,
+            () => _vereinBlock.Visible = false,
+            () => SetzeReiterRand(7),
+            () => _zeitBlock.Visible = false,
+        };
+        foreach (var schritt in verzichte)
+        {
+            if (_kopfleiste.GetCombinedMinimumSize().X <= verfuegbar) break;
+            schritt();
+        }
+    }
+
+    private void SetzeReiterRand(int rand)
+    {
+        if (_reiterRand == rand) return;
+        _reiterRand = rand;
+        foreach (var knopf in _reiter.Values)
+            SetzeReiterStil(knopf, knopf.HasMeta("aktiv") && (bool)knopf.GetMeta("aktiv"));
     }
 
     /// <summary>Die Seiten des aktiven Bereichs - Tabelle, Spielplan, Statistiken.</summary>
@@ -239,15 +296,16 @@ public partial class GameMain : Control
     }
 
     /// <summary>Reiter der Menüzeile: flach, der aktive mit Bernstein-Unterstreichung.</summary>
-    private static void SetzeReiterStil(Button knopf, bool aktiv)
+    private void SetzeReiterStil(Button knopf, bool aktiv)
     {
+        knopf.SetMeta("aktiv", aktiv);
         var stil = new StyleBoxFlat
         {
             BgColor = new Color(0, 0, 0, 0),
             BorderColor = FmTheme.Accent,
             BorderWidthBottom = aktiv ? 3 : 0,
-            ContentMarginLeft = 14,
-            ContentMarginRight = 14,
+            ContentMarginLeft = _reiterRand,
+            ContentMarginRight = _reiterRand,
         };
         var schwebend = (StyleBoxFlat)stil.Duplicate();
         foreach (var zustand in new[] { "normal", "pressed", "focus", "disabled" })
@@ -501,7 +559,7 @@ public partial class GameMain : Control
         var ziel = stand.NaechstesEreignis;
 
         // Der Wochenstart hält genau dafür an, dass hier geplant wird.
-        _trainingButton.Visible = hier is { IstWochenstart: true };
+        _trainingAngeboten = hier is { IstWochenstart: true };
 
         _simulierenButton.Disabled = false;
         // Die Unterzeile sagt, was der Knopf tut: Bei einer eigenen Partie, gegen wen; sonst, bis
@@ -514,6 +572,7 @@ public partial class GameMain : Control
             : ziel == null
                 ? "Die Zeit weiterlaufen lassen"
                 : $"Nächster Halt: {ziel.Titel} ({ziel.ZeitText})";
+        PasseKopfleisteAn();
     }
 
     private void LadeScene(string path)

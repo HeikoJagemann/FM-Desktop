@@ -36,6 +36,7 @@ public class BuchungModel
         "FERNSEHGELD"  => "Fernsehgeld",
         "TRANSFER"     => "Transfer",
         "SCOUTING"     => "Scouting",
+        "MITARBEITER"  => "Mitarbeiter",
         "PRAEMIE"      => "Prämie",
         _              => Art,
     };

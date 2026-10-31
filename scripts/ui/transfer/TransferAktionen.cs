@@ -13,14 +13,11 @@ public static class TransferAktionen
     /// <summary>
     /// Kontextmenü für einen fremden Spieler: bieten oder einen Scout gezielt auf ihn ansetzen.
     /// </summary>
-    /// <param name="fensterOffen">bieten geht nur im offenen Transferfenster</param>
     /// <param name="meldung">bekommt das Ergebnis für die Statuszeile</param>
-    public static void Zeige(Control caller, TransferSpieler spieler, bool fensterOffen, Action<string> meldung)
+    public static void Zeige(Control caller, TransferSpieler spieler, Action<string> meldung)
     {
         var menu = new PopupMenu();
         menu.AddItem($"Angebot für {spieler.Name} abgeben …", 0);
-        menu.SetItemDisabled(0, !fensterOffen);
-        if (!fensterOffen) menu.SetItemTooltip(0, "Das Transferfenster ist geschlossen.");
         menu.AddItem("Gezielt beobachten lassen …", 1);
         menu.AddItem($"Scoutbericht ({spieler.Kenntnis} %)", 2);
 
@@ -29,7 +26,7 @@ public static class TransferAktionen
         {
             if (id == 0) BietenDialog.Zeige(caller, spieler, meldung);
             else if (id == 1) _ = BeobachtenLassen(caller, spieler.SpielerId, spieler.Name, meldung);
-            else if (id == 2) ScoutberichtDialog.Zeige(caller, spieler, fensterOffen, meldung);
+            else if (id == 2) ScoutberichtDialog.Zeige(caller, spieler, meldung);
         };
         menu.PopupHide += menu.QueueFree;
         menu.Position = (Vector2I)caller.GetGlobalMousePosition();

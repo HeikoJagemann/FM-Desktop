@@ -55,7 +55,7 @@ public static class TransferSpalten
 
     public static GridSpalte<TransferSpieler> Talent => new()
     {
-        Titel = "Talent", Breite = 74, Ausrichtung = HorizontalAlignment.Center,
+        Titel = "Talent", Breite = 100, Ausrichtung = HorizontalAlignment.Center,
         Text       = s => s.TalentText,
         Farbe      = s => s.TalentBis == 0 ? FmTheme.TextGedimmt : FmTheme.TextPrimary,
         Tooltip    = _ => "Wie weit sich der Spieler entwickeln kann.\nOhne Scoutbericht unbekannt.",

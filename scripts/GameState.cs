@@ -39,7 +39,8 @@ public partial class GameState : Node
         }
 
         // Fenstermodus vom letzten Start wiederherstellen - liegt lokal, nicht im Spielstand.
-        if (ClientEinstellungen.GetBool("vollbild", false))
+        // "--fenster" übergeht ihn, damit die Vorschau mit "--resolution" kleine Fenster prüfen kann.
+        if (ClientEinstellungen.GetBool("vollbild", false) && Array.IndexOf(argumente, "--fenster") < 0)
             DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
     }
 
@@ -55,7 +56,8 @@ public partial class GameState : Node
     ///
     /// <para>Ein sechstes Argument öffnet zusätzlich einen Dialog über der Ansicht:
     /// <c>einstellungen</c>, <c>spieler:&lt;id&gt;</c> (aus dem eigenen Kader),
-    /// <c>bericht:&lt;spielId&gt;[:reiter]</c> oder <c>wechsel</c> (nur über der Spielansicht).</para>
+    /// <c>bericht:&lt;spielId&gt;[:reiter]</c>, <c>wechsel</c> oder <c>ueberspringen</c> (beide nur
+    /// über der Spielansicht).</para>
     /// </summary>
     private async System.Threading.Tasks.Task Vorschau(string schema, long vereinId, string ansicht, string datei,
                                                        string? dialog)
@@ -110,6 +112,15 @@ public partial class GameState : Node
             case "wechsel":
                 if (szene is UI.SpielView spielView) spielView.OeffneWechsel();
                 else GD.PrintErr("[Vorschau] Wechsel nur über der Spielansicht.");
+                break;
+            case "ueberspringen":
+                if (szene is UI.SpielView partie)
+                {
+                    partie.Ueberspringe();
+                    // Der Rest der Partie und des Spieltags braucht ein paar Sekunden.
+                    await ToSignal(GetTree().CreateTimer(8.0), SceneTreeTimer.SignalName.Timeout);
+                }
+                else GD.PrintErr("[Vorschau] Überspringen nur in der Spielansicht.");
                 break;
             default:
                 GD.PrintErr($"[Vorschau] Unbekannter Dialog: {dialog}");

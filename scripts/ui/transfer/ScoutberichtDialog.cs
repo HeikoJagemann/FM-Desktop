@@ -17,15 +17,14 @@ namespace FMDesktop.UI.Transfer;
 public partial class ScoutberichtDialog : Overlaykarte
 {
     private TransferSpieler _spieler = null!;
-    private bool _fensterOffen;
     private Action<string>? _meldung;
     private VBoxContainer _inhalt = null!;
 
     public ScoutberichtDialog() : base("Scoutbericht") { }
 
-    public static void Zeige(Node caller, TransferSpieler spieler, bool fensterOffen, Action<string> meldung)
+    public static void Zeige(Node caller, TransferSpieler spieler, Action<string> meldung)
     {
-        Oeffne(caller, new ScoutberichtDialog { _spieler = spieler, _fensterOffen = fensterOffen, _meldung = meldung });
+        Oeffne(caller, new ScoutberichtDialog { _spieler = spieler, _meldung = meldung });
     }
 
     protected override void BaueInhalt(VBoxContainer inhalt)
@@ -49,8 +48,7 @@ public partial class ScoutberichtDialog : Overlaykarte
             await TransferAktionen.BeobachtenLassen(this, s.SpielerId, s.Name, text => _meldung?.Invoke(text));
         };
         leiste.AddChild(beobachten);
-        var bieten = new Button { Text = "Angebot abgeben …", Disabled = !_fensterOffen };
-        if (!_fensterOffen) bieten.TooltipText = "Das Transferfenster ist geschlossen.";
+        var bieten = new Button { Text = "Angebot abgeben …" };
         FmTheme.ApplyPrimaryButton(bieten);
         bieten.Pressed += () =>
         {
@@ -77,7 +75,7 @@ public partial class ScoutberichtDialog : Overlaykarte
 
         _inhalt.AddChild(Zeile("Stärke", FmTheme.MakeLabel(TransferSpieler.Spanne(bericht.StaerkeVon, bericht.StaerkeBis), 14, FmTheme.TextPrimary)));
         _inhalt.AddChild(Zeile("Talent", FmTheme.MakeLabel(bericht.TalentBis == 0 ? "?"
-            : TransferSpieler.Spanne(bericht.TalentVon, bericht.TalentBis), 14, FmTheme.TextPrimary)));
+            : TransferSpieler.SterneSpanne(bericht.TalentVon, bericht.TalentBis), 14, FmTheme.TextPrimary)));
 
         var fortschritt = new ProgressBar
         {

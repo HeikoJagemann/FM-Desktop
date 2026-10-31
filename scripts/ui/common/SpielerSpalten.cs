@@ -91,7 +91,7 @@ public static class SpielerSpalten
         Farbe      = s => s.Talent >= 80 ? FmTheme.Gold
                         : s.Talent >= 65 ? FmTheme.Success
                         : FmTheme.TextSecondary,
-        Tooltip    = s => $"Talent {s.Talent} von 100 ({s.TalentSterne} von 5 Sternen).\n"
+        Tooltip    = s => $"Talent {Spieler.SterneWort(s.TalentSterne)} ({s.TalentSterne} von 5 Sternen).\n"
                         + "Die Skala gilt für alle Ligen: Fünf Sterne hat, wer auch international "
                         + "herausragt.",
         Sortierung = s => -s.Talent,
@@ -175,7 +175,7 @@ public static class SpielerSpalten
         Text       = s => s.PotenzialSterneText,
         Farbe      = s => s.PotenzialSterne >= 4 ? FmTheme.Gold : FmTheme.TextSecondary,
         Tooltip    = s => $"Potenzial {s.PotenzialText} als Sterne - nicht zu verwechseln mit "
-                        + $"dem Talent ({s.Talent}).",
+                        + $"dem Talent ({s.TalentSterneText}).",
         Sortierung = s => -s.PotenzialSterne,
     };
 

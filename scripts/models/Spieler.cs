@@ -118,14 +118,27 @@ public class Spieler
     public string PotenzialSterneText =>
         new string('★', PotenzialSterne) + new string('☆', 5 - PotenzialSterne);
 
-    /// <summary>Talent grob als 1 bis 5 Sterne - stand vorher dreimal wortgleich im UI.</summary>
-    public int TalentSterne => Talent switch
+    /// <summary>
+    /// Talent als 1 bis 5 Sterne. Die Zahl dahinter zeigt das Spiel nirgends - ein Manager
+    /// schätzt Talent ein, er misst es nicht.
+    /// </summary>
+    public static int Sterne(int talent) => talent switch
     {
         >= 80 => 5, >= 65 => 4, >= 50 => 3, >= 35 => 2, _ => 1,
     };
 
-    public string TalentSterneText =>
-        new string('★', TalentSterne) + new string('☆', 5 - TalentSterne);
+    public static string SterneText(int sterne) =>
+        new string('★', sterne) + new string('☆', 5 - sterne);
+
+    /// <summary>Die Sterne in Worten - für Tooltips und Tafeln.</summary>
+    public static string SterneWort(int sterne) => sterne switch
+    {
+        5 => "herausragend", 4 => "sehr gut", 3 => "gut", 2 => "ordentlich", _ => "gering",
+    };
+
+    public int TalentSterne => Sterne(Talent);
+
+    public string TalentSterneText => SterneText(TalentSterne);
 
     public int BestPositionStaerke =>
         Top3Positionen?.Count > 0 ? Top3Positionen[0].Staerke : Staerke;

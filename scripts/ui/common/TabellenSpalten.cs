@@ -88,7 +88,15 @@ public static class TabellenSpalten
     /// <summary>Die Tabelle in schmal - für das Dashboard.</summary>
     public static IEnumerable<GridSpalte<TabellenEintrag>> Kompakt => new[]
     {
-        Platz, Verein, Spiele, Tordifferenz, Punkte,
+        Platz, VereinSchmal, Spiele, Tordifferenz, Punkte,
+    };
+
+    /// <summary>Der Verein für die kompakte Tabelle: schmaler, lange Namen werden gekürzt.</summary>
+    private static GridSpalte<TabellenEintrag> VereinSchmal => new()
+    {
+        Titel = "Verein", Breite = 110, Expand = true, ExpandGewicht = 3,
+        Text       = e => e.Verein?.Name ?? "",
+        Sortierung = e => e.Verein?.Name ?? "",
     };
 
     /// <summary>

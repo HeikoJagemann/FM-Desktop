@@ -98,7 +98,8 @@ public partial class SpielerDetailOverlay : Overlaykarte
         reihe.AddChild(Positionstafel());
         reihe.AddChild(Tafel("Stärke", _s.BestPositionStaerke.ToString(), FmTheme.TextPrimary,
             Veraenderung(_verlauf?.StaerkeDifferenz ?? 0), _s.BestPositionErklaerung));
-        reihe.AddChild(Tafel("Talent", _s.Talent.ToString(), FmTheme.TextPrimary, _s.TalentSterneText));
+        reihe.AddChild(Tafel("Talent", _s.TalentSterneText, FmTheme.Gold, "",
+            $"Talent {Spieler.SterneWort(_s.TalentSterne)} - wie leicht er Neues annimmt."));
         // Das Potenzial nur als Spanne - den exakten Wert liefert das Backend nicht aus, kein
         // Manager kennt das Maximum eines Spielers auf den Punkt.
         reihe.AddChild(Tafel("Potenzial", _s.PotenzialText, FmTheme.TextPrimary, _s.PotenzialSterneText,
@@ -201,7 +202,7 @@ public partial class SpielerDetailOverlay : Overlaykarte
     {
         var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 7);
-        v.AddChild(AttributZeile("Talent (TW)", _s.TalentTW));
+        v.AddChild(Sternezeile("Talent (TW)", _s.TalentTW));
         v.AddChild(Fertigkeit("Strafraumbeherrschung", _s.Strafraumbeherrschung, "STRAFRAUMBEHERRSCHUNG"));
         v.AddChild(Fertigkeit("Fangsicherheit", _s.Fangsicherheit, "FANGSICHERHEIT"));
         v.AddChild(Fertigkeit("Reflexe", _s.Reflexe, "REFLEXE"));
@@ -275,6 +276,23 @@ public partial class SpielerDetailOverlay : Overlaykarte
         trend.CustomMinimumSize = new Vector2(30, 0);
         row.AddChild(trend);
 
+        return row;
+    }
+
+    /// <summary>Ein Talent als Sterne statt als Zahl, bündig mit den Fähigkeitszeilen.</summary>
+    private static Control Sternezeile(string label, int talent)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 10);
+        row.AddChild(new Control { CustomMinimumSize = new Vector2(12, 12) });
+        var l = FmTheme.MakeLabel(label, 13, FmTheme.TextPrimary);
+        l.CustomMinimumSize = new Vector2(158, 0);
+        row.AddChild(l);
+        int sterne = Spieler.Sterne(talent);
+        var s = FmTheme.MakeLabel(Spieler.SterneText(sterne), 15, FmTheme.Gold);
+        s.TooltipText = $"Talent {Spieler.SterneWort(sterne)}";
+        s.MouseFilter = MouseFilterEnum.Pass;
+        row.AddChild(s);
         return row;
     }
 

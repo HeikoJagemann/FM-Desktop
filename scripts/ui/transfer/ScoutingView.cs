@@ -36,16 +36,12 @@ public partial class ScoutingView : Control
 
     private ScoutingModel? _scouting;
     private ScoutModel? _scout;
-    private bool _fensterOffen;
 
     private bool Lebt => IsInstanceValid(this) && !IsQueuedForDeletion();
 
     public override async void _Ready()
     {
         BuildUI();
-        var fenster = await ApiClient.GetAsync<TransferfensterModel>("transfer/fenster");
-        if (!Lebt) return;
-        _fensterOffen = fenster?.Offen ?? false;
         await LadeScouts();
         if (!Lebt) return;
         await LadeBerichte();
@@ -93,8 +89,8 @@ public partial class ScoutingView : Control
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
-        _berichtGrid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, _fensterOffen, Melde);
-        _berichtGrid.Rechtsklick += s => TransferAktionen.Zeige(this, s, _fensterOffen, Melde);
+        _berichtGrid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, Melde);
+        _berichtGrid.Rechtsklick += s => TransferAktionen.Zeige(this, s, Melde);
         vbox.AddChild(_berichtGrid);
 
         AktualisiereKnoepfe();

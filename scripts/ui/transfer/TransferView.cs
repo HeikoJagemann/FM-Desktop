@@ -15,8 +15,8 @@ namespace FMDesktop.UI.Transfer;
 /// ihn mit einem Angebot ab. Stärke und Talent stehen hier als Spannen: Genau kennt der Verein nur
 /// seine eigenen Spieler.</para>
 ///
-/// <para>Gewechselt wird nur im offenen Transferfenster - außerhalb bleibt die Liste sichtbar,
-/// aber Angebote sind gesperrt.</para>
+/// <para>Geboten werden darf jederzeit. Gewechselt wird nur im offenen Transferfenster - was
+/// außerhalb vereinbart wird, vollzieht sich mit seiner Öffnung.</para>
 /// </summary>
 public partial class TransferView : Control
 {
@@ -70,8 +70,8 @@ public partial class TransferView : Control
             SizeFlagsVertical = SizeFlags.ExpandFill,
         };
         _grid.Ausgewaehlt += s => { _gewaehlt = s; AktualisiereKnoepfe(); };
-        _grid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, _fensterOffen, Melde);
-        _grid.Rechtsklick += s => TransferAktionen.Zeige(this, s, _fensterOffen, Melde);
+        _grid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, Melde);
+        _grid.Rechtsklick += s => TransferAktionen.Zeige(this, s, Melde);
         vbox.AddChild(_grid);
     }
 
@@ -175,7 +175,7 @@ public partial class TransferView : Control
 
     private void AktualisiereKnoepfe()
     {
-        _bietenButton.Disabled = _gewaehlt == null || !_fensterOffen;
+        _bietenButton.Disabled = _gewaehlt == null;
         _beobachtenButton.Disabled = _gewaehlt == null;
         _bietenButton.Text = _gewaehlt == null
             ? "Angebot abgeben"
