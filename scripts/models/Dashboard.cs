@@ -33,6 +33,9 @@ public class Meldung
     public string   Text  { get; set; } = "";
     public bool     Neu   { get; set; }
 
+    /// <summary>Wohin ein Klick führt, wenn nicht in den Bereich der Rubrik - etwa "SCOUTWOCHE".</summary>
+    public string?  Ziel  { get; set; }
+
     /// <summary>Die Rubrik als Wort - steht als kleines Schild vor der Meldung.</summary>
     public string Rubrik => Art switch
     {

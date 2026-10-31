@@ -275,6 +275,7 @@ public partial class DashboardView : Control
             zeile.AddThemeConstantOverride("separation", 10);
 
             zeile.AddChild(Rubrikschild(m.Rubrik));
+            var meldung = m;
 
             var text = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
             text.AddThemeConstantOverride("separation", 1);
@@ -299,7 +300,58 @@ public partial class DashboardView : Control
             text.AddChild(inhalt);
             zeile.AddChild(text);
 
-            _meldungen.AddChild(zeile);
+            _meldungen.AddChild(Anklickbar(zeile, meldung));
+        }
+    }
+
+    /// <summary>
+    /// Macht eine Meldung zum Sprung in ihren Bereich: die ganze Zeile reagiert, beim Überfahren
+    /// hinterlegt und mit Pfeil. Die Wochenmeldung der Scouts öffnet ihre Zusammenfassung.
+    /// </summary>
+    private Control Anklickbar(HBoxContainer zeile, Meldung m)
+    {
+        bool zusammenfassung = m.Ziel == "SCOUTWOCHE";
+        string? scene = UI.GameMain.SceneFuerMeldung(m.Art);
+        var huelle = new PanelContainer();
+        var ruhig = FmTheme.Flaeche(new Color(0, 0, 0, 0), 8);
+        ruhig.ContentMarginLeft = ruhig.ContentMarginRight = 6;
+        ruhig.ContentMarginTop = ruhig.ContentMarginBottom = 3;
+        huelle.AddThemeStyleboxOverride("panel", ruhig);
+        huelle.AddChild(zeile);
+        if (!zusammenfassung && scene == null) return huelle;
+
+        var pfeil = FmTheme.MakeLabel("›", 18, FmTheme.TextGedimmt);
+        pfeil.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        zeile.AddChild(pfeil);
+
+        var hover = FmTheme.Flaeche(FmTheme.BgHover, 8);
+        hover.ContentMarginLeft = hover.ContentMarginRight = 6;
+        hover.ContentMarginTop = hover.ContentMarginBottom = 3;
+        huelle.MouseFilter = MouseFilterEnum.Stop;
+        // Schild und Texte lassen den Klick durch zur Hülle.
+        LassDurch(zeile);
+        huelle.MouseDefaultCursorShape = CursorShape.PointingHand;
+        huelle.TooltipText = zusammenfassung ? "Zusammenfassung der Woche öffnen" : $"Zu {m.Rubrik} springen";
+        huelle.MouseEntered += () => { huelle.AddThemeStyleboxOverride("panel", hover); pfeil.AddThemeColorOverride("font_color", FmTheme.Accent); };
+        huelle.MouseExited  += () => { huelle.AddThemeStyleboxOverride("panel", ruhig); pfeil.AddThemeColorOverride("font_color", FmTheme.TextGedimmt); };
+        huelle.GuiInput += ev =>
+        {
+            if (ev is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }) return;
+            if (zusammenfassung)
+                Transfer.ScoutwocheOverlay.Zeige(this, m.Datum,
+                    () => UI.GameMain.Springe(this, UI.GameMain.SceneScouting));
+            else
+                UI.GameMain.Springe(this, scene!);
+        };
+        return huelle;
+    }
+
+    private static void LassDurch(Node knoten)
+    {
+        foreach (var kind in knoten.GetChildren())
+        {
+            if (kind is Control c && c.MouseFilter == MouseFilterEnum.Stop) c.MouseFilter = MouseFilterEnum.Pass;
+            LassDurch(kind);
         }
     }
 

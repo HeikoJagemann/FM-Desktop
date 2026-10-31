@@ -179,6 +179,42 @@ public static class ApiClient
         }
     }
 
+    /// <summary>
+    /// Wie <see cref="SendeAsync"/>, liefert aber bei Erfolg auch den Rumpf - für Abläufe, die
+    /// sowohl den neuen Stand als auch eine verständliche Ablehnung brauchen.
+    /// </summary>
+    public static async Task<(TResult? Wert, string? Fehler)> SendeAsync<TResult>(string methode, string path,
+        object? body = null)
+    {
+        try
+        {
+            var request = new System.Net.Http.HttpRequestMessage(new System.Net.Http.HttpMethod(methode), path);
+            request.Headers.TryAddWithoutValidation("X-Schema", CurrentSchema);
+            if (body != null) request.Content = JsonContent.Create(body, options: SendeOpts);
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+                return (await response.Content.ReadFromJsonAsync<TResult>(JsonOpts), null);
+
+            string text = await response.Content.ReadAsStringAsync();
+            string? fehler = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(text);
+                if (doc.RootElement.TryGetProperty("fehler", out var f)) fehler = f.GetString();
+            }
+            catch (JsonException)
+            {
+                // Kein JSON - dann bleibt es bei der allgemeinen Meldung.
+            }
+            return (default, fehler ?? $"Der Server hat abgelehnt (HTTP {(int)response.StatusCode}).");
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[ApiClient] {methode} {path} fehlgeschlagen: {e.Message}");
+            return (default, "Der Server ist nicht erreichbar.");
+        }
+    }
+
     public static async Task<TResult?> PostAsync<TBody, TResult>(string path, TBody body)
     {
         try

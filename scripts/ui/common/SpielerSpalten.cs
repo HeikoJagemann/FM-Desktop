@@ -154,6 +154,20 @@ public static class SpielerSpalten
         Sortierung = s => -s.Gehalt,
     };
 
+    /// <summary>
+    /// Vertragsende - Verträge laufen bis zum 30. Juni am Ende der Saison. Leer bei
+    /// Jugendspielern, die keinen Vertrag haben.
+    /// </summary>
+    public static GridSpalte<Spieler> Vertrag => new()
+    {
+        Titel = "Vertrag bis", Breite = 92, Ausrichtung = HorizontalAlignment.Center,
+        Text       = s => s.VertragBis > 0 ? $"30.06.{s.VertragBis + 1}" : "–",
+        Tooltip    = s => s.VertragBis > 0
+            ? $"Vertrag bis Saison {s.VertragBis}/{s.VertragBis + 1}.\nNach Vertragsende kann er ablösefrei gehen."
+            : "Kein verwalteter Vertrag.",
+        Sortierung = s => s.VertragBis > 0 ? s.VertragBis : int.MaxValue,
+    };
+
     public static GridSpalte<Spieler> Nation => new()
     {
         Titel = "Nation", Breite = 90, Expand = true,
@@ -195,7 +209,7 @@ public static class SpielerSpalten
 
     public static IEnumerable<GridSpalte<Spieler>> Kaderliste => new[]
     {
-        Name, Position, Staerke, Form, Talent, Alter, Wert, Gehalt, Nation,
+        Name, Position, Staerke, Form, Talent, Alter, Wert, Gehalt, Vertrag, Nation,
     };
 
     public static IEnumerable<GridSpalte<Spieler>> Jugendliste => new[]

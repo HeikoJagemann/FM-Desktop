@@ -31,7 +31,7 @@ public static class SpielerKontextmenue
         bool hatVertrag = spieler.Kader is "Profi" or "Amateur";
         if (hatVertrag)
         {
-            menu.AddItem("Vertrag um 2 Jahre verlängern", 1);
+            menu.AddItem("Vertrag verhandeln …", 1);
             menu.AddItem(spieler.AufTransferliste
                 ? "Von der Transferliste nehmen"
                 : "Auf die Transferliste setzen", 2);
@@ -63,7 +63,7 @@ public static class SpielerKontextmenue
             }
             else if (gewaehlt == 1)
             {
-                _ = VerlaengereAsync(caller, spieler);
+                VertragsverhandlungDialog.Zeige(caller, spieler, () => KaderGeaendert?.Invoke());
             }
             else if (gewaehlt == 2)
             {
@@ -95,31 +95,6 @@ public static class SpielerKontextmenue
             "JugendC"            => alter <= 14,
             _                    => false,
         };
-    }
-
-    /// <summary>
-    /// Verlängert um zwei Jahre ab dem späteren von laufendem Vertragsende und aktueller Saison -
-    /// so verkürzt die Aktion nie versehentlich einen bereits länger laufenden Vertrag. Das Gehalt
-    /// wird dabei neu zum Marktsatz berechnet; eine Verhandlung mit Ablehnung gibt es noch nicht.
-    /// </summary>
-    private static async System.Threading.Tasks.Task VerlaengereAsync(Control caller, Spieler spieler)
-    {
-        var kalender = await ApiClient.GetAsync<KalenderStand>("kalender");
-        int saison = kalender?.Saison ?? DateTime.Now.Year;
-        int bis = Math.Max(spieler.VertragBis, saison) + 2;
-
-        var ergebnis = await ApiClient.PutAsync<object, Spieler>(
-            $"spieler/{spieler.Id}/vertrag?bis={bis}", new { });
-
-        if (ergebnis == null)
-        {
-            GD.PrintErr($"Vertragsverlängerung für {spieler.Name} abgelehnt.");
-            return;
-        }
-
-        spieler.Gehalt = ergebnis.Gehalt;
-        spieler.VertragBis = ergebnis.VertragBis;
-        KaderGeaendert?.Invoke();
     }
 
     /// <summary>

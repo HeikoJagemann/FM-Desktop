@@ -113,6 +113,24 @@ public partial class GameState : Node
                 if (szene is UI.SpielView spielView) spielView.OeffneWechsel();
                 else GD.PrintErr("[Vorschau] Wechsel nur über der Spielansicht.");
                 break;
+            case "verhandlung":
+                // verhandlung:<spielerId>[:<Anteil der Forderung>] - Vertragsgespräch, auf Wunsch mit Angebot
+                var eigene = await ApiClient.GetAsync<System.Collections.Generic.List<Models.Spieler>>(
+                    $"verein/{VereinId}/spieler");
+                var gespraech = eigene?.Find(s => s.Id == long.Parse(teile[1]));
+                if (gespraech == null) { GD.PrintErr($"[Vorschau] Spieler {teile[1]} nicht im Kader."); break; }
+                UI.VertragsverhandlungDialog.Zeige(szene, gespraech);
+                if (teile.Length > 2)
+                {
+                    var gespraechsDialog = FindeKnoten<UI.VertragsverhandlungDialog>(GetTree().Root);
+                    if (gespraechsDialog != null)
+                        await gespraechsDialog.VorschauBiete(double.Parse(teile[2], System.Globalization.CultureInfo.InvariantCulture));
+                }
+                break;
+            case "scoutwoche":
+                // scoutwoche:<yyyy-MM-dd> - die Zusammenfassung einer Scoutingwoche
+                UI.Transfer.ScoutwocheOverlay.Zeige(szene, DateOnly.Parse(teile[1]));
+                break;
             case "umstellen":
                 // umstellen[:<vorlage>] - der Umstell-Dialog, auf Wunsch mit gewählter Vorlage
                 if (szene is UI.SpielView spielAnsicht)

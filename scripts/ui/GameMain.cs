@@ -39,26 +39,26 @@ public partial class GameMain : Control
     /// laden, weil die Views ihre Daten nur einmal in _Ready() holen.
     private string _aktuelleScene = SceneDashboard;
 
-    private const string SceneDashboard   = "res://scenes/dashboard/DashboardView.tscn";
-    private const string SceneKader       = "res://scenes/mannschaft/KaderView.tscn";
-    private const string SceneMitarbeiter = "res://scenes/mitarbeiter/MitarbeiterView.tscn";
-    private const string SceneJugend      = "res://scenes/jugend/JugendView.tscn";
-    private const string SceneTalente     = "res://scenes/jugend/TalenteView.tscn";
-    private const string SceneUmfeld      = "res://scenes/umfeld/UmfeldView.tscn";
-    private const string SceneTabelle     = "res://scenes/liga/TabelleView.tscn";
-    private const string SceneSpielplan   = "res://scenes/liga/SpielplanView.tscn";
-    private const string SceneStatistiken = "res://scenes/liga/StatistikenView.tscn";
-    private const string SceneAufstellung = "res://scenes/taktik/AufstellungView.tscn";
-    private const string SceneTaktik      = "res://scenes/taktik/TaktikView.tscn";
-    private const string SceneTraining     = "res://scenes/training/TrainingView.tscn";
-    private const string SceneKalender     = "res://scenes/kalender/KalenderView.tscn";
-    private const string SceneFinanzen     = "res://scenes/finanzen/FinanzenView.tscn";
-    private const string SceneTransfer     = "res://scenes/transfer/TransferView.tscn";
-    private const string SceneScouting     = "res://scenes/transfer/ScoutingView.tscn";
-    private const string SceneAngebote     = "res://scenes/transfer/AngeboteView.tscn";
+    internal const string SceneDashboard   = "res://scenes/dashboard/DashboardView.tscn";
+    internal const string SceneKader       = "res://scenes/mannschaft/KaderView.tscn";
+    internal const string SceneMitarbeiter = "res://scenes/mitarbeiter/MitarbeiterView.tscn";
+    internal const string SceneJugend      = "res://scenes/jugend/JugendView.tscn";
+    internal const string SceneTalente     = "res://scenes/jugend/TalenteView.tscn";
+    internal const string SceneUmfeld      = "res://scenes/umfeld/UmfeldView.tscn";
+    internal const string SceneTabelle     = "res://scenes/liga/TabelleView.tscn";
+    internal const string SceneSpielplan   = "res://scenes/liga/SpielplanView.tscn";
+    internal const string SceneStatistiken = "res://scenes/liga/StatistikenView.tscn";
+    internal const string SceneAufstellung = "res://scenes/taktik/AufstellungView.tscn";
+    internal const string SceneTaktik      = "res://scenes/taktik/TaktikView.tscn";
+    internal const string SceneTraining     = "res://scenes/training/TrainingView.tscn";
+    internal const string SceneKalender     = "res://scenes/kalender/KalenderView.tscn";
+    internal const string SceneFinanzen     = "res://scenes/finanzen/FinanzenView.tscn";
+    internal const string SceneTransfer     = "res://scenes/transfer/TransferView.tscn";
+    internal const string SceneScouting     = "res://scenes/transfer/ScoutingView.tscn";
+    internal const string SceneAngebote     = "res://scenes/transfer/AngeboteView.tscn";
 
     /// Eigener Bildschirm statt Overlay - die Partie übernimmt das ganze Fenster.
-    private const string SceneSpiel        = "res://scenes/spiel/SpielView.tscn";
+    internal const string SceneSpiel        = "res://scenes/spiel/SpielView.tscn";
 
     /// <summary>
     /// Die Bereiche der Menüzeile und ihre Seiten. Die Seiten eines Bereichs stehen in der
@@ -583,6 +583,34 @@ public partial class GameMain : Control
                 : $"Nächster Halt: {ziel.Titel} ({ziel.ZeitText})";
         PasseKopfleisteAn();
     }
+
+    /// <summary>
+    /// Springt aus einer Seite heraus in einen anderen Bereich - etwa aus einer Meldung im
+    /// Dashboard. Die Menüzeile folgt mit.
+    /// </summary>
+    internal static void Springe(Node aus, string scene)
+    {
+        for (Node? knoten = aus; knoten != null; knoten = knoten.GetParent())
+        {
+            if (knoten is GameMain main)
+            {
+                main.LadeScene(scene);
+                return;
+            }
+        }
+    }
+
+    /// <summary>Wohin eine Meldung führt: der Bereich ihrer Rubrik.</summary>
+    internal static string? SceneFuerMeldung(string art) => art switch
+    {
+        "TRANSFER" => SceneAngebote,
+        "SCOUTING" => SceneScouting,
+        "FINANZEN" => SceneFinanzen,
+        "SAISON"   => SceneTabelle,
+        "JUGEND"   => SceneTalente,
+        "UMFELD"   => SceneUmfeld,
+        _          => null,
+    };
 
     private void LadeScene(string path)
     {
