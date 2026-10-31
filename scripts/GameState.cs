@@ -113,6 +113,12 @@ public partial class GameState : Node
                 if (szene is UI.SpielView spielView) spielView.OeffneWechsel();
                 else GD.PrintErr("[Vorschau] Wechsel nur über der Spielansicht.");
                 break;
+            case "umstellen":
+                // umstellen[:<vorlage>] - der Umstell-Dialog, auf Wunsch mit gewählter Vorlage
+                if (szene is UI.SpielView spielAnsicht)
+                    await spielAnsicht.OeffneTaktik(teile.Length > 1 ? teile[1] : null);
+                else GD.PrintErr("[Vorschau] Umstellen nur über der Spielansicht.");
+                break;
             case "ziehen":
                 // ziehen:<slot>:<x>:<y> - eine Plakette der Aufstellung an eine Stelle ziehen
                 var aufstellung = FindeKnoten<UI.Taktik.AufstellungView>(GetTree().Root);
@@ -129,6 +135,13 @@ public partial class GameState : Node
                 var ansicht = FindeKnoten<UI.Taktik.AufstellungView>(GetTree().Root);
                 if (ansicht != null && teile.Length >= 2) ansicht.VorschauVorlage(teile[1]);
                 else GD.PrintErr("[Vorschau] Vorlage nur in der Aufstellung.");
+                break;
+            case "eigenschaften":
+                // eigenschaften:<spielerId> - einen Spieler in der Eigenschaftentafel zeigen
+                var tafel = FindeKnoten<UI.Transfer.EigenschaftenTafel>(GetTree().Root);
+                if (tafel != null && teile.Length >= 2)
+                    await tafel.Zeige(new Models.TransferSpieler { SpielerId = long.Parse(teile[1]), Name = "Vorschau" });
+                else GD.PrintErr("[Vorschau] Keine Eigenschaftentafel.");
                 break;
             case "ueberspringen":
                 if (szene is UI.SpielView partie)

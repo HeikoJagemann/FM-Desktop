@@ -1,5 +1,6 @@
 #nullable enable
 using Godot;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using FMDesktop.Api;
 using FMDesktop.Models;
@@ -22,6 +23,7 @@ public partial class SpielerDetailOverlay : Overlaykarte
 
     /// Entwicklung der letzten Spieltage; wird nachgeladen, die Karte steht vorher schon.
     private SpielerVerlauf? _verlauf;
+    private List<KatalogEintrag> _bereiche = new();
     private VBoxContainer _inhalt = null!;
 
     public SpielerDetailOverlay() : base("", 960) { }
@@ -50,8 +52,11 @@ public partial class SpielerDetailOverlay : Overlaykarte
 
     private async Task Lade()
     {
-        _verlauf = await ApiClient.GetAsync<SpielerVerlauf>(
+        var verlaufTask = ApiClient.GetAsync<SpielerVerlauf>(
             $"training/spieler/{_s.Id}/verlauf?spieltage={Spieltagsfenster}");
+        var planTask = ApiClient.GetAsync<TrainingsplanModel>($"training/{GameState.Instance.VereinId}");
+        _verlauf = await verlaufTask;
+        _bereiche = (await planTask)?.Bereiche ?? new List<KatalogEintrag>();
         if (!IsInstanceValid(this)) return;
         foreach (Node kind in _inhalt.GetChildren()) kind.QueueFree();
 
@@ -73,6 +78,7 @@ public partial class SpielerDetailOverlay : Overlaykarte
 
         var rechts = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         rechts.AddThemeConstantOverride("separation", 16);
+        rechts.AddChild(Trainingsfokus());
         rechts.AddChild(Positionen());
         if (_s.IstTorwart) rechts.AddChild(Torwart());
         rechts.AddChild(Stammdaten());
@@ -104,6 +110,9 @@ public partial class SpielerDetailOverlay : Overlaykarte
         // Manager kennt das Maximum eines Spielers auf den Punkt.
         reihe.AddChild(Tafel("Potenzial", _s.PotenzialText, FmTheme.TextPrimary, _s.PotenzialSterneText,
             "Geschätzt - wie weit er sich noch entwickeln kann."));
+        reihe.AddChild(Tafel("Form", _s.FormText, FmTheme.FormFarbe(_s.FormWert), "",
+            $"Form {_s.FormWert} von 90 - gute Spiele heben sie, schwache senken sie. Im Spiel wirkt sie "
+            + "bis zu ±6 % auf alle Fähigkeiten."));
         reihe.AddChild(Tafel("Frische", _s.Frische.ToString(), FmTheme.FrischeFarbe(_s.Frische), "",
             "Startwert der Kondition im nächsten Spiel."));
         reihe.AddChild(Tafel("Marktwert", FmTheme.Geld(_s.Wert), FmTheme.TextPrimary, ""));
@@ -362,12 +371,53 @@ public partial class SpielerDetailOverlay : Overlaykarte
             v.AddChild(InfoZeile(FmTheme.GehaltTitel, FmTheme.Gehalt(_s.Gehalt)));
             v.AddChild(InfoZeile("Vertrag bis", $"Saison {_s.VertragBis}/{_s.VertragBis + 1}"));
         }
-        if (!string.IsNullOrEmpty(_s.IndividualFokus))
-            v.AddChild(InfoZeile("Trainingsschwerpunkt", _s.IndividualFokus));
         return Karte("Stammdaten", v);
     }
 
     // ── Bausteine ────────────────────────────────────────────────────────────
+
+    // ── Trainingsfokus ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Der persönliche Schwerpunkt: was der Spieler zusätzlich zum Mannschaftstraining übt. Gilt
+    /// ab der nächsten Trainingswoche - wie auf der Trainingsseite, nur ohne den Umweg dorthin.
+    /// </summary>
+    private Control Trainingsfokus()
+    {
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 6);
+
+        var auswahl = new OptionButton { CustomMinimumSize = new Vector2(0, 36) };
+        auswahl.AddItem("Kein persönlicher Schwerpunkt", 0);
+        int gewaehlt = 0;
+        for (int i = 0; i < _bereiche.Count; i++)
+        {
+            auswahl.AddItem(_bereiche[i].Anzeige, i + 1);
+            if (_bereiche[i].Schluessel == _s.IndividualFokus) gewaehlt = i + 1;
+        }
+        auswahl.Select(gewaehlt);
+        v.AddChild(auswahl);
+
+        var erklaerung = FmTheme.MakeLabel(FokusText(gewaehlt), 12, FmTheme.TextSecondary);
+        erklaerung.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        v.AddChild(erklaerung);
+
+        auswahl.ItemSelected += async index =>
+        {
+            string? fokus = index == 0 ? null : _bereiche[(int)index - 1].Schluessel;
+            erklaerung.Text = FokusText((int)index);
+            await ApiClient.PutAsync<object, object>(
+                $"training/spieler/{_s.Id}/fokus", new { fokus = fokus ?? "" });
+            if (!IsInstanceValid(this)) return;
+            _s.IndividualFokus = fokus;
+            erklaerung.Text = FokusText((int)index) + " Gilt ab der nächsten Trainingswoche.";
+        };
+        return Karte("Trainingsfokus", v);
+    }
+
+    private string FokusText(int index) => index == 0 || index > _bereiche.Count
+        ? "Er trainiert nur mit der Mannschaft."
+        : $"Schult zusätzlich: {_bereiche[index - 1].Beschreibung}.";
 
     private static PanelContainer Karte(string titel, Control inhalt)
     {

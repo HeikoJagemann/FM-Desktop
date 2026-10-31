@@ -85,13 +85,22 @@ public partial class ScoutingView : Control
         vbox.AddChild(_berichteLabel);
         vbox.AddChild(BaueFilterleiste());
 
+        // Daneben die Eigenschaften des gewählten Spielers - ohne Umweg über den Scoutbericht.
+        var unten = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        unten.AddThemeConstantOverride("separation", 12);
+        vbox.AddChild(unten);
+
         _berichtGrid = new FmGrid<TransferSpieler>(TransferSpalten.Berichte)
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
+        var eigenschaften = new EigenschaftenTafel { SizeFlagsVertical = SizeFlags.ExpandFill };
+        _berichtGrid.Ausgewaehlt += s => _ = eigenschaften.Zeige(s);
         _berichtGrid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, Melde);
         _berichtGrid.Rechtsklick += s => TransferAktionen.Zeige(this, s, Melde);
-        vbox.AddChild(_berichtGrid);
+        unten.AddChild(_berichtGrid);
+        unten.AddChild(eigenschaften);
 
         AktualisiereKnoepfe();
     }

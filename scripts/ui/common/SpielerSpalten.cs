@@ -105,6 +105,18 @@ public static class SpielerSpalten
         Sortierung = s => s.Alter,
     };
 
+    /// <summary>Die Form in Worten, farbig - Topform in Grün, Formtief in Rot.</summary>
+    public static GridSpalte<Spieler> Form => new()
+    {
+        Titel = "Form", Breite = 82, Ausrichtung = HorizontalAlignment.Center,
+        Text       = s => s.FormText,
+        Farbe      = s => FmTheme.FormFarbe(s.FormWert),
+        Tooltip    = s => $"Form {s.FormWert} von 90 - gute Spiele heben sie, schwache senken sie, "
+                        + "und jede Woche kehrt sie ein Stück zur Mitte zurück. Im Spiel wirkt sie "
+                        + "bis zu ±6 % auf alle Fähigkeiten.",
+        Sortierung = s => -s.FormWert,
+    };
+
     public static GridSpalte<Spieler> Frische => new()
     {
         Titel = "Frische", Breite = 66, Ausrichtung = HorizontalAlignment.Center,
@@ -183,7 +195,7 @@ public static class SpielerSpalten
 
     public static IEnumerable<GridSpalte<Spieler>> Kaderliste => new[]
     {
-        Name, Position, Staerke, Talent, Alter, Wert, Gehalt, Nation,
+        Name, Position, Staerke, Form, Talent, Alter, Wert, Gehalt, Nation,
     };
 
     public static IEnumerable<GridSpalte<Spieler>> Jugendliste => new[]
@@ -193,7 +205,7 @@ public static class SpielerSpalten
 
     public static IEnumerable<GridSpalte<Spieler>> Aufstellungsliste => new[]
     {
-        Name, Position, Staerke, Talent, Alter, Frische, Kader,
+        Name, Position, Staerke, Form, Talent, Alter, Frische, Kader,
     };
 
     public static IEnumerable<GridSpalte<Spieler>> Trainingsliste(Func<Spieler, int> differenz,

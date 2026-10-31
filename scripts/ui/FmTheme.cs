@@ -196,6 +196,16 @@ public static class FmTheme
     }
 
     /// <summary>Einheitliche Ampelfarbe für einen Frische-/Konditionswert (0-100).</summary>
+    /// <summary>Farbe der Form: Grün im Hoch, Rot im Tief, neutral dazwischen.</summary>
+    public static Color FormFarbe(int form) => form switch
+    {
+        >= 75 => Success,
+        >= 60 => new Color("A8DDB9"),
+        > 40  => TextPrimary,
+        > 25  => new Color("F2B0A6"),
+        _     => Danger,
+    };
+
     public static Color FrischeFarbe(double frische) => frische switch
     {
         >= 85 => Success,

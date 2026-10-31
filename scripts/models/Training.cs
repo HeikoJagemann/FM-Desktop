@@ -22,6 +22,23 @@ public class TrainingsplanModel
 
     public List<KatalogEintrag> Bereiche      { get; set; } = new();
     public List<KatalogEintrag> Intensitaeten { get; set; } = new();
+
+    /// <summary>Ob die langfristige Planung gilt - dann setzt sie den Wochenplan selbst.</summary>
+    public bool ZyklusAktiv { get; set; }
+
+    /// <summary>Die laufende Woche des Zyklus, 0 bis 3.</summary>
+    public int Zykluswoche { get; set; }
+
+    public List<ZyklusWoche> Zyklus { get; set; } = new();
+}
+
+/// <summary>Eine Woche der langfristigen Planung.</summary>
+public class ZyklusWoche
+{
+    public string? Intensitaet  { get; set; } = "MITTEL";
+    public string? Schwerpunkt1 { get; set; }
+    public string? Schwerpunkt2 { get; set; }
+    public string? Schwerpunkt3 { get; set; }
 }
 
 /// <summary>Was der Client beim Speichern schickt - ohne den Katalog.</summary>

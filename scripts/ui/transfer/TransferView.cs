@@ -65,14 +65,22 @@ public partial class TransferView : Control
 
         vbox.AddChild(BaueFilterleiste());
 
+        // Daneben die Eigenschaften des gewählten Spielers - ohne Umweg über den Scoutbericht.
+        var unten = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        unten.AddThemeConstantOverride("separation", 12);
+        vbox.AddChild(unten);
+
         _grid = new FmGrid<TransferSpieler>(TransferSpalten.Transferliste)
         {
             SizeFlagsVertical = SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        _grid.Ausgewaehlt += s => { _gewaehlt = s; AktualisiereKnoepfe(); };
+        var eigenschaften = new EigenschaftenTafel { SizeFlagsVertical = SizeFlags.ExpandFill };
+        _grid.Ausgewaehlt += s => { _gewaehlt = s; AktualisiereKnoepfe(); _ = eigenschaften.Zeige(s); };
         _grid.Doppelklick += s => ScoutberichtDialog.Zeige(this, s, Melde);
         _grid.Rechtsklick += s => TransferAktionen.Zeige(this, s, Melde);
-        vbox.AddChild(_grid);
+        unten.AddChild(_grid);
+        unten.AddChild(eigenschaften);
     }
 
     private Control BaueFilterleiste()

@@ -40,6 +40,8 @@ public class Meldung
         "SCOUTING" => "Scouting",
         "FINANZEN" => "Finanzen",
         "SAISON"   => "Saison",
+        "JUGEND"   => "Jugend",
+        "UMFELD"   => "Umfeld",
         _          => "",
     };
 }

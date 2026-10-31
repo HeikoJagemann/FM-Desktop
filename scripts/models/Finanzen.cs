@@ -38,6 +38,8 @@ public class BuchungModel
         "SCOUTING"     => "Scouting",
         "MITARBEITER"  => "Mitarbeiter",
         "PRAEMIE"      => "Prämie",
+        "BAU"          => "Ausbau",
+        "ANLAGEN"      => "Gelände",
         _              => Art,
     };
 

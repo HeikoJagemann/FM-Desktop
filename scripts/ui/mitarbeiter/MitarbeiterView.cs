@@ -266,6 +266,7 @@ public partial class MitarbeiterView : Control
     private static string Mehrzahl(string rolle) => rolle switch
     {
         "Physiotherapeut" => "Physiotherapeuten",
+        "Jugendscout"     => "Jugendscouts",
         _                 => rolle,
     };
 
@@ -273,6 +274,8 @@ public partial class MitarbeiterView : Control
     {
         "CO_TRAINER" => "Leiten Einheiten mit an: Alle Spieler lernen im Training schneller. "
                         + "Der Beste zählt voll, der zweite halb.",
+        "JUGENDSCOUT" => "Sichten in der Region und schlagen Talente vor, überwiegend für die C-Jugend. "
+                         + "Ein besserer Scout findet öfter und bessere - einladen unter Jugend › Talente.",
         _            => "Behandeln und regenerieren: Die Spieler erholen sich zwischen den Spielen besser. "
                         + "Der Beste zählt voll, der zweite halb.",
     };
@@ -280,6 +283,7 @@ public partial class MitarbeiterView : Control
     private static string Fehlt(string rolle) => rolle switch
     {
         "CO_TRAINER" => "Noch kein Co-Trainer - das Training bringt zehn Prozent weniger als bei den anderen Vereinen.",
+        "JUGENDSCOUT" => "Noch kein Jugendscout - der Verein findet keine Talente von außerhalb.",
         _            => "Noch kein Physiotherapeut - jeder Spieler erholt sich zwei Frischepunkte je Woche weniger.",
     };
 

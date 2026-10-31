@@ -29,11 +29,12 @@ public partial class TaktikView : Control
     /// falsch, solange die Engine sie nur speichert - Grundausrichtung und Passlänge warten auf
     /// Steilpässe, hohe Bälle und Konter, ohne die Offensive immer gewänne.
     /// </summary>
-    private sealed record Einstellung(string Titel, string Erklaerung, string[] Werte, string[] Texte,
+    internal sealed record Einstellung(string Titel, string Erklaerung, string[] Werte, string[] Texte,
         string[] Wirkung, Func<TaktikModel, string> Lesen, Action<TaktikModel, string> Setzen, float Knopfbreite,
         bool WirktNoch = true);
 
-    private static readonly Einstellung[] Einstellungen =
+    /// <summary>Auch der Umstell-Dialog im 2D-Spiel zeigt diese Einstellungen.</summary>
+    internal static readonly Einstellung[] Einstellungen =
     {
         new("Grundausrichtung",
             "Wie hoch die Mannschaft steht und wie viel sie wagt - im Ballbesitz wie gegen den Ball.",
@@ -66,7 +67,7 @@ public partial class TaktikView : Control
             new[]
             {
                 "Nach einem Ballverlust ordnet sich die Mannschaft zuerst und zieht sich in ihren Block zurück.",
-                "Nach einem Ballverlust gehen die drei Nächsten sofort auf den Ball, und der Block rückt nicht zurück. Holt den Ball oft schnell zurück - kostet Kraft und öffnet Räume, wenn der Gegner sich befreit.",
+                "Nach einem Ballverlust gehen die vier Nächsten sofort auf den Ball, und der Block rückt nicht zurück. Holt den Ball oft schnell zurück - kostet Kraft und öffnet Räume, wenn der Gegner sich befreit.",
             },
             t => t.Gegenpressing ? "AN" : "AUS", (t, v) => t.Gegenpressing = v == "AN", 110),
         new("Passrichtung",

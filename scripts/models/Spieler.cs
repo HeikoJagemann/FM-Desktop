@@ -85,6 +85,21 @@ public class Spieler
     // Training
     /// <summary>Frische zwischen den Spielen (0-100); Startwert der Kondition im nächsten Spiel.</summary>
     public int    Frische               { get; set; }
+
+    /// <summary>Form von 10 bis 90, 50 normal; ohne Wert normal. Wirkt im Spiel bis ±6 % auf alle Fähigkeiten.</summary>
+    public int?   Form                  { get; set; }
+
+    public int FormWert => Form ?? 50;
+
+    /// <summary>Die Form in Worten - wie der Server sie nennt (<c>training.Form.anzeige</c>).</summary>
+    public string FormText => FormWert switch
+    {
+        >= 75 => "Topform",
+        >= 60 => "gut",
+        > 40  => "normal",
+        > 25  => "schwach",
+        _     => "Formtief",
+    };
     /// <summary>Untere Grenze der Potenzialschätzung. Den exakten Wert liefert das Backend nie.</summary>
     public int    PotenzialVon          { get; set; }
     /// <summary>Obere Grenze der Potenzialschätzung.</summary>

@@ -93,6 +93,7 @@ public partial class SpielView : Control
     // Fußleiste
     private Label _wechselLabel = null!;
     private Button _wechselButton = null!;
+    private Button _taktikButton = null!;
     private Button _aktionButton = null!;
 
     private bool _abgepfiffen;
@@ -681,6 +682,12 @@ public partial class SpielView : Control
         _wechselButton.Pressed += OnWechselnPressed;
         leiste.AddChild(_wechselButton);
 
+        _taktikButton = new Button { Text = "Umstellen", CustomMinimumSize = new Vector2(160, 44) };
+        FmTheme.ApplySecondaryButton(_taktikButton);
+        _taktikButton.TooltipText = "Formation und Taktik ändern - jederzeit, nur für diese Partie.";
+        _taktikButton.Pressed += async () => await OeffneTaktik();
+        leiste.AddChild(_taktikButton);
+
         _aktionButton = new Button { Text = "Überspringen", CustomMinimumSize = new Vector2(190, 44) };
         FmTheme.ApplySecondaryButton(_aktionButton);
         _aktionButton.Pressed += OnAktionPressed;
@@ -699,6 +706,7 @@ public partial class SpielView : Control
         _rumpf.AddChild(box);
 
         _wechselButton.Visible = false;
+        _taktikButton.Visible = false;
         _aktionButton.Text = "← Zurück";
         _aktionButton.Disabled = false;
         _abgepfiffen = true;
@@ -957,6 +965,55 @@ public partial class SpielView : Control
         if (!_abgepfiffen) _pausiert = false;
     }
 
+    // ── Umstellen ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Öffnet den Umstell-Dialog. Die Uhr steht, solange er offen ist; anders als ein Wechsel
+    /// kostet Umstellen nichts und ist jederzeit erlaubt.
+    /// </summary>
+    internal async System.Threading.Tasks.Task OeffneTaktik(string? vorlage = null)
+    {
+        if (_abgepfiffen || _spiel == null) return;
+        _pausiert = true;
+        var standTask    = ApiClient.GetAsync<LiveTaktik>("spielfeld/taktik");
+        var vorlagenTask = ApiClient.GetAsync<List<FormationsVorlage>>("aufstellung/vorlagen");
+        var stand    = await standTask;
+        var vorlagen = await vorlagenTask ?? new List<FormationsVorlage>();
+        if (!Lebt) return;
+        if (stand == null)
+        {
+            SchreibeZeile(_spiel.Minute, "Umstellen gerade nicht möglich.", FmTheme.Danger);
+            if (!_abgepfiffen) _pausiert = false;
+            return;
+        }
+        LiveTaktikDialog.Zeige(this, stand, vorlagen,
+            beiBestaetigung: async neu => await StelleUm(neu),
+            beiAbbruch: () => { if (!_abgepfiffen) _pausiert = false; });
+        if (vorlage != null)
+            FindeDialog()?.VorschauVorlage(vorlage);
+    }
+
+    private LiveTaktikDialog? FindeDialog()
+    {
+        foreach (var kind in (GetTree().CurrentScene ?? GetTree().Root).GetChildren())
+            if (kind is LiveTaktikDialog d) return d;
+        return null;
+    }
+
+    private async System.Threading.Tasks.Task StelleUm(LiveTaktik neu)
+    {
+        var ergebnis = await ApiClient.PostAsync<LiveTaktik, LiveTaktik>("spielfeld/taktik", neu);
+        if (!Lebt) return;
+        if (ergebnis == null)
+            SchreibeZeile(_spiel?.Minute ?? 0, "Die Umstellung kam nicht an.", FmTheme.Danger);
+        else
+            SchreibeZeile(_spiel?.Minute ?? 0, $"Umgestellt: {ergebnis.Formation}.", FmTheme.TextSecondary);
+        var zustand = await ApiClient.GetAsync<LiveSpiel>("spielfeld/stand");
+        if (!Lebt) return;
+        if (zustand != null) Aktualisiere(zustand);
+        if (!_abgepfiffen) _pausiert = false;
+    }
+
     // ── Abpfiff ──────────────────────────────────────────────────────────────
 
     private async Task Abpfiff()
@@ -966,6 +1023,7 @@ public partial class SpielView : Control
         _pausiert = true;
         _spielfeldLaeuft = false;
         _wechselButton.Disabled = true;
+        _taktikButton.Disabled = true;
 
         var zustand = await ApiClient.PostAsync<object, LiveSpiel>("spielfeld/abpfiff", new { });
         if (!Lebt) return;
@@ -989,6 +1047,7 @@ public partial class SpielView : Control
         // Statistiken stimmig, deshalb wird bis dahin gewartet.
         _spieltagLaeuft = true;
         _wechselButton.Visible = false;
+        _taktikButton.Visible = false;
         _aktionButton.Disabled = true;
         _aktionButton.Text = "Restlicher Spieltag …";
         await WarteAufSpieltag();

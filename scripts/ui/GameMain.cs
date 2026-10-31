@@ -43,6 +43,8 @@ public partial class GameMain : Control
     private const string SceneKader       = "res://scenes/mannschaft/KaderView.tscn";
     private const string SceneMitarbeiter = "res://scenes/mitarbeiter/MitarbeiterView.tscn";
     private const string SceneJugend      = "res://scenes/jugend/JugendView.tscn";
+    private const string SceneTalente     = "res://scenes/jugend/TalenteView.tscn";
+    private const string SceneUmfeld      = "res://scenes/umfeld/UmfeldView.tscn";
     private const string SceneTabelle     = "res://scenes/liga/TabelleView.tscn";
     private const string SceneSpielplan   = "res://scenes/liga/SpielplanView.tscn";
     private const string SceneStatistiken = "res://scenes/liga/StatistikenView.tscn";
@@ -72,7 +74,8 @@ public partial class GameMain : Control
         ("Kalender",   new[] { ("Termine", SceneKalender) }),
         ("Transfers",  new[] { ("Transferliste", SceneTransfer), ("Scouting", SceneScouting), ("Angebote", SceneAngebote) }),
         ("Finanzen",   new[] { ("Übersicht", SceneFinanzen) }),
-        ("Jugend",     new[] { ("Jugendkader", SceneJugend) }),
+        ("Umfeld",     new[] { ("Anlagen", SceneUmfeld) }),
+        ("Jugend",     new[] { ("Jugendkader", SceneJugend), ("Talente", SceneTalente) }),
     };
 
     public override async void _Ready()

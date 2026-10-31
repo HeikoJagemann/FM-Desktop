@@ -27,6 +27,12 @@ public partial class TrainingView : Control
     private FmGrid<Spieler> _kaderGrid    = null!;
 
     private TrainingsplanModel? _plan;
+
+    // Langfristige Planung: vier Wochen mit je Intensität und drei Schwerpunkten.
+    private const int ZyklusWochen = 4;
+    private readonly OptionButton[,] _zyklusFelder = new OptionButton[ZyklusWochen, 4];
+    private readonly Label[] _zyklusKoepfe = new Label[ZyklusWochen];
+    private CheckButton _zyklusAktiv = null!;
     private List<Spieler> _kader = new();
     /// Entwicklung der letzten Trainingswoche je Spieler-ID.
     private Dictionary<long, SpielerEntwicklung> _letzteWoche = new();
@@ -54,6 +60,7 @@ public partial class TrainingView : Control
         vbox.AddChild(_statusLabel);
 
         vbox.AddChild(BaueSteuerung());
+        vbox.AddChild(BaueZyklus());
 
         vbox.AddChild(FmTheme.MakeLabel("Kader", 15, FmTheme.TextPrimary));
         _kaderGrid = BaueKaderGrid();
@@ -104,6 +111,59 @@ public partial class TrainingView : Control
             12, FmTheme.TextSecondary);
         innen.AddChild(_hinweisLabel);
 
+        return panel;
+    }
+
+    /// <summary>
+    /// Die langfristige Planung: vier Wochen nebeneinander, die laufende hervorgehoben. Ist sie
+    /// eingeschaltet, setzt sie den Wochenplan darüber nach jeder Trainingswoche selbst - die Felder
+    /// dort sind dann nur noch Anzeige.
+    /// </summary>
+    private Control BaueZyklus()
+    {
+        var panel = new PanelContainer();
+        panel.AddThemeStyleboxOverride("panel", FmTheme.PanelStyle());
+        var rand = new MarginContainer();
+        FmTheme.SetMargin(rand, 10, 10);
+        panel.AddChild(rand);
+        var innen = new VBoxContainer();
+        innen.AddThemeConstantOverride("separation", 8);
+        rand.AddChild(innen);
+
+        var kopf = new HBoxContainer();
+        kopf.AddThemeConstantOverride("separation", 16);
+        var titel = FmTheme.MakeAbschnitt("Langfristige Planung", 18);
+        titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        kopf.AddChild(titel);
+        _zyklusAktiv = new CheckButton { Text = "Plan verwenden" };
+        _zyklusAktiv.TooltipText = "Der Wochenplan wechselt dann jede Woche von selbst zur nächsten Woche des Plans.";
+        _zyklusAktiv.Toggled += async _ => await ZyklusGeaendert();
+        kopf.AddChild(_zyklusAktiv);
+        var ausgewogen = new Button { Text = "Ausgewogenen Plan erstellen" };
+        FmTheme.ApplySecondaryButton(ausgewogen);
+        ausgewogen.TooltipText = "Jeder Bereich kommt regelmäßig dran, und auf eine harte Woche folgt eine leichtere.";
+        ausgewogen.Pressed += async () => await ErstelleAusgewogen();
+        kopf.AddChild(ausgewogen);
+        innen.AddChild(kopf);
+
+        var wochen = new HBoxContainer();
+        wochen.AddThemeConstantOverride("separation", 12);
+        innen.AddChild(wochen);
+        for (int w = 0; w < ZyklusWochen; w++)
+        {
+            var spalte = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            spalte.AddThemeConstantOverride("separation", 4);
+            _zyklusKoepfe[w] = FmTheme.MakeLabel($"Woche {w + 1}", 12, FmTheme.TextSecondary);
+            spalte.AddChild(_zyklusKoepfe[w]);
+            for (int f = 0; f < 4; f++)
+            {
+                var feld = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+                feld.ItemSelected += async _ => await ZyklusGeaendert();
+                _zyklusFelder[w, f] = feld;
+                spalte.AddChild(feld);
+            }
+            wochen.AddChild(spalte);
+        }
         return panel;
     }
 
@@ -166,6 +226,7 @@ public partial class TrainingView : Control
             .ToDictionary(g => g.Key, g => g.First());
 
         FuelleAuswahlfelder(_plan);
+        FuelleZyklus(_plan);
         FuelleKader();
 
         int veraendert = _letzteWoche.Count(e => e.Value.Aenderungen.Count > 0);
@@ -207,6 +268,91 @@ public partial class TrainingView : Control
     }
 
     private void FuelleKader() => _kaderGrid.Zeige(_kader);
+
+    /// <summary>Füllt die vier Wochen; die laufende ist hervorgehoben.</summary>
+    private void FuelleZyklus(TrainingsplanModel plan)
+    {
+        _fuellt = true;
+        _zyklusAktiv.SetPressedNoSignal(plan.ZyklusAktiv);
+        for (int w = 0; w < ZyklusWochen; w++)
+        {
+            var woche = w < plan.Zyklus.Count ? plan.Zyklus[w] : new ZyklusWoche();
+            bool laufend = plan.Zyklus.Count > 0 && w == plan.Zykluswoche;
+            _zyklusKoepfe[w].Text = laufend ? $"Woche {w + 1} · diese Woche" : $"Woche {w + 1}";
+            _zyklusKoepfe[w].AddThemeColorOverride("font_color", laufend ? FmTheme.Accent : FmTheme.TextSecondary);
+
+            var intensitaet = _zyklusFelder[w, 0];
+            intensitaet.Clear();
+            for (int i = 0; i < plan.Intensitaeten.Count; i++)
+            {
+                intensitaet.AddItem(plan.Intensitaeten[i].Anzeige, i);
+                intensitaet.SetItemMetadata(i, plan.Intensitaeten[i].Schluessel);
+                if (plan.Intensitaeten[i].Schluessel == (woche.Intensitaet ?? "MITTEL")) intensitaet.Select(i);
+            }
+            string?[] gesetzt = { woche.Schwerpunkt1, woche.Schwerpunkt2, woche.Schwerpunkt3 };
+            for (int f = 1; f < 4; f++)
+            {
+                var feld = _zyklusFelder[w, f];
+                feld.Clear();
+                feld.AddItem("– kein Schwerpunkt –", 0);
+                feld.SetItemMetadata(0, "");
+                for (int b = 0; b < plan.Bereiche.Count; b++)
+                {
+                    feld.AddItem(plan.Bereiche[b].Anzeige, b + 1);
+                    feld.SetItemMetadata(b + 1, plan.Bereiche[b].Schluessel);
+                    if (plan.Bereiche[b].Schluessel == gesetzt[f - 1]) feld.Select(b + 1);
+                }
+            }
+        }
+        // Gilt der Plan, steuert er die Woche - die Felder darüber sind dann nur Anzeige.
+        foreach (var feld in _schwerpunkte) feld.Disabled = plan.ZyklusAktiv;
+        _intensitaet.Disabled = plan.ZyklusAktiv;
+        _fuellt = false;
+    }
+
+    private async Task ZyklusGeaendert()
+    {
+        if (_fuellt || _plan == null) return;
+        var wochen = new List<ZyklusWoche>();
+        for (int w = 0; w < ZyklusWochen; w++)
+        {
+            wochen.Add(new ZyklusWoche
+            {
+                Intensitaet  = _zyklusFelder[w, 0].GetSelectedMetadata().AsString(),
+                Schwerpunkt1 = LeerAlsNull(_zyklusFelder[w, 1].GetSelectedMetadata().AsString()),
+                Schwerpunkt2 = LeerAlsNull(_zyklusFelder[w, 2].GetSelectedMetadata().AsString()),
+                Schwerpunkt3 = LeerAlsNull(_zyklusFelder[w, 3].GetSelectedMetadata().AsString()),
+            });
+        }
+        var eingabe = new { aktiv = _zyklusAktiv.ButtonPressed, wochen };
+        var gespeichert = await ApiClient.PutAsync<object, TrainingsplanModel>(
+            $"training/{GameState.Instance.VereinId}/zyklus", eingabe);
+        UebernimmPlan(gespeichert, _zyklusAktiv.ButtonPressed
+            ? "Langfristige Planung gilt - der Wochenplan wechselt jetzt jede Woche von selbst."
+            : "Langfristige Planung gespeichert, aber nicht in Gebrauch.");
+    }
+
+    private async Task ErstelleAusgewogen()
+    {
+        var gespeichert = await ApiClient.PostAsync<object, TrainingsplanModel>(
+            $"training/{GameState.Instance.VereinId}/zyklus/ausgewogen", new { });
+        UebernimmPlan(gespeichert, "Ausgewogener Plan erstellt und in Gebrauch: Jeder Bereich kommt in vier Wochen dran, "
+                                 + "auf eine harte Woche folgt eine leichtere.");
+    }
+
+    private void UebernimmPlan(TrainingsplanModel? plan, string meldung)
+    {
+        if (!IsInstanceValid(this)) return;
+        if (plan == null)
+        {
+            _statusLabel.Text = "Die langfristige Planung konnte nicht gespeichert werden.";
+            return;
+        }
+        _plan = plan;
+        FuelleAuswahlfelder(plan);
+        FuelleZyklus(plan);
+        _statusLabel.Text = meldung;
+    }
 
     /// <summary>Die veränderten Fähigkeiten der letzten Woche, stärkste Veränderung zuerst.</summary>
     private static string WochenText(SpielerEntwicklung? woche)
