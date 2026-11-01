@@ -227,9 +227,14 @@ public partial class SpielView : Control
                 SchreibeZeile(v.Minute, $"Rote Karte - {v.Name}", FmTheme.Danger, Symbol.Art.Rot);
                 break;
             case "HALBZEIT":
-                SchreibeZeile(v.Minute,
-                    $"Halbzeit - {_feldHeimTore} : {_feldGastTore}, Seitenwechsel",
-                    FmTheme.TextPrimary, Symbol.Art.Pause);
+                // Der Pfiff nach 90 Minuten in einem K.-o.-Spiel führt in die Verlängerung.
+                string pause = v.Minute switch
+                {
+                    90  => $"Nach 90 Minuten {_feldHeimTore} : {_feldGastTore} - Verlängerung",
+                    105 => $"Halbzeit der Verlängerung - {_feldHeimTore} : {_feldGastTore}, Seitenwechsel",
+                    _   => $"Halbzeit - {_feldHeimTore} : {_feldGastTore}, Seitenwechsel",
+                };
+                SchreibeZeile(v.Minute, pause, FmTheme.TextPrimary, Symbol.Art.Pause);
                 break;
             case "ABPFIFF":
                 SchreibeZeile(v.Minute,

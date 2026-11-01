@@ -12,9 +12,15 @@ public partial class SpielplanView : Control
     private FmGrid<Spiel> _grid        = null!;
     private Label         _statusLabel = null!;
 
+    private HBoxContainer _header = null!;
+
     public override async void _Ready()
     {
         BuildUI();
+        var auswahl = await LigaAuswahl.Baue(async _ => await LadeSpielplan());
+        if (!IsInstanceValid(this)) return;
+        auswahl.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        _header.AddChild(auswahl);
         await LadeSpielplan();
     }
 
@@ -25,7 +31,10 @@ public partial class SpielplanView : Control
         vbox.AddThemeConstantOverride("separation", 10);
         AddChild(vbox);
 
-        vbox.AddChild(FmTheme.MakeTitel("Spielplan"));
+        _header = new HBoxContainer();
+        _header.AddThemeConstantOverride("separation", 12);
+        _header.AddChild(FmTheme.MakeTitel("Spielplan"));
+        vbox.AddChild(_header);
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);
@@ -41,8 +50,9 @@ public partial class SpielplanView : Control
 
     private async System.Threading.Tasks.Task LadeSpielplan()
     {
-        var ligaId = GameState.Instance.LigaId;
+        var ligaId = LigaAuswahl.Aktuell;
         var spiele = await ApiClient.GetAsync<List<Spiel>>($"liga/{ligaId}/spielplan");
+        if (!IsInstanceValid(this)) return;
 
         if (spiele == null) { _statusLabel.Text = "Fehler beim Laden."; return; }
 

@@ -214,7 +214,7 @@ public partial class DashboardView : Control
             ? d.ToString("ddd, dd.MM.yyyy", Deutsch) + (spiel.Uhrzeit is { } u ? $", {u:HH\\:mm} Uhr" : "")
             : "";
         _naechstesSpiel.AddChild(FmTheme.MakeLabel(
-            $"{spiel.Spieltag}. Spieltag  ·  {wann}  ·  {(spiel.Heimspiel ? "Heimspiel" : "Auswärtsspiel")}",
+            $"{(string.IsNullOrEmpty(spiel.Bezeichnung) ? $"{spiel.Spieltag}. Spieltag" : spiel.Bezeichnung)}  ·  {wann}  ·  {(spiel.Heimspiel ? "Heimspiel" : "Auswärtsspiel")}",
             12, FmTheme.TextSecondary));
 
         var zeile = new HBoxContainer();

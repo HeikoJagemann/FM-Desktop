@@ -9,6 +9,8 @@ public class SpielBericht
     public long    SpielId      { get; set; }
     public int     Saison       { get; set; }
     public int     Spieltag     { get; set; }
+    public string? Bezeichnung  { get; set; }
+    public string? Zusatz       { get; set; }
     public long?   HeimVereinId { get; set; }
     public string? HeimVerein   { get; set; }
     public long?   GastVereinId { get; set; }

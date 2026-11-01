@@ -13,6 +13,33 @@ public class Spiel
     public int?    GastTore    { get; set; }
     public bool    Gespielt    { get; set; }
 
+    /// <summary>"LIGA", "DFB_POKAL", "CHAMPIONS_LEAGUE" …</summary>
+    public string  Wettbewerb  { get; set; } = "LIGA";
+
+    /// <summary>Runde ausserhalb der Liga, etwa "Achtelfinale, Hinspiel".</summary>
+    public string? Runde       { get; set; }
+    public bool    Verlaengerung { get; set; }
+    public int?    ElfmeterHeim  { get; set; }
+    public int?    ElfmeterGast  { get; set; }
+
+    public bool IstLigaspiel => Wettbewerb == "LIGA";
+
+    /// <summary>"12. Spieltag" oder "DFB-Pokal, Achtelfinale".</summary>
+    public string Bezeichnung => IstLigaspiel
+        ? $"{Spieltag}. Spieltag"
+        : $"{WettbewerbAnzeige(Wettbewerb)}, {Runde}";
+
+    public static string WettbewerbAnzeige(string wettbewerb) => wettbewerb switch
+    {
+        "DFB_POKAL"         => "DFB-Pokal",
+        "CHAMPIONS_LEAGUE"  => "Champions League",
+        "EUROPA_LEAGUE"     => "Europa League",
+        "CONFERENCE_LEAGUE" => "Conference League",
+        "RELEGATION"        => "Relegation",
+        "AUFSTIEGSSPIEL"    => "Aufstiegsspiel",
+        _                   => "Liga",
+    };
+
     /// <summary>Termin der Partie; der Kalender steuert seit der Zeitachse den Fortschritt.</summary>
     public DateOnly?  Datum   { get; set; }
     public TimeOnly?  Uhrzeit { get; set; }
@@ -30,7 +57,8 @@ public class Spiel
         }
     }
 
-    public string Ergebnis => Gespielt
-        ? $"{HeimTore}:{GastTore}"
-        : "–:–";
+    public string Ergebnis => !Gespielt ? "–:–"
+        : ElfmeterHeim.HasValue ? $"{HeimTore}:{GastTore} i.E. {ElfmeterHeim}:{ElfmeterGast}"
+        : Verlaengerung ? $"{HeimTore}:{GastTore} n.V."
+        : $"{HeimTore}:{GastTore}";
 }

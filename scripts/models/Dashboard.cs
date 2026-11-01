@@ -86,6 +86,7 @@ public class NaechstesSpiel
     public DateOnly? Datum            { get; set; }
     public TimeOnly? Uhrzeit          { get; set; }
     public int       Spieltag         { get; set; }
+    public string?   Bezeichnung      { get; set; }
     public long?     HeimId           { get; set; }
     public string    Heim             { get; set; } = "";
     public long?     GastId           { get; set; }

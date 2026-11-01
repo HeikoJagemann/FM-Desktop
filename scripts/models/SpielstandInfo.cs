@@ -14,6 +14,9 @@ public class SpielstandInfo
     public int?    NaechsterSpieltag { get; set; }
     public string? AngelegtAm        { get; set; }
 
+    /// <summary>Abgestiegen aus der Oberliga - der Manager muss sich einen neuen Verein suchen.</summary>
+    public bool    Entlassen         { get; set; }
+
     /// <summary>Ob der Spielstand geladen werden kann – ohne Verein fehlt die Zuordnung.</summary>
     public bool Ladbar => VereinId is > 0;
 

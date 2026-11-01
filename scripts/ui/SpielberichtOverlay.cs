@@ -47,7 +47,9 @@ public partial class SpielberichtOverlay : Overlaykarte
             return;
         }
 
-        SetzeUntertitel($"Saison {bericht.Saison}/{bericht.Saison + 1}  ·  {bericht.Spieltag}. Spieltag");
+        SetzeUntertitel($"Saison {bericht.Saison}/{bericht.Saison + 1}  ·  "
+                        + (string.IsNullOrEmpty(bericht.Bezeichnung) ? $"{bericht.Spieltag}. Spieltag" : bericht.Bezeichnung)
+                        + (string.IsNullOrEmpty(bericht.Zusatz) ? "" : $"  ·  {bericht.Zusatz}"));
         _inhalt.AddChild(Anzeigetafel(bericht));
 
         if (!bericht.Gespielt)

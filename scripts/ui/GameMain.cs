@@ -3,6 +3,8 @@ using Godot;
 using System;
 using FMDesktop.Api;
 using FMDesktop.Models;
+using FMDesktop.UI.Common;
+using System.Threading.Tasks;
 
 namespace FMDesktop.UI;
 
@@ -56,6 +58,9 @@ public partial class GameMain : Control
     internal const string SceneTransfer     = "res://scenes/transfer/TransferView.tscn";
     internal const string SceneScouting     = "res://scenes/transfer/ScoutingView.tscn";
     internal const string SceneAngebote     = "res://scenes/transfer/AngeboteView.tscn";
+    internal const string ScenePokal        = "res://scenes/wettbewerbe/PokalView.tscn";
+    internal const string SceneEuropapokal  = "res://scenes/wettbewerbe/EuropapokalView.tscn";
+    internal const string SceneUefaWertung  = "res://scenes/wettbewerbe/UefaWertungView.tscn";
 
     /// Eigener Bildschirm statt Overlay - die Partie übernimmt das ganze Fenster.
     internal const string SceneSpiel        = "res://scenes/spiel/SpielView.tscn";
@@ -71,6 +76,7 @@ public partial class GameMain : Control
         ("Taktik",     new[] { ("Aufstellung", SceneAufstellung), ("Taktik", SceneTaktik) }),
         ("Training",   new[] { ("Trainingsplan", SceneTraining) }),
         ("Liga",       new[] { ("Tabelle", SceneTabelle), ("Spielplan", SceneSpielplan), ("Statistiken", SceneStatistiken) }),
+        ("Wettbewerbe", new[] { ("DFB-Pokal", ScenePokal), ("Europapokal", SceneEuropapokal), ("UEFA-Wertung", SceneUefaWertung) }),
         ("Kalender",   new[] { ("Termine", SceneKalender) }),
         ("Transfers",  new[] { ("Transferliste", SceneTransfer), ("Scouting", SceneScouting), ("Angebote", SceneAngebote) }),
         ("Finanzen",   new[] { ("Übersicht", SceneFinanzen) }),
@@ -510,6 +516,8 @@ public partial class GameMain : Control
 
         await AktualisiereKalenderstand();
         if (!IsInstanceValid(this)) return;
+        await PruefeSpielstand();
+        if (!IsInstanceValid(this)) return;
         // Nach jedem Schritt zurück aufs Dashboard: Ereignisse, Ergebnisse und Training der
         // vergangenen Tage stehen dort.
         LadeScene(SceneDashboard);
@@ -611,6 +619,24 @@ public partial class GameMain : Control
         "UMFELD"   => SceneUmfeld,
         _          => null,
     };
+
+    /// <summary>
+    /// Nach dem Saisonwechsel kann der Verein in einer anderen Liga spielen - oder der Manager
+    /// wurde nach dem Abstieg aus der Oberliga entlassen und sucht sich einen neuen Verein.
+    /// </summary>
+    private async Task PruefeSpielstand()
+    {
+        var stand = await ApiClient.GetAsync<SpielstandInfo>("spielstand");
+        if (!IsInstanceValid(this) || stand?.VereinId == null) return;
+        if (stand.LigaId.HasValue && stand.LigaId.Value != GameState.Instance.LigaId)
+        {
+            GameState.Instance.SetVerein(stand.VereinId.Value, stand.VereinName ?? GameState.Instance.VereinName,
+                stand.LigaId.Value, stand.LigaName ?? "");
+            LigaAuswahl.Gewaehlt = null;
+        }
+        if (stand.Entlassen)
+            EntlassungDialog.Zeige(this, () => LadeScene(SceneDashboard));
+    }
 
     private void LadeScene(string path)
     {

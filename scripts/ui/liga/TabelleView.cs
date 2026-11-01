@@ -10,10 +10,15 @@ public partial class TabelleView : Control
 {
     private FmGrid<TabellenEintrag> _grid        = null!;
     private Label                   _statusLabel = null!;
+    private HBoxContainer           _header      = null!;
 
     public override async void _Ready()
     {
         BuildUI();
+        var auswahl = await LigaAuswahl.Baue(async _ => await LadeTabelle());
+        if (!IsInstanceValid(this)) return;
+        auswahl.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        _header.AddChild(auswahl);
         await LadeTabelle();
     }
 
@@ -29,10 +34,7 @@ public partial class TabelleView : Control
         vbox.AddChild(header);
 
         header.AddChild(FmTheme.MakeTitel("Tabelle"));
-        // Bernstein bleibt den Aktionen vorbehalten - die Liga steht ruhig daneben.
-        var liga = FmTheme.MakeLabel(GameState.Instance.LigaName, 14, FmTheme.TextSecondary);
-        liga.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-        header.AddChild(liga);
+        _header = header;
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);
@@ -46,7 +48,7 @@ public partial class TabelleView : Control
 
     private async System.Threading.Tasks.Task LadeTabelle()
     {
-        var ligaId    = GameState.Instance.LigaId;
+        var ligaId    = LigaAuswahl.Aktuell;
         var eintraege = await ApiClient.GetAsync<List<TabellenEintrag>>($"liga/{ligaId}/tabelle");
 
         if (eintraege == null) { _statusLabel.Text = "Fehler beim Laden."; return; }

@@ -16,7 +16,9 @@ public static class ApiClient
 
     private static readonly System.Net.Http.HttpClient Http = new()
     {
-        BaseAddress = new Uri("http://localhost:8081/api/"),
+        // FM_API lenkt den Client auf ein anderes Backend - etwa ein Testbackend auf einem
+        // zweiten Port, ohne das laufende Spiel anzuhalten.
+        BaseAddress = new Uri(System.Environment.GetEnvironmentVariable("FM_API") ?? "http://localhost:8081/api/"),
         Timeout     = TimeSpan.FromSeconds(30)
     };
 

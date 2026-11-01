@@ -33,7 +33,7 @@ public static class SpielplanSpalten
 
     public static GridSpalte<Spiel> Ergebnis => new()
     {
-        Titel = "Ergebnis", Breite = 76, Ausrichtung = HorizontalAlignment.Center,
+        Titel = "Ergebnis", Breite = 120, Ausrichtung = HorizontalAlignment.Center,
         Text  = s => s.Ergebnis,
         Farbe = VereinsFarbe,
     };
