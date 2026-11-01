@@ -23,9 +23,16 @@ public partial class GameState : Node
 
     public void SetSpieldatum(DateOnly datum) => Spieldatum = datum;
 
+    /// <summary>Läuft das Spiel nur für ein Bildschirmfoto? Dann bleibt das Backend beim Beenden an.</summary>
+    private bool _vorschau;
+
+    private bool _beendet;
+
     public override void _Ready()
     {
         Instance = this;
+        // Das Schließen über das Fenster läuft über Beende() - erst das Backend, dann das Spiel.
+        GetTree().AutoAcceptQuit = false;
 
         // Flutlicht auf das ganze Fenster: Schrift, Knöpfe, Menüs und Tooltips aller Ansichten.
         GetTree().Root.Theme = UI.FmTheme.Basistheme();
@@ -34,6 +41,7 @@ public partial class GameState : Node
         int vorschau = Array.IndexOf(argumente, "--vorschau");
         if (vorschau >= 0 && argumente.Length >= vorschau + 5 && long.TryParse(argumente[vorschau + 2], out var verein))
         {
+            _vorschau = true;
             _ = Vorschau(argumente[vorschau + 1], verein, argumente[vorschau + 3], argumente[vorschau + 4],
                 argumente.Length > vorschau + 5 ? argumente[vorschau + 5] : null);
         }
@@ -42,6 +50,26 @@ public partial class GameState : Node
         // "--fenster" übergeht ihn, damit die Vorschau mit "--resolution" kleine Fenster prüfen kann.
         if (ClientEinstellungen.GetBool("vollbild", false) && Array.IndexOf(argumente, "--fenster") < 0)
             DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationWMCloseRequest)
+            Beende();
+    }
+
+    /// <summary>
+    /// Beendet das Spiel und mit ihm das Backend. Ohne das lief es weiter, und beim nächsten
+    /// Start traf der neue Client auf ein Backend mit altem Code. Ist es nicht erreichbar, endet
+    /// das Spiel trotzdem.
+    /// </summary>
+    public async void Beende()
+    {
+        if (_beendet) return;
+        _beendet = true;
+        if (!_vorschau)
+            await ApiClient.PostAsync("betrieb/beenden");
+        GetTree().Quit();
     }
 
     /// <summary>Welche Ansicht das Hauptspiel zuerst zeigt - sonst der Kader.</summary>

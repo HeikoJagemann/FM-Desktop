@@ -180,7 +180,7 @@ public partial class StartScreen : Control
         btnBeenden.AddThemeStyleboxOverride("hover", FmTheme.Flaeche(FmTheme.BgHover, 10));
         btnBeenden.AddThemeColorOverride("font_color", FmTheme.TextSecondary);
         btnBeenden.AddThemeColorOverride("font_hover_color", FmTheme.Danger);
-        btnBeenden.Pressed += () => GetTree().Quit();
+        btnBeenden.Pressed += () => GameState.Instance.Beende();
         vbox.AddChild(btnBeenden);
 
         return center;

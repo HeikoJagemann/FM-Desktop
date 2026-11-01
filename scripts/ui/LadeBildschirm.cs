@@ -115,7 +115,7 @@ public partial class LadeBildschirm : Control
         };
         FmTheme.ApplySecondaryButton(_beendenButton);
         _beendenButton.AddThemeColorOverride("font_color", FmTheme.Danger);
-        _beendenButton.Pressed += () => GetTree().Quit();
+        _beendenButton.Pressed += () => GameState.Instance.Beende();
 
         var buttonMitte = new CenterContainer();
         buttonMitte.AddChild(_beendenButton);
