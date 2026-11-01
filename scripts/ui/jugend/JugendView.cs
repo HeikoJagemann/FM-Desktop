@@ -52,8 +52,8 @@ public partial class JugendView : Control
     }
 
     /// <summary>
-    /// Dieselben Spalten wie im Profikader, nur mit der rohen Stärke: In der Jugend zählt der
-    /// positionsunabhängige Wert, weil die Position noch nicht feststeht.
+    /// Dieselben Spalten wie im Profikader, die Stärke aber als eine Zahl - die auf der besten
+    /// Position, wie in der Detailansicht.
     /// </summary>
     private void BaueGrid(string tabName)
     {

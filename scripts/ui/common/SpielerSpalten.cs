@@ -72,15 +72,18 @@ public static class SpielerSpalten
         Sortierung = s => -s.BestPositionStaerke,
     };
 
-    /// <summary>Roher, positionsunabhängiger Wert - so wird die Jugend bewertet.</summary>
-    public static GridSpalte<Spieler> StaerkeRoh => new()
+    /// <summary>
+    /// Die Stärke auf der besten Position als eine Zahl - dieselbe wie in der Detailansicht.
+    /// Früher stand hier die rohe Grundstärke ohne Positionsbezug; bei einem Torwart lag sie
+    /// sichtbar unter dem Wert, den die Detailansicht zeigt.
+    /// </summary>
+    public static GridSpalte<Spieler> StaerkeBestePosition => new()
     {
         Titel = "Stärke", Breite = 64,
-        Text       = s => s.Staerke.ToString(),
-        Farbe      = s => StaerkeFarbe(s.Staerke),
-        Tooltip    = _ => "Rohe Stärke ohne Positionsbezug - Grundlage der Talenteinschätzung "
-                        + "im Jugendbereich.",
-        Sortierung = s => -s.Staerke,
+        Text       = s => s.BestPositionStaerke.ToString(),
+        Tooltip    = s => s.BestPositionErklaerung,
+        Farbe      = s => StaerkeFarbe(s.BestPositionStaerke),
+        Sortierung = s => -s.BestPositionStaerke,
     };
 
     /// <summary>Sterne zum <em>Talent</em> - siehe auch <see cref="PotenzialSterne"/>.</summary>
@@ -214,7 +217,7 @@ public static class SpielerSpalten
 
     public static IEnumerable<GridSpalte<Spieler>> Jugendliste => new[]
     {
-        Name, Position, StaerkeRoh, Talent, Alter, Nation,
+        Name, Position, StaerkeBestePosition, Talent, Alter, Nation,
     };
 
     public static IEnumerable<GridSpalte<Spieler>> Aufstellungsliste => new[]

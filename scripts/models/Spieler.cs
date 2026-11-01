@@ -19,11 +19,14 @@ public class PositionsStaerke
     /// <summary>0 bis 100. Darunter fällt die Stärke; bei 0 bleibt dem Spieler die Hälfte.</summary>
     public int    Eingespieltheit { get; set; }
 
+    /// <summary>Was die Form gerade ausmacht - in <see cref="Staerke"/> schon verrechnet.</summary>
+    public double FormFaktor { get; set; } = 1.0;
+
     /// <summary>Kurzzeichen für die Vertrautheit: voll, angelernt, fremd.</summary>
     public string Zeichen => Eingespieltheit >= 90 ? "" : Eingespieltheit >= 40 ? "~" : "?";
 
     /// <summary>Mouseover-Text: wie sich die Stärke auf dieser Position zusammensetzt.</summary>
-    public string Erklaerung => StaerkeErklaerung.Basis(Position, Grundstaerke, Eingespieltheit, Staerke);
+    public string Erklaerung => StaerkeErklaerung.Basis(Position, Grundstaerke, Eingespieltheit, Staerke, FormFaktor);
 }
 
 

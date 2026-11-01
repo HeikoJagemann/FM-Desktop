@@ -873,7 +873,7 @@ public partial class SpielView : Control
             staerke.CustomMinimumSize = new Vector2(s.Geschaetzt ? 46 : 24, 0);
             staerke.TooltipText = s.AufDemPlatz || s.Geschaetzt
                 ? s.Erklaerung
-                : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.Staerke);
+                : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.EffektiveStaerke, s.FormFaktor);
             zeile.AddChild(staerke);
 
             if (s.AufDemPlatz && s.StaerkeVerlust >= 3)

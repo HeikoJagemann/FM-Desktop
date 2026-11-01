@@ -22,8 +22,11 @@ public class LiveSpieler
     public double  Kondition   { get; set; }
     public bool    AufDemPlatz { get; set; }
 
+    /// <summary>Was die Form ausmacht - in <see cref="EffektiveStaerke"/> verrechnet.</summary>
+    public double  FormFaktor  { get; set; } = 1.0;
+
     /// <summary>Wieviel die Ermüdung gerade kostet; 0 bei voller Kondition oder auf der Bank.</summary>
-    public int StaerkeVerlust => System.Math.Max(0, Staerke - EffektiveStaerke);
+    public int StaerkeVerlust => System.Math.Max(0, (int)System.Math.Round(Staerke * FormFaktor) - EffektiveStaerke);
     public int     Tore        { get; set; }
     public int     GelbeKarten { get; set; }
     public int     RoteKarten  { get; set; }
@@ -39,7 +42,7 @@ public class LiveSpieler
     /// <summary>Mouseover-Text: Grundstärke + Eingespieltheit + Frische = Spielstärke.</summary>
     public string Erklaerung => Geschaetzt
         ? $"Geschätzte Stärke {StaerkeVon}–{StaerkeBis}.\nGenauer wird es mit Scoutberichten."
-        : StaerkeErklaerung.MitFrische(Position, Grundstaerke, Eingespieltheit, Staerke, Kondition, EffektiveStaerke);
+        : StaerkeErklaerung.MitFrische(Position, Grundstaerke, Eingespieltheit, Staerke, Kondition, EffektiveStaerke, FormFaktor);
 }
 
 /// <summary>Zustand der laufenden Partie (GET/POST spiel/live/...).</summary>

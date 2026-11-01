@@ -292,7 +292,7 @@ public partial class WechselDialog : Overlaykarte
         staerke.MouseFilter = MouseFilterEnum.Pass;
         staerke.TooltipText = aufDemPlatz
             ? s.Erklaerung
-            : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.Staerke);
+            : StaerkeErklaerung.Basis(s.Position, s.Grundstaerke, s.Eingespieltheit, s.EffektiveStaerke, s.FormFaktor);
         inhalt.AddChild(staerke);
 
         // Auf dem Platz die Kondition - nach ihr wird meist gewechselt. Auf der Bank ein

@@ -60,6 +60,8 @@ public class AufstellungModel
     public Dictionary<string, int> SlotGrundstaerken { get; set; } = new();
     /// <summary>Eingespieltheit (0-100) je Slot - für die Stärke-Aufschlüsselung.</summary>
     public Dictionary<string, int> SlotEingespieltheit { get; set; } = new();
+    /// <summary>Formfaktor je Slot - die Slot-Stärken enthalten die Form schon.</summary>
+    public Dictionary<string, double> SlotFormFaktor { get; set; } = new();
 
     /// <summary>Mouseover-Text: wie sich die Stärke auf diesem Slot zusammensetzt.</summary>
     public string SlotErklaerung(string slot, string position)
@@ -67,6 +69,7 @@ public class AufstellungModel
         if (!SlotStaerken.TryGetValue(slot, out int staerke)) return "";
         SlotGrundstaerken.TryGetValue(slot, out int grundstaerke);
         SlotEingespieltheit.TryGetValue(slot, out int eingespieltheit);
-        return StaerkeErklaerung.Basis(position, grundstaerke, eingespieltheit, staerke);
+        double form = SlotFormFaktor.TryGetValue(slot, out double f) ? f : 1.0;
+        return StaerkeErklaerung.Basis(position, grundstaerke, eingespieltheit, staerke, form);
     }
 }

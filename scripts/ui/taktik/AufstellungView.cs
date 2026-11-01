@@ -33,6 +33,8 @@ public partial class PositionSlot : Button
     public int?   Staerke { get; private set; }
     public int?   Grundstaerke { get; private set; }
     public int?   Eingespieltheit { get; private set; }
+    /// <summary>Was die Form ausmacht - in <see cref="Staerke"/> schon verrechnet.</summary>
+    public double FormFaktor { get; private set; } = 1.0;
     /// <summary>Gelernte Position des Spielers - für die Bank, wo der Platz keine hat.</summary>
     public string? SpielerPosition { get; private set; }
 
@@ -80,7 +82,8 @@ public partial class PositionSlot : Button
     }
 
     public void Assign(long spielerId, string spielerName, int? staerke = null,
-        int? grundstaerke = null, int? eingespieltheit = null, string? spielerPosition = null)
+        int? grundstaerke = null, int? eingespieltheit = null, string? spielerPosition = null,
+        double formFaktor = 1.0)
     {
         SpielerId       = spielerId;
         SpielerName     = spielerName;
@@ -88,6 +91,7 @@ public partial class PositionSlot : Button
         Grundstaerke    = grundstaerke;
         Eingespieltheit = eingespieltheit;
         SpielerPosition = spielerPosition;
+        FormFaktor      = formFaktor;
         Refresh();
     }
 
@@ -166,7 +170,7 @@ public partial class PositionSlot : Button
     {
         Text = "";
         TooltipText = SpielerId.HasValue && Staerke.HasValue && Grundstaerke.HasValue && Eingespieltheit.HasValue
-            ? StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value)
+            ? StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value, FormFaktor)
             : SpielerId.HasValue
                 ? IstBank ? $"{SpielerName} - Rechtsklick entfernt" : $"{SpielerName} - ziehen verschiebt, Rechtsklick entfernt"
                 : IstBank ? "Freier Bankplatz - Spieler hierher ziehen" : $"{Anzeige} - Spieler hierher ziehen, Platz verschieben mit der Maus";
@@ -819,7 +823,7 @@ public partial class AufstellungView : Control
         {
             UebernimmPlaetze(aufstellung);
             WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
-                aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit);
+                aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit, aufstellung.SlotFormFaktor);
             AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
         }
         else
@@ -915,7 +919,7 @@ public partial class AufstellungView : Control
             slot.Clear();
 
         WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
-            aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit);
+            aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit, aufstellung.SlotFormFaktor);
         WendeBankAn(aufstellung.Ersatzbank);
         AktualisiereListenPositionen();
         AktualisiereWarnung(aufstellung);
@@ -962,7 +966,8 @@ public partial class AufstellungView : Control
     private void WendeSpielerZuweisungenAn(Dictionary<string, long>? positionen,
         Dictionary<string, int>? slotStaerken = null,
         Dictionary<string, int>? slotGrundstaerken = null,
-        Dictionary<string, int>? slotEingespieltheit = null)
+        Dictionary<string, int>? slotEingespieltheit = null,
+        Dictionary<string, double>? slotFormFaktor = null)
     {
         if (positionen == null) return;
         foreach (var (slot, spielerId) in positionen)
@@ -979,7 +984,9 @@ public partial class AufstellungView : Control
                 int? eingespieltheit = null;
                 if (slotEingespieltheit != null && slotEingespieltheit.TryGetValue(slot, out var e))
                     eingespieltheit = e;
-                slotCtrl.Assign(spielerId, name, slotStaerke, grundstaerke, eingespieltheit);
+                double formFaktor = slotFormFaktor != null && slotFormFaktor.TryGetValue(slot, out var f) ? f : 1.0;
+                slotCtrl.Assign(spielerId, name, slotStaerke, grundstaerke, eingespieltheit,
+                    formFaktor: formFaktor);
             }
         }
     }
