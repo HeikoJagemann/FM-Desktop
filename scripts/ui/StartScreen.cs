@@ -478,27 +478,29 @@ public partial class StartScreen : Control
 
     private async void OnSpielStarten()
     {
-        var schemas = await ApiClient.GetAsync<List<string>>("schemas");
-        if (schemas == null || schemas.Count <= 1)
+        // db_default ist keine Spielwelt mehr, sondern veraltet mit jedem Ausbau der Welterzeugung.
+        // Zur Wahl stehen nur Welten, die jemand im Editor eigens angelegt hat.
+        var schemas = (await ApiClient.GetAsync<List<string>>("schemas") ?? new List<string>())
+            .Where(s => s != "db_default").ToList();
+        if (schemas.Count == 0)
         {
-            // Nur eine Editor-Datenbank vorhanden - Auswahl überspringen.
             ZeigePanel(Zustand.Laden);
-            if (!await LegeSpielstandAn(schemas?.FirstOrDefault() ?? "db_default")) return;
+            if (!await LegeSpielstandAn(NeueWelt)) return;
             await LadeAngebote();
             return;
         }
 
-        _gewaehlteSchema = "db_default";
+        _gewaehlteSchema = NeueWelt;
         _schemaButtons.Clear();
         foreach (Node child in _schemaListeContainer.GetChildren())
             child.QueueFree();
 
-        foreach (var schema in schemas)
+        foreach (var schema in schemas.Prepend(NeueWelt))
         {
             var s = schema;
             var btn = new Button
             {
-                Text = s,
+                Text = s == NeueWelt ? "Neue Welt erzeugen (empfohlen)" : s,
                 CustomMinimumSize = new Vector2(0, 38),
                 Alignment = HorizontalAlignment.Left,
             };
@@ -523,9 +525,13 @@ public partial class StartScreen : Control
         await LadeAngebote();
     }
 
+    /// <summary>Auswahl in der Weltenliste: keine Vorlage, sondern eine frisch erzeugte Welt.</summary>
+    private const string NeueWelt = "";
+
     /// <summary>
-    /// Legt einen frischen Spielstand als Kopie der gewählten Editor-Datenbank an und spielt
-    /// darin weiter. So bleibt die Vorlage unberührt und jedes neue Spiel beginnt bei Spieltag 1.
+    /// Legt einen Spielstand an und spielt darin weiter: mit einer frisch erzeugten Welt
+    /// (<see cref="NeueWelt"/>) oder als Kopie einer im Editor angelegten Welt, die dabei
+    /// unberührt bleibt. Jedes neue Spiel beginnt bei Spieltag 1.
     /// </summary>
     private async Task<bool> LegeSpielstandAn(string vorlage)
     {
@@ -533,6 +539,10 @@ public partial class StartScreen : Control
         _progressBar.Value  = 0;
 
         var name = $"spiel_{System.DateTime.Now:yyyyMMdd_HHmmss}";
+        if (vorlage == NeueWelt)
+        {
+            return await ErzeugeWelt(name);
+        }
         var antwort = await ApiClient.PostAsync<object, Dictionary<string, string>>(
             "schemas/saves", new { name, basedOn = vorlage });
 
@@ -547,6 +557,67 @@ public partial class StartScreen : Control
         _progressBar.Value = 50;
         _progressLabel.Text = "Lade Vereine …";
         return true;
+    }
+
+    /// <summary>
+    /// Legt einen leeren Spielstand an und lässt darin Ligen, Vereine, Kader und Spielpläne
+    /// erzeugen - das dauert etwa eine halbe Minute, der Balken zeigt den Fortschritt.
+    /// </summary>
+    private async Task<bool> ErzeugeWelt(string name)
+    {
+        var antwort = await ApiClient.PostAsync<object, Dictionary<string, string>>(
+            "schemas/saves/neu", new { name });
+        if (antwort == null || !antwort.TryGetValue("schema", out var schema))
+        {
+            OS.Alert("Der Spielstand konnte nicht angelegt werden.", "Fehler");
+            ZeigePanel(Zustand.Start);
+            return false;
+        }
+        GameState.Instance.SetSchema(schema);
+
+        _progressLabel.Text = "Die Welt wird erzeugt …";
+        string? fehler = await ApiClient.PostAsync("spiel/initialisieren") ? null : "Die Erzeugung ließ sich nicht starten.";
+        while (fehler == null)
+        {
+            await ToSignal(GetTree().CreateTimer(0.5), SceneTreeTimer.SignalName.Timeout);
+            var stand = await ApiClient.GetAsync<InitFortschritt>("spiel/fortschritt");
+            if (!IsInstanceValid(this)) return false;
+            if (stand == null)
+            {
+                fehler = "Das Backend antwortet nicht mehr.";
+                break;
+            }
+            _progressBar.Value  = stand.Prozent;
+            _progressLabel.Text = stand.Nachricht;
+            if (stand.Fertig)
+            {
+                // Eine abgebrochene Erzeugung meldet sich auch als fertig - mit "Fehler: ...".
+                var ligen = await ApiClient.GetAsync<List<Models.Liga>>("liga");
+                if (stand.Nachricht.StartsWith("Fehler") || ligen == null || ligen.Count == 0)
+                    fehler = stand.Nachricht;
+                break;
+            }
+        }
+
+        if (fehler != null)
+        {
+            // Eine halbe Welt ist kein Spielstand - weg damit, statt sie in der Liste zu lassen.
+            await ApiClient.SendeAsync("DELETE", $"schemas/saves/{schema}");
+            GameState.Instance.SetSchema("db_default");
+            OS.Alert($"Die Welt konnte nicht erzeugt werden.\n{fehler}", "Fehler");
+            ZeigePanel(Zustand.Start);
+            return false;
+        }
+        _progressLabel.Text = "Lade Vereine …";
+        return true;
+    }
+
+    /// <summary>Stand der Welterzeugung (GET spiel/fortschritt).</summary>
+    private sealed class InitFortschritt
+    {
+        public string Nachricht { get; set; } = "";
+        public int    Prozent   { get; set; }
+        public bool   Fertig    { get; set; }
     }
 
     private async Task LadeAngebote()
