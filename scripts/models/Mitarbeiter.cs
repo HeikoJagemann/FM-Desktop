@@ -25,11 +25,15 @@ public class StabModel
 /// <summary>Eine Rolle im Stab: wer sie besetzt und wer sich in diesem Monat bewirbt.</summary>
 public class StabAbteilung
 {
-    /// <summary>CO_TRAINER oder PHYSIOTHERAPEUT.</summary>
+    /// <summary>CO_TRAINER, PHYSIOTHERAPEUT, JUGENDSCOUT oder JUGENDTRAINER.</summary>
     public string              Rolle       { get; set; } = "";
     public string              Anzeige     { get; set; } = "";
     public List<StabPerson>    Mitarbeiter { get; set; } = new();
     public List<ScoutBewerber> Bewerber    { get; set; } = new();
+    /// <summary>Wie viele der Verein höchstens beschäftigt.</summary>
+    public int                 Max         { get; set; }
+    /// <summary>Bei Jugendtrainern die Jugendkader ohne Trainer ("JugendA" …).</summary>
+    public List<string>        FreieKader  { get; set; } = new();
 }
 
 public class StabPerson
@@ -39,4 +43,15 @@ public class StabPerson
     public int       Qualitaet   { get; set; }
     public int       Gehalt      { get; set; }
     public DateOnly? Eingestellt { get; set; }
+    /// <summary>Der Jugendkader eines Jugendtrainers, sonst leer.</summary>
+    public string?   Kader       { get; set; }
+    /// <summary>Bis wann er auf Lehrgang ist - so lange fehlt er.</summary>
+    public DateOnly? FortbildungBis { get; set; }
+    public long      FortbildungKosten { get; set; }
+    /// <summary>Um wie viel ein Lehrgang ihn besser machen würde.</summary>
+    public int       FortbildungPlus { get; set; }
+    /// <summary>Warum gerade kein Lehrgang geht, sonst leer.</summary>
+    public string?   FortbildungHindernis { get; set; }
+
+    public bool AufLehrgang => FortbildungBis != null;
 }

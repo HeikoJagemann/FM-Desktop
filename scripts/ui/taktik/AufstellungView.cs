@@ -493,8 +493,19 @@ public partial class AufstellungView : Control
         blitz.Size = new Vector2(18, 18);
         _autoBtn.AddChild(blitz);
         _autoBtn.TooltipText = "Besetzt jeden Platz der aktuellen Formation mit dem stärksten "
-                             + "verfügbaren Spieler und füllt die Ersatzbank.";
-        _autoBtn.Pressed += async () => await AutomatischAufstellen();
+                             + "verfügbaren Spieler und füllt die Ersatzbank - wahlweise nach Spielstärke "
+                             + "oder Grundstärke.";
+        // Zwei Maßstäbe: was er heute bringt, oder was er auf Dauer kann.
+        var auswahl = new PopupMenu();
+        auswahl.AddItem("Beste Spielstärke  ·  mit Form und Frische", 0);
+        auswahl.AddItem("Beste Grundstärke  ·  ohne Form und Frische", 1);
+        auswahl.IdPressed += async id => await AutomatischAufstellen(id == 0 ? "SPIELSTAERKE" : "GRUNDSTAERKE");
+        _autoBtn.AddChild(auswahl);
+        _autoBtn.Pressed += () =>
+        {
+            var unten = _autoBtn.GetScreenPosition() + new Vector2(0, _autoBtn.Size.Y + 4);
+            auswahl.Popup(new Rect2I((Vector2I)unten, new Vector2I((int)_autoBtn.Size.X, 0)));
+        };
         hbox.AddChild(_autoBtn);
 
         // Kein Speichern-Knopf: Jede Änderung wird sofort übernommen, gespielt wird immer
@@ -898,14 +909,15 @@ public partial class AufstellungView : Control
     }
 
     /// <summary>Lässt den Server die stärkste Elf und die Ersatzbank bestimmen.</summary>
-    private async System.Threading.Tasks.Task AutomatischAufstellen()
+    /// <param name="nach">SPIELSTAERKE (mit Form und Frische) oder GRUNDSTAERKE (ohne beides)</param>
+    private async System.Threading.Tasks.Task AutomatischAufstellen(string nach)
     {
         _autoBtn.Disabled = true;
         _statusLabel.Text = "Stelle auf …";
 
         var vereinId = GameState.Instance.VereinId;
         var ergebnis = await ApiClient.PostAsync<object, AufstellungModel>(
-            $"aufstellung/{vereinId}/automatisch", new { });
+            $"aufstellung/{vereinId}/automatisch?nach={nach}", new { });
 
         _autoBtn.Disabled = false;
 
@@ -916,7 +928,7 @@ public partial class AufstellungView : Control
         }
 
         WendeAufstellungAn(ergebnis);
-        _statusLabel.Text = "Automatisch aufgestellt";
+        _statusLabel.Text = nach == "SPIELSTAERKE" ? "Nach Spielstärke aufgestellt" : "Nach Grundstärke aufgestellt";
     }
 
     /// <summary>Überträgt eine komplette Aufstellung vom Server auf die Oberfläche.</summary>

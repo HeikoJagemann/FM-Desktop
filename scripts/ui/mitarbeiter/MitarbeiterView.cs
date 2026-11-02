@@ -8,7 +8,8 @@ using FMDesktop.Models;
 namespace FMDesktop.UI.Personal;
 
 /// <summary>
-/// Der Stab des Vereins: Co-Trainer und Physiotherapeuten einstellen und entlassen.
+/// Der Stab des Vereins: Co-Trainer, Physiotherapeuten, Jugendscouts und Jugendtrainer einstellen,
+/// auf Lehrgang schicken und entlassen.
 ///
 /// <para>Oben steht, was der Stab gerade bewirkt - gemessen an einem Verein ohne erfassten Stab,
 /// wie ihn die anderen Vereine haben. Darunter je Rolle eine Karte mit den Beschäftigten und den
@@ -20,7 +21,7 @@ public partial class MitarbeiterView : Control
     private static readonly CultureInfo Deutsch = CultureInfo.GetCultureInfo("de-DE");
 
     private HBoxContainer _wirkung = null!;
-    private HBoxContainer _abteilungen = null!;
+    private GridContainer _abteilungen = null!;
     private Label _statusLabel = null!;
 
     private bool Lebt => IsInstanceValid(this) && !IsQueuedForDeletion();
@@ -46,9 +47,14 @@ public partial class MitarbeiterView : Control
         _wirkung.AddThemeConstantOverride("separation", 12);
         seite.AddChild(_wirkung);
 
-        _abteilungen = new HBoxContainer();
-        _abteilungen.AddThemeConstantOverride("separation", 12);
-        seite.AddChild(_abteilungen);
+        // Vier Abteilungen - zwei je Reihe, nebeneinander würden sie zu schmal.
+        var rollen = new ScrollContainer { SizeFlagsVertical = SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        seite.AddChild(rollen);
+        _abteilungen = new GridContainer { Columns = 2, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _abteilungen.AddThemeConstantOverride("h_separation", 12);
+        _abteilungen.AddThemeConstantOverride("v_separation", 12);
+        rollen.AddChild(_abteilungen);
     }
 
     private async Task Lade()
@@ -62,7 +68,8 @@ public partial class MitarbeiterView : Control
         }
         if (_statusLabel.Text == "Lade …")
             _statusLabel.Text = $"Bewerber wechseln jeden Monat. Wer entlassen wird, bekommt "
-                                + $"{stab.AbfindungWochen} Wochengehälter Abfindung.";
+                                + $"{stab.AbfindungWochen} Wochengehälter Abfindung. Mitarbeiter werden jede Saison "
+                                + "etwas besser, schneller mit einem Lehrgang - einer je Saison.";
         ZeigeWirkung(stab);
         ZeigeAbteilungen(stab);
     }
@@ -76,8 +83,9 @@ public partial class MitarbeiterView : Control
         double training = (stab.Trainingsfaktor - 1.0) * 100.0;
         _wirkung.AddChild(Tafel("Training",
             $"{Vorzeichen(training)}{System.Math.Abs(training).ToString("0", Deutsch)} %", Wertfarbe(training),
-            "Trainingsfortschritt aller Spieler gegenüber einem Verein ohne eigenen Stab. "
-            + "Ein Co-Trainer mittlerer Qualität (50) gleicht ihn aus, ohne Co-Trainer fehlen zehn Prozent."));
+            "Trainingsfortschritt der Profis und Amateure gegenüber einem Verein ohne eigenen Stab. "
+            + "Ein Co-Trainer mittlerer Qualität (50) gleicht ihn aus, ohne Co-Trainer fehlen zehn Prozent. "
+            + "Die Jugend trainiert bei ihren Jugendtrainern."));
 
         double erholung = stab.Erholungsbonus;
         _wirkung.AddChild(Tafel("Erholung",
@@ -151,7 +159,7 @@ public partial class MitarbeiterView : Control
         var titel = FmTheme.MakeAbschnitt(Mehrzahl(abteilung.Anzeige), 20);
         titel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         kopf.AddChild(titel);
-        var besetzt = FmTheme.MakeLabel($"{abteilung.Mitarbeiter.Count} von {stab.MaxJeRolle}", 13,
+        var besetzt = FmTheme.MakeLabel($"{abteilung.Mitarbeiter.Count} von {abteilung.Max}", 13,
             FmTheme.TextSecondary);
         besetzt.SizeFlagsVertical = SizeFlags.ShrinkCenter;
         kopf.AddChild(besetzt);
@@ -169,11 +177,20 @@ public partial class MitarbeiterView : Control
         }
         foreach (var person in abteilung.Mitarbeiter)
         {
-            var knopf = Knopf("Entlassen", primaer: false);
             var p = person;
-            knopf.Pressed += () => FrageEntlassen(p, stab.AbfindungWochen);
-            box.AddChild(Personenzeile(p.Name, p.Qualitaet, p.Gehalt, knopf,
-                p.Eingestellt is { } seit ? $"seit {seit:dd.MM.yyyy}" : ""));
+            var lehrgang = Knopf("Lehrgang", primaer: false);
+            lehrgang.Disabled = p.FortbildungHindernis != null;
+            lehrgang.TooltipText = p.FortbildungHindernis
+                ?? $"Vier Wochen Lehrgang für {FmTheme.Geld(p.FortbildungKosten)}: Qualität {p.Qualitaet} → "
+                   + $"{System.Math.Min(100, p.Qualitaet + p.FortbildungPlus)}. So lange fehlt er, und danach verlangt er mehr Gehalt.";
+            lehrgang.Pressed += () => FrageLehrgang(p);
+            var entlassen = Knopf("Entlassen", primaer: false);
+            entlassen.Pressed += () => FrageEntlassen(p, stab.AbfindungWochen);
+            var zusatz = new System.Collections.Generic.List<string>();
+            if (p.Kader != null) zusatz.Add(KaderName(p.Kader));
+            if (p.AufLehrgang) zusatz.Add($"auf Lehrgang bis {p.FortbildungBis:dd.MM.yyyy}");
+            else if (p.Eingestellt is { } seit) zusatz.Add($"seit {seit:dd.MM.yyyy}");
+            box.AddChild(Personenzeile(p.Name, p.Qualitaet, p.Gehalt, string.Join("  ·  ", zusatz), lehrgang, entlassen));
         }
 
         var sep = new HSeparator();
@@ -181,21 +198,27 @@ public partial class MitarbeiterView : Control
         box.AddChild(sep);
         box.AddChild(FmTheme.MakeAbschnitt("Bewerber diesen Monat", 16));
 
-        bool voll = abteilung.Mitarbeiter.Count >= stab.MaxJeRolle;
+        bool voll = abteilung.Mitarbeiter.Count >= abteilung.Max;
+        bool jugendtrainer = abteilung.Rolle == "JUGENDTRAINER";
         foreach (var bewerber in abteilung.Bewerber)
         {
             var knopf = Knopf("Einstellen", primaer: true);
             knopf.Disabled = voll;
-            if (voll) knopf.TooltipText = $"Mehr als {stab.MaxJeRolle} beschäftigt der Verein nicht.";
+            if (voll) knopf.TooltipText = jugendtrainer
+                ? "Jede Jugendmannschaft hat schon ihren Jugendtrainer."
+                : $"Mehr als {abteilung.Max} beschäftigt der Verein nicht.";
             var b = bewerber;
-            knopf.Pressed += () => _ = StelleEin(abteilung.Rolle, b);
-            box.AddChild(Personenzeile(b.Name, b.Qualitaet, b.Gehalt, knopf, ""));
+            if (jugendtrainer) knopf.Pressed += () => WaehleKader(b, abteilung.FreieKader);
+            else knopf.Pressed += () => _ = StelleEin(abteilung.Rolle, b);
+            box.AddChild(Personenzeile(b.Name, b.Qualitaet, b.Gehalt, "", knopf));
         }
         return karte;
     }
 
-    /// <summary>Name, Qualität als Balken und Zahl, Gehalt und die Aktion.</summary>
-    private static Control Personenzeile(string name, int qualitaet, int gehalt, Button aktion, string zusatz)
+    private static string KaderName(string kader) => kader.Replace("Jugend", "") + "-Jugend";
+
+    /// <summary>Name, Qualität als Balken und Zahl, Gehalt und die Aktionen.</summary>
+    private static Control Personenzeile(string name, int qualitaet, int gehalt, string zusatz, params Button[] aktionen)
     {
         var zeile = new PanelContainer();
         var stil = FmTheme.Flaeche(FmTheme.BgDark, 8, FmTheme.Border);
@@ -242,8 +265,11 @@ public partial class MitarbeiterView : Control
         g.MouseFilter = MouseFilterEnum.Pass;
         reihe.AddChild(g);
 
-        aktion.SizeFlagsVertical = SizeFlags.ShrinkCenter;
-        reihe.AddChild(aktion);
+        foreach (var aktion in aktionen)
+        {
+            aktion.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+            reihe.AddChild(aktion);
+        }
         return zeile;
     }
 
@@ -267,13 +293,16 @@ public partial class MitarbeiterView : Control
     {
         "Physiotherapeut" => "Physiotherapeuten",
         "Jugendscout"     => "Jugendscouts",
+        "Jugendtrainer"   => "Jugendtrainer",
         _                 => rolle,
     };
 
     private static string Erklaerung(string rolle) => rolle switch
     {
-        "CO_TRAINER" => "Leiten Einheiten mit an: Alle Spieler lernen im Training schneller. "
+        "CO_TRAINER" => "Leiten Einheiten mit an: Profis und Amateure lernen im Training schneller. "
                         + "Der Beste zählt voll, der zweite halb.",
+        "JUGENDTRAINER" => "Je Jugendmannschaft einer: Seine Mannschaft lernt im Training schneller. "
+                           + "Ein mittlerer (50) gleicht einen Verein ohne erfassten Stab aus. Deutlich günstiger als ein Co-Trainer.",
         "JUGENDSCOUT" => "Sichten in der Region und schlagen Talente vor, überwiegend für die C-Jugend. "
                          + "Ein besserer Scout findet öfter und bessere - einladen unter Jugend › Talente.",
         _            => "Behandeln und regenerieren: Die Spieler erholen sich zwischen den Spielen besser. "
@@ -283,21 +312,66 @@ public partial class MitarbeiterView : Control
     private static string Fehlt(string rolle) => rolle switch
     {
         "CO_TRAINER" => "Noch kein Co-Trainer - das Training bringt zehn Prozent weniger als bei den anderen Vereinen.",
+        "JUGENDTRAINER" => "Noch kein Jugendtrainer - jede Jugendmannschaft ohne ihn lernt zehn Prozent weniger.",
         "JUGENDSCOUT" => "Noch kein Jugendscout - der Verein findet keine Talente von außerhalb.",
         _            => "Noch kein Physiotherapeut - jeder Spieler erholt sich zwei Frischepunkte je Woche weniger.",
     };
 
     // ── Aktionen ─────────────────────────────────────────────────────────────
 
-    private async Task StelleEin(string rolle, ScoutBewerber bewerber)
+    private async Task StelleEin(string rolle, ScoutBewerber bewerber, string? kader = null)
     {
         var antwort = await ApiClient.SendeAsync("POST",
-            $"mitarbeiter/{GameState.Instance.VereinId}/{rolle}/bewerber/{bewerber.Nummer}");
+            $"mitarbeiter/{GameState.Instance.VereinId}/{rolle}/bewerber/{bewerber.Nummer}"
+            + (kader != null ? $"?kader={kader}" : ""));
         if (!Lebt) return;
         _statusLabel.Text = antwort.Ok
-            ? $"{bewerber.Name} ist eingestellt."
+            ? $"{bewerber.Name} ist eingestellt" + (kader != null ? $" und trainiert die {KaderName(kader)}." : ".")
             : antwort.Fehler ?? "Die Einstellung ist fehlgeschlagen.";
         await Lade();
+    }
+
+    /// <summary>Ein Jugendtrainer übernimmt eine Mannschaft - welche, entscheidet der Manager.</summary>
+    private void WaehleKader(ScoutBewerber bewerber, System.Collections.Generic.List<string> frei)
+    {
+        var menu = new PopupMenu();
+        menu.AddItem($"{bewerber.Name} trainiert …", -1);
+        menu.SetItemDisabled(0, true);
+        menu.AddSeparator();
+        for (int i = 0; i < frei.Count; i++) menu.AddItem(KaderName(frei[i]), i);
+        AddChild(menu);
+        menu.IdPressed += id =>
+        {
+            if (id >= 0 && id < frei.Count) _ = StelleEin("JUGENDTRAINER", bewerber, frei[(int)id]);
+        };
+        menu.PopupHide += menu.QueueFree;
+        menu.Position = (Vector2I)GetGlobalMousePosition();
+        menu.Popup();
+    }
+
+    private void FrageLehrgang(StabPerson person)
+    {
+        var menu = new PopupMenu();
+        menu.AddItem($"{person.Name} auf Lehrgang schicken? Qualität {person.Qualitaet} → "
+                     + $"{System.Math.Min(100, person.Qualitaet + person.FortbildungPlus)}, vier Wochen ohne ihn", -1);
+        menu.SetItemDisabled(0, true);
+        menu.AddSeparator();
+        menu.AddItem($"Ja - kostet {FmTheme.Geld(person.FortbildungKosten)}", 1);
+        menu.AddItem("Nein", 0);
+        AddChild(menu);
+        menu.IdPressed += async id =>
+        {
+            if (id != 1) return;
+            var antwort = await ApiClient.SendeAsync("POST", $"mitarbeiter/person/{person.Id}/fortbildung");
+            if (!Lebt) return;
+            _statusLabel.Text = antwort.Ok
+                ? $"{person.Name} ist bis in vier Wochen auf Lehrgang."
+                : antwort.Fehler ?? "Abgelehnt.";
+            await Lade();
+        };
+        menu.PopupHide += menu.QueueFree;
+        menu.Position = (Vector2I)GetGlobalMousePosition();
+        menu.Popup();
     }
 
     private void FrageEntlassen(StabPerson person, int abfindungWochen)

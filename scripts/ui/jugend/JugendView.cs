@@ -16,20 +16,32 @@ public partial class JugendView : Control
     /// <summary>Je Jugendmannschaft ein Grid, geschlüsselt nach Kadertyp ("JugendA").</summary>
     private readonly Dictionary<string, FmGrid<Spieler>> _grids = new();
 
+    /// <summary>Förderplätze je Kader und was der letzte Klick ergab.</summary>
+    private Label _foerderLabel = null!;
+    private string _hinweis = "";
+
     public override async void _Ready()
     {
         BuildUI();
         // Ein hochgezogenes Talent verschwindet aus der Jugend - also neu laden.
         SpielerKontextmenue.KaderGeaendert += OnKaderGeaendert;
+        SpielerKontextmenue.Hinweis += OnHinweis;
         await LadeSpieler();
     }
 
     public override void _ExitTree()
     {
         SpielerKontextmenue.KaderGeaendert -= OnKaderGeaendert;
+        SpielerKontextmenue.Hinweis -= OnHinweis;
     }
 
     private async void OnKaderGeaendert() => await LadeSpieler();
+
+    private async void OnHinweis(string text)
+    {
+        _hinweis = text;
+        await LadeFoerderung();
+    }
 
     private void BuildUI()
     {
@@ -42,6 +54,9 @@ public partial class JugendView : Control
 
         _statusLabel = FmTheme.MakeLabel("Lade …", 13, FmTheme.TextSecondary);
         vbox.AddChild(_statusLabel);
+        _foerderLabel = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
+        _foerderLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        vbox.AddChild(_foerderLabel);
 
         _tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         vbox.AddChild(_tabs);
@@ -83,5 +98,18 @@ public partial class JugendView : Control
         {
             grid.Zeige(alle.Where(s => s.Kader == kaderTyp));
         }
+        await LadeFoerderung();
+    }
+
+    /// <summary>Wie viele Förderplätze je Kader es gibt und wie viele belegt sind.</summary>
+    private async System.Threading.Tasks.Task LadeFoerderung()
+    {
+        var foerderung = await ApiClient.GetAsync<FoerderungModel>($"foerderung/{GameState.Instance.VereinId}");
+        if (!IsInstanceValid(this) || foerderung == null) return;
+        var belegt = string.Join("  ·  ", foerderung.Kader.Select(k =>
+            $"{k.Kader.Replace("Jugend", "")}-Jugend {k.Gefoerdert.Count} von {k.Plaetze}"));
+        _foerderLabel.Text = $"Förderplätze ({foerderung.Gelaende}): {belegt}.  Rechtsklick auf einen Spieler fördert ihn "
+                             + "bis zum Saisonende - er entwickelt sich schneller, und sein Potenzial steigt."
+                             + (_hinweis != "" ? $"\n{_hinweis}" : "");
     }
 }

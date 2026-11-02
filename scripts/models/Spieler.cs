@@ -62,6 +62,8 @@ public class Spieler
     public int    VertragBis           { get; set; }
     /// <summary>Ob der Verein den Spieler abgeben will - dann steht er auf der Transferliste.</summary>
     public bool   AufTransferliste     { get; set; }
+    /// <summary>Ob er in seinem Jugendkader besonders gefördert wird - für eine Saison.</summary>
+    public bool   Gefoerdert           { get; set; }
     // Technisch
     public int    Pass                 { get; set; }
     public int    Ballkontrolle        { get; set; }
@@ -202,4 +204,20 @@ public class Spieler
         Top3Positionen?.Count > 0
             ? string.Join("\n\n", Top3Positionen.Select(p => p.Erklaerung))
             : "";
+}
+
+/// <summary>Förderplätze der Jugend (GET foerderung/{vereinId}).</summary>
+public class FoerderungModel
+{
+    public int    Jugendgelaende { get; set; }
+    public string Gelaende       { get; set; } = "";
+    public System.Collections.Generic.List<FoerderKader> Kader { get; set; } = new();
+}
+
+public class FoerderKader
+{
+    /// <summary>"JugendA", "JugendB" oder "JugendC".</summary>
+    public string Kader   { get; set; } = "";
+    public int    Plaetze { get; set; }
+    public System.Collections.Generic.List<long> Gefoerdert { get; set; } = new();
 }

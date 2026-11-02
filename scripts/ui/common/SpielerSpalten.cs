@@ -217,7 +217,20 @@ public static class SpielerSpalten
 
     public static IEnumerable<GridSpalte<Spieler>> Jugendliste => new[]
     {
-        Name, Position, StaerkeBestePosition, Talent, Alter, Nation,
+        Name, Position, StaerkeBestePosition, Talent, Alter, Foerderung, Nation,
+    };
+
+    /// <summary>Ob er in der Jugend besonders gefördert wird.</summary>
+    public static GridSpalte<Spieler> Foerderung => new()
+    {
+        Titel = "Förderung", Breite = 96,
+        Text       = s => s.Gefoerdert ? "gefördert" : "",
+        Farbe      = _ => FmTheme.Gold,
+        Tooltip    = s => s.Gefoerdert
+            ? "Wird besonders gefördert: entwickelt sich schneller, und zum Saisonende steigt sein "
+              + "Potenzial. Die Förderung gilt bis zum Saisonende - Rechtsklick beendet sie."
+            : "Rechtsklick: fördern, solange es freie Förderplätze gibt.",
+        Sortierung = s => s.Gefoerdert ? 0 : 1,
     };
 
     public static IEnumerable<GridSpalte<Spieler>> Aufstellungsliste => new[]

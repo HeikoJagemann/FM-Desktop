@@ -13,6 +13,9 @@ public static class SpielerKontextmenue
     /// <summary>Wird nach einem Kaderwechsel gerufen, damit die Ansicht neu laden kann.</summary>
     public static event Action? KaderGeaendert;
 
+    /// <summary>Ein Hinweis für die Ansicht - etwa warum eine Förderung nicht ging.</summary>
+    public static event Action<string>? Hinweis;
+
     private static readonly (string Schluessel, string Anzeige)[] Kader =
     {
         ("Profi",   "Profikader"),
@@ -35,6 +38,12 @@ public static class SpielerKontextmenue
             menu.AddItem(spieler.AufTransferliste
                 ? "Von der Transferliste nehmen"
                 : "Auf die Transferliste setzen", 2);
+        }
+
+        // Jugendspieler lassen sich fördern - so viele je Kader, wie das Jugendgelände zulässt.
+        if (spieler.Kader.StartsWith("Jugend"))
+        {
+            menu.AddItem(spieler.Gefoerdert ? "Förderung beenden" : "Fördern", 3);
         }
 
         menu.AddSeparator("Verschieben nach");
@@ -68,6 +77,10 @@ public static class SpielerKontextmenue
             else if (gewaehlt == 2)
             {
                 _ = ListeAsync(spieler, !spieler.AufTransferliste);
+            }
+            else if (gewaehlt == 3)
+            {
+                _ = FoerdereAsync(spieler, !spieler.Gefoerdert);
             }
             else if (ziele.TryGetValue(gewaehlt, out var ziel))
             {
@@ -112,6 +125,21 @@ public static class SpielerKontextmenue
             return;
         }
         spieler.AufTransferliste = gelistet;
+        KaderGeaendert?.Invoke();
+    }
+
+    private static async System.Threading.Tasks.Task FoerdereAsync(Spieler spieler, bool an)
+    {
+        long vereinId = GameState.Instance.VereinId;
+        var antwort = await ApiClient.SendeAsync("POST",
+            $"foerderung/{vereinId}/{spieler.Id}?an={(an ? "true" : "false")}");
+        if (!antwort.Ok)
+        {
+            Hinweis?.Invoke(antwort.Fehler ?? $"Die Förderung von {spieler.Name} ging nicht.");
+            return;
+        }
+        spieler.Gefoerdert = an;
+        Hinweis?.Invoke(an ? $"{spieler.Name} wird bis zum Saisonende gefördert." : $"Förderung von {spieler.Name} beendet.");
         KaderGeaendert?.Invoke();
     }
 
