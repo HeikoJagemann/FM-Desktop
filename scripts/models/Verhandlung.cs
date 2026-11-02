@@ -22,7 +22,9 @@ public class Verhandlung
     public int     Wunschlaufzeit  { get; set; }
     public int     MinLaufzeit     { get; set; }
     public int     MaxLaufzeit     { get; set; }
-    public double  RestSekunden    { get; set; }
+    /// <summary>Was er bei jeder möglichen Laufzeit verlangt - abseits seines Wunsches mit Aufschlag.</summary>
+    public Dictionary<int, long> ForderungJeLaufzeit { get; set; } = new();
+    /// <summary>0 bis 100 - jedes Angebot kostet Stimmung; bei 0 bricht er ab.</summary>
     public int     Stimmung        { get; set; }
     public int     Runde           { get; set; }
     public string  Status          { get; set; } = "";
@@ -37,6 +39,10 @@ public class Verhandlung
     public long?   AngebotId       { get; set; }
 
     public bool Laeuft => Status == "LAEUFT";
+
+    /// <summary>Seine Forderung bei einer Laufzeit; ohne Angabe vom Server die bei seinem Wunsch.</summary>
+    public long ForderungBei(int laufzeit) =>
+        ForderungJeLaufzeit.TryGetValue(laufzeit, out var betrag) ? betrag : Forderung;
 
     /// <summary>Kalenderjahr, in dem ein Vertrag über so viele Jahre am 30. Juni endet.</summary>
     public int EndetIm(int laufzeit) => Saison + laufzeit + 1;

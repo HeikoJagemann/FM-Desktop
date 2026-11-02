@@ -4,7 +4,7 @@ namespace FMDesktop.Models;
 
 /// <summary>
 /// Baut den Mouseover-Text, der erklärt, wie sich eine angezeigte Stärke zusammensetzt:
-/// Grundstärke (der Position) + Eingespieltheit [+ Frische] = Spielstärke.
+/// Grundstärke (der Position) × Eingespieltheit × Form [× Frische] = Spielstärke.
 ///
 /// Die Endwerte (Stärke, Spielstärke) kommen immer direkt vom Backend, nie aus einer
 /// Neuberechnung hier - nur die Zwischenfaktoren werden fürs Verständnis lokal ausgerechnet,
@@ -35,8 +35,35 @@ public static class StaerkeErklaerung
              + $"= Spielstärke: {effektiveStaerke}";
     }
 
-    private static string Kopf(string position, int grundstaerke, int eingespieltheit, double formFaktor)
+    /// <summary>
+    /// In der Aufstellung, vor dem Spiel: alle Faktoren - erst bis zur Stärke, wie sie auf der
+    /// Plakette steht, dann mit der Frische bis zu dem, was er bei Anpfiff bringt.
+    /// </summary>
+    /// <param name="staerke">die Stärke mit Form - die Zahl auf der Plakette</param>
+    /// <param name="form">Formwert, 50 ist normal</param>
+    /// <param name="frische">Frische bei Anpfiff in Prozent</param>
+    /// <param name="frischeFaktor">was die Frische von der Stärke übrig lässt - vom Server</param>
+    /// <param name="spielstaerke">Stärke bei Anpfiff - vom Server</param>
+    public static string Aufstellung(string position, int grundstaerke, int eingespieltheit, int staerke,
+        double formFaktor, int form, int frische, double frischeFaktor, int spielstaerke)
+        => Kopf(position, grundstaerke, eingespieltheit, formFaktor, form)
+         + $"= Stärke: {staerke}\n"
+         + $"Frische {frische}% bei Anpfiff: × {F(frischeFaktor)}\n"
+         + $"= Spielstärke bei Anpfiff: {spielstaerke}";
+
+    private static string Kopf(string position, int grundstaerke, int eingespieltheit, double formFaktor,
+        int? form = null)
         => $"Grundstärke ({position}): {grundstaerke}\n"
          + $"Eingespieltheit {eingespieltheit}%: × {F(EingespieltFaktor(eingespieltheit))}\n"
-         + $"Form: × {F(formFaktor)}\n";
+         + (form.HasValue ? $"Form {form} ({Formwort(form.Value)}): × {F(formFaktor)}\n" : $"Form: × {F(formFaktor)}\n");
+
+    /// <summary>Formwert in Worten - 50 ist normal, die Spanne reicht von 10 bis 90.</summary>
+    private static string Formwort(int form) => form switch
+    {
+        >= 75 => "bestens",
+        >= 60 => "gut",
+        > 40  => "normal",
+        > 25  => "schwach",
+        _     => "miserabel",
+    };
 }

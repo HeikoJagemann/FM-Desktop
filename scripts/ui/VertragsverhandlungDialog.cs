@@ -9,16 +9,16 @@ using FMDesktop.Models;
 namespace FMDesktop.UI;
 
 /// <summary>
-/// Vertragsverhandlung gegen die Uhr - mit einem eigenen Spieler über die Verlängerung oder mit
-/// einem Neuzugang, dessen Ablöse schon geklärt ist. Scheitert das Gespräch mit einem Neuzugang,
-/// platzt der Wechsel.
+/// Vertragsverhandlung - mit einem eigenen Spieler über die Verlängerung oder mit einem Neuzugang,
+/// dessen Ablöse schon geklärt ist. Scheitert das Gespräch mit einem Neuzugang, platzt der Wechsel.
 ///
 /// <para>Er nennt Gehalt und Laufzeit, du bietest. Er kommt dir entgegen, aber nie unter das, was
-/// er sich wert ist; zu niedrige Angebote verstimmen ihn. Nach sechzig Sekunden ist das Gespräch
-/// vorbei. Die Uhr läuft im Server - die Anzeige hier zählt nur mit.</para>
+/// er sich wert ist. Jedes Angebot kostet Stimmung - umso mehr, je weiter es unter seiner Forderung
+/// liegt. Ist sie aufgebraucht, bricht er ab. Gerechnet wird im Server; früher lief statt der
+/// Stimmung eine Uhr über sechzig Sekunden.</para>
 ///
 /// <para>Gehälter erscheinen in der eingestellten Periode (Woche, Monat oder Jahr); gerechnet
-/// wird im Server immer mit dem Wochengehalt.</para>
+/// wird im Server immer mit dem Wochengehalt, auf volle Euro.</para>
 /// </summary>
 public partial class VertragsverhandlungDialog : Overlaykarte
 {
@@ -30,15 +30,14 @@ public partial class VertragsverhandlungDialog : Overlaykarte
     private TransferangebotModel? _angebot;
     private Action? _geaendert;
     private Verhandlung? _stand;
-    private double _rest;
-    private bool _fragtNach;
 
-    private Label _uhr = null!;
-    private ProgressBar _uhrBalken = null!;
+    private Label _stimmungZahl = null!;
+    private Label _stimmungWort = null!;
+    private ProgressBar _stimmung = null!;
     private Label _forderung = null!;
     private Label _forderungLaufzeit = null!;
-    private ProgressBar _stimmung = null!;
     private SpinBox _gehalt = null!;
+    private HSlider _regler = null!;
     private Label _gehaltText = null!;
     private Segmentschalter? _laufzeit;
     private HBoxContainer _laufzeitPlatz = null!;
@@ -46,9 +45,11 @@ public partial class VertragsverhandlungDialog : Overlaykarte
     private VBoxContainer _verlauf = null!;
     private ScrollContainer _verlaufScroll = null!;
     private Button _bieten = null!;
-    private Button _annehmen = null!;
+    private Button _erfuellen = null!;
     private Button _beenden = null!;
     private Label _hinweis = null!;
+    /// <summary>Verhindert, dass sich Feld und Regler beim Abgleich gegenseitig anstoßen.</summary>
+    private bool _gleichtAb;
 
     public VertragsverhandlungDialog() : base("Vertragsverhandlung", 900)
     {
@@ -85,6 +86,19 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         _                    => 1.0,
     };
 
+    /// <summary>
+    /// Kleinster Schritt in der Anzeige - ein ganzes Vielfaches eines Euros Wochengehalt, damit die
+    /// angezeigte Zahl genau das ist, was beim Server ankommt: Jahr 52 € (1 € je Woche), Monat 13 €
+    /// (3 € je Woche), Woche 1 €. Früher waren es im Jahr 1.000 € - in der Oberliga musste man die
+    /// Forderung so oft deutlich überbieten.
+    /// </summary>
+    private static double Schritt => Gehaltsformat.Periode switch
+    {
+        GehaltsPeriode.Monat => 13,
+        GehaltsPeriode.Jahr  => 52,
+        _                    => 1,
+    };
+
     private static long ZuWoche(double angezeigt) => (long)Math.Round(angezeigt / Faktor);
     private static double AusWoche(long woche) => Math.Round(woche * Faktor);
 
@@ -94,22 +108,29 @@ public partial class VertragsverhandlungDialog : Overlaykarte
     {
         SetzeUntertitel($"{_name}  ·  Gespräch wird vorbereitet …");
 
-        // Die Uhr
-        var uhrZeile = new HBoxContainer();
-        uhrZeile.AddThemeConstantOverride("separation", 14);
-        _uhr = FmTheme.MakeZahl("60", 40, FmTheme.Accent);
-        _uhr.CustomMinimumSize = new Vector2(70, 0);
-        uhrZeile.AddChild(_uhr);
-        _uhrBalken = new ProgressBar
+        // Die Stimmung - sie ersetzt die Uhr.
+        var stimmungZeile = new HBoxContainer();
+        stimmungZeile.AddThemeConstantOverride("separation", 14);
+        _stimmungZahl = FmTheme.MakeZahl("–", 40, FmTheme.Success);
+        _stimmungZahl.CustomMinimumSize = new Vector2(70, 0);
+        stimmungZeile.AddChild(_stimmungZahl);
+        var stimmungSpalte = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        stimmungSpalte.AddThemeConstantOverride("separation", 4);
+        _stimmungWort = FmTheme.MakeLabel("STIMMUNG", 11, FmTheme.TextSecondary);
+        stimmungSpalte.AddChild(_stimmungWort);
+        _stimmung = new ProgressBar
         {
-            MinValue = 0, MaxValue = 60, Value = 60, ShowPercentage = false,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ShrinkCenter,
-            CustomMinimumSize = new Vector2(0, 12),
+            MinValue = 0, MaxValue = 100, Value = 100, ShowPercentage = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(0, 12),
         };
-        _uhrBalken.AddThemeStyleboxOverride("background", FmTheme.Flaeche(FmTheme.BgDark, 6, FmTheme.Border));
-        _uhrBalken.AddThemeStyleboxOverride("fill", FmTheme.Flaeche(FmTheme.Accent, 6));
-        uhrZeile.AddChild(_uhrBalken);
-        inhalt.AddChild(uhrZeile);
+        _stimmung.AddThemeStyleboxOverride("background", FmTheme.Flaeche(FmTheme.BgDark, 6, FmTheme.Border));
+        _stimmung.AddThemeStyleboxOverride("fill", FmTheme.Flaeche(FmTheme.Success, 6));
+        stimmungSpalte.AddChild(_stimmung);
+        stimmungZeile.AddChild(stimmungSpalte);
+        stimmungZeile.TooltipText = "Wie das Gespräch läuft. Jedes Angebot kostet Stimmung - umso mehr, je weiter "
+                                    + "es unter seiner Forderung liegt; ein beleidigendes kostet viel. Bei 0 bricht er ab.";
+        inhalt.AddChild(stimmungZeile);
 
         // Forderung links, Angebot rechts
         var spalten = new HBoxContainer();
@@ -120,26 +141,28 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         _forderung = FmTheme.MakeZahl("–", 30, FmTheme.TextPrimary);
         fordert.AddChild(_forderung);
         _forderungLaufzeit = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
+        _forderungLaufzeit.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         fordert.AddChild(_forderungLaufzeit);
-        fordert.AddChild(FmTheme.MakeLabel("STIMMUNG", 10, FmTheme.TextSecondary));
-        _stimmung = new ProgressBar { MinValue = 0, MaxValue = 100, Value = 70, ShowPercentage = false,
-            CustomMinimumSize = new Vector2(0, 8) };
-        _stimmung.AddThemeStyleboxOverride("background", FmTheme.Flaeche(FmTheme.BgDark, 4, FmTheme.Border));
-        _stimmung.AddThemeStyleboxOverride("fill", FmTheme.Flaeche(FmTheme.Success, 4));
-        _stimmung.TooltipText = "Wie das Gespräch läuft. Angebote weit unter seinem Wert verstimmen ihn - zweimal, und er geht.";
-        fordert.AddChild(_stimmung);
         spalten.AddChild(fordertKarte);
 
         var (bieteKarte, biete) = Karte("Dein Angebot");
         var gehaltZeile = new HBoxContainer();
         gehaltZeile.AddThemeConstantOverride("separation", 10);
-        _gehalt = new SpinBox { MinValue = 0, MaxValue = 50_000_000, Step = 10, CustomMinimumSize = new Vector2(170, 0),
+        _gehalt = new SpinBox { MinValue = 0, MaxValue = 50_000_000, Step = 1, CustomMinimumSize = new Vector2(170, 0),
             Suffix = "€", Editable = false };
         _gehaltText = FmTheme.MakeLabel("", 13, FmTheme.TextSecondary);
-        _gehalt.ValueChanged += _ => AktualisiereGehaltText();
+        _gehalt.ValueChanged += wert => GehaltGeaendert(wert, ausRegler: false);
         gehaltZeile.AddChild(_gehalt);
         gehaltZeile.AddChild(_gehaltText);
         biete.AddChild(gehaltZeile);
+        _regler = new HSlider { MinValue = 0, MaxValue = 1, Step = 1, Editable = false,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(0, 22) };
+        _regler.AddThemeStyleboxOverride("slider", FmTheme.Flaeche(FmTheme.BgPanel, 4, FmTheme.Border));
+        _regler.AddThemeStyleboxOverride("grabber_area", FmTheme.Flaeche(FmTheme.Accent, 4));
+        _regler.AddThemeStyleboxOverride("grabber_area_highlight", FmTheme.Flaeche(FmTheme.Accent, 4));
+        _regler.TooltipText = "Bis ganz rechts: genau seine Forderung bei der gewählten Laufzeit.";
+        _regler.ValueChanged += wert => GehaltGeaendert(wert, ausRegler: true);
+        biete.AddChild(_regler);
         biete.AddChild(FmTheme.MakeLabel("LAUFZEIT", 10, FmTheme.TextSecondary));
         _laufzeitPlatz = new HBoxContainer();
         biete.AddChild(_laufzeitPlatz);
@@ -161,8 +184,8 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         inhalt.AddChild(verlaufRahmen);
 
         _hinweis = FmTheme.MakeLabel(Wechsel
-                ? "Brichst du nach einem Angebot ab oder läuft die Zeit ab, platzt der Wechsel - und er redet zwei Wochen lang nicht mehr mit uns."
-                : "Brichst du nach einem Angebot ab oder läuft die Zeit ab, redet er zwei Wochen lang nicht mehr darüber.",
+                ? "Bricht er ab oder stehst du nach einem Angebot auf, platzt der Wechsel - und er redet zwei Wochen lang nicht mehr mit uns."
+                : "Bricht er ab oder stehst du nach einem Angebot auf, redet er zwei Wochen lang nicht mehr darüber.",
             12, FmTheme.TextGedimmt);
         _hinweis.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         inhalt.AddChild(_hinweis);
@@ -174,11 +197,11 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         _beenden.Pressed += Schliessen;
         leiste.AddChild(_beenden);
         leiste.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
-        _annehmen = new Button { Text = "Forderung annehmen", Disabled = true };
-        FmTheme.ApplySecondaryButton(_annehmen);
-        _annehmen.TooltipText = "Seine Forderung bei seiner Wunschlaufzeit - er unterschreibt sofort.";
-        _annehmen.Pressed += async () => await NimmForderungAn();
-        leiste.AddChild(_annehmen);
+        _erfuellen = new Button { Text = "Forderung erfüllen", Disabled = true };
+        FmTheme.ApplySecondaryButton(_erfuellen);
+        _erfuellen.TooltipText = "Bietet genau seine Forderung bei der gewählten Laufzeit - er unterschreibt sofort.";
+        _erfuellen.Pressed += async () => await ErfuelleForderung();
+        leiste.AddChild(_erfuellen);
         _bieten = new Button { Text = "Angebot machen", Disabled = true };
         FmTheme.ApplyPrimaryButton(_bieten);
         _bieten.Pressed += async () => await Biete();
@@ -212,7 +235,6 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         {
             SetzeUntertitel(_name);
             ZeigeFehler(fehler ?? "Das Gespräch kam nicht zustande.");
-            _uhr.Text = "–";
             _beenden.Text = "Schließen";
             return;
         }
@@ -228,67 +250,56 @@ public partial class VertragsverhandlungDialog : Overlaykarte
             .Select(j => j == 1 ? "1 Jahr" : $"{j} Jahre").ToArray();
         _laufzeit = Segmentschalter.Neu(texte, Math.Max(0, stand.Wunschlaufzeit - stand.MinLaufzeit),
             new Vector2(78, 30), 12);
-        _laufzeit.Gewaehlt += _ => AktualisiereLaufzeitText();
+        _laufzeit.Gewaehlt += _ => LaufzeitGeaendert();
         _laufzeitPlatz.AddChild(_laufzeit);
 
-        _gehalt.Step = Faktor >= 52 ? 1_000 : Faktor > 1 ? 100 : 10;
+        _gehalt.Step = _regler.Step = Schritt;
         _gehalt.Suffix = $"€ / {Gehaltsformat.PeriodeLabel}";
-        _gehalt.Value = AusWoche(Math.Max(stand.AktuellesGehalt, stand.Marktsatz));
-        _gehalt.Editable = true;
-        _bieten.Disabled = false;
-        _annehmen.Disabled = false;
+        _stand = stand;
+        SetzeReglerSpanne();
+        _gehalt.Value = AusWoche(Math.Min(Math.Max(stand.AktuellesGehalt, stand.Marktsatz), ForderungBeiWahl));
+        _gehalt.Editable = _regler.Editable = true;
         Uebernimm(stand);
     }
 
     private int GewaehlteLaufzeit => _stand == null || _laufzeit == null
         ? 0 : _stand.MinLaufzeit + _laufzeit.Auswahl;
 
+    /// <summary>Seine Forderung bei der gewählten Laufzeit - dieselbe Zahl, die er im Gespräch nennt.</summary>
+    private long ForderungBeiWahl => _stand?.ForderungBei(GewaehlteLaufzeit) ?? 0;
+
     private async Task Biete() => await Sende(ZuWoche(_gehalt.Value), GewaehlteLaufzeit);
 
-    private async Task NimmForderungAn()
+    private async Task ErfuelleForderung()
     {
-        if (_stand == null || _laufzeit == null) return;
-        _laufzeit.Auswahl = _stand.Wunschlaufzeit - _stand.MinLaufzeit;
-        _gehalt.Value = AusWoche(_stand.Forderung);
-        await Sende(_stand.Forderung, _stand.Wunschlaufzeit);
+        if (_stand == null) return;
+        long forderung = ForderungBeiWahl;
+        _gehalt.Value = AusWoche(forderung);
+        await Sende(forderung, GewaehlteLaufzeit);
     }
 
     private async Task Sende(long wochengehalt, int laufzeit)
     {
         if (_stand == null || !_stand.Laeuft) return;
-        _bieten.Disabled = _annehmen.Disabled = true;
+        _bieten.Disabled = _erfuellen.Disabled = true;
         var (stand, fehler) = await ApiClient.SendeAsync<Verhandlung>("POST",
             $"vertrag/{_spielerId}/verhandlung/angebot", new { gehalt = wochengehalt, laufzeit });
         if (!IsInstanceValid(this)) return;
         if (stand == null)
         {
             ZeigeFehler(fehler ?? "Das Angebot kam nicht an.");
-            _bieten.Disabled = _annehmen.Disabled = !(_stand?.Laeuft ?? false);
+            _bieten.Disabled = _erfuellen.Disabled = !(_stand?.Laeuft ?? false);
             return;
         }
         Uebernimm(stand);
     }
 
-    /// <summary>Die Uhr ist abgelaufen - der Server soll das Gespräch beenden, damit es zählt.</summary>
-    private async Task FrageNachEnde()
-    {
-        _fragtNach = true;
-        var (stand, _) = await ApiClient.SendeAsync<Verhandlung>("GET", $"vertrag/{_spielerId}/verhandlung");
-        if (!IsInstanceValid(this)) return;
-        _fragtNach = false;
-        if (stand != null) Uebernimm(stand);
-    }
-
     private void Uebernimm(Verhandlung stand)
     {
         _stand = stand;
-        _rest = stand.RestSekunden;
-        _forderung.Text = $"{FmTheme.Gehalt(stand.Forderung)}";
-        _forderungLaufzeit.Text = $"je {Gehaltsformat.PeriodeLabel}, über {(stand.Wunschlaufzeit == 1 ? "1 Jahr" : $"{stand.Wunschlaufzeit} Jahre")} "
-                                  + $"(bis 30.06.{stand.EndetIm(stand.Wunschlaufzeit)})  ·  üblich wären {FmTheme.Gehalt(stand.Marktsatz)}";
-        _stimmung.Value = stand.Stimmung;
-        _stimmung.AddThemeStyleboxOverride("fill", FmTheme.Flaeche(
-            stand.Stimmung >= 50 ? FmTheme.Success : stand.Stimmung >= 25 ? FmTheme.Gold : FmTheme.Danger, 4));
+        ZeigeStimmung(stand.Stimmung);
+        AktualisiereForderung();
+        SetzeReglerSpanne();
 
         foreach (var kind in _verlauf.GetChildren()) kind.QueueFree();
         foreach (var zeile in stand.Verlauf) _verlauf.AddChild(Sprechblase(zeile));
@@ -297,15 +308,13 @@ public partial class VertragsverhandlungDialog : Overlaykarte
         AktualisiereLaufzeitText();
         AktualisiereGehaltText();
         if (!stand.Laeuft) Beende(stand);
-        else _bieten.Disabled = _annehmen.Disabled = false;
+        else _bieten.Disabled = _erfuellen.Disabled = false;
     }
 
     private void Beende(Verhandlung stand)
     {
-        _gehalt.Editable = false;
-        _bieten.Disabled = _annehmen.Disabled = true;
-        _rest = 0;
-        ZeigeUhr();
+        _gehalt.Editable = _regler.Editable = false;
+        _bieten.Disabled = _erfuellen.Disabled = true;
         _beenden.Text = "Schließen";
         string vertrag = $"{FmTheme.Gehalt(stand.NeuesGehalt ?? 0)} je {Gehaltsformat.PeriodeLabel}, "
                          + $"bis 30.06.{(stand.NeuerVertragBis ?? 0) + 1}";
@@ -320,14 +329,9 @@ public partial class VertragsverhandlungDialog : Overlaykarte
                     _spieler.VertragBis = stand.NeuerVertragBis ?? _spieler.VertragBis;
                 }
                 break;
-            case "ABGELAUFEN":
-                _hinweis.Text = Wechsel ? "Die Zeit ist abgelaufen - keine Einigung, der Wechsel ist geplatzt."
-                    : "Die Zeit ist abgelaufen - keine Einigung. In zwei Wochen kannst du es wieder versuchen.";
-                _hinweis.AddThemeColorOverride("font_color", FmTheme.Danger);
-                break;
             default:
-                _hinweis.Text = Wechsel ? "Er hat das Gespräch abgebrochen - der Wechsel ist geplatzt."
-                    : "Er hat das Gespräch abgebrochen. In zwei Wochen kannst du es wieder versuchen.";
+                _hinweis.Text = Wechsel ? "Die Stimmung ist gekippt - er hat abgebrochen, der Wechsel ist geplatzt."
+                    : "Die Stimmung ist gekippt - er hat abgebrochen. In zwei Wochen kannst du es wieder versuchen.";
                 _hinweis.AddThemeColorOverride("font_color", FmTheme.Danger);
                 break;
         }
@@ -342,33 +346,77 @@ public partial class VertragsverhandlungDialog : Overlaykarte
             _ = ApiClient.SendeAsync("DELETE", $"vertrag/{_spielerId}/verhandlung");
     }
 
-    public override void _Process(double delta)
-    {
-        if (_stand == null || !_stand.Laeuft) return;
-        _rest = Math.Max(0, _rest - delta);
-        ZeigeUhr();
-        if (_rest <= 0 && !_fragtNach) _ = FrageNachEnde();
-    }
-
-    private void ZeigeUhr()
-    {
-        _uhr.Text = $"{Math.Ceiling(_rest):0}";
-        _uhrBalken.Value = _rest;
-        var farbe = _rest <= 10 ? FmTheme.Danger : _rest <= 25 ? FmTheme.Gold : FmTheme.Accent;
-        _uhr.AddThemeColorOverride("font_color", farbe);
-        _uhrBalken.AddThemeStyleboxOverride("fill", FmTheme.Flaeche(farbe, 6));
-    }
-
     // ── Anzeige ──────────────────────────────────────────────────────────────
+
+    private void ZeigeStimmung(int stimmung)
+    {
+        var farbe = stimmung >= 60 ? FmTheme.Success : stimmung >= 30 ? FmTheme.Gold : FmTheme.Danger;
+        _stimmungZahl.Text = stimmung.ToString();
+        _stimmungZahl.AddThemeColorOverride("font_color", farbe);
+        _stimmung.Value = stimmung;
+        _stimmung.AddThemeStyleboxOverride("fill", FmTheme.Flaeche(farbe, 6));
+        _stimmungWort.Text = "STIMMUNG  ·  " + (stimmung >= 80 ? "gut gelaunt" : stimmung >= 60 ? "gesprächsbereit"
+            : stimmung >= 40 ? "angespannt" : stimmung >= 20 ? "gereizt" : stimmung > 0 ? "kurz vor dem Abbruch" : "abgebrochen");
+    }
+
+    private void AktualisiereForderung()
+    {
+        if (_stand == null) return;
+        int jahre = GewaehlteLaufzeit;
+        _forderung.Text = FmTheme.Gehalt(ForderungBeiWahl);
+        string laufzeit = jahre == 1 ? "1 Jahr" : $"{jahre} Jahre";
+        string wunsch = jahre == _stand.Wunschlaufzeit
+            ? "seine Wunschlaufzeit"
+            : $"Wunsch: {(_stand.Wunschlaufzeit == 1 ? "1 Jahr" : $"{_stand.Wunschlaufzeit} Jahre")} für {FmTheme.Gehalt(_stand.Forderung)}";
+        _forderungLaufzeit.Text = $"je {Gehaltsformat.PeriodeLabel}, bei {laufzeit} (bis 30.06.{_stand.EndetIm(jahre)})  ·  "
+                                  + $"{wunsch}  ·  üblich wären {FmTheme.Gehalt(_stand.Marktsatz)}";
+    }
+
+    /// <summary>
+    /// Der Regler reicht bis zu seiner Forderung bei der gewählten Laufzeit; links bis gut die
+    /// Hälfte davon - weiter unten ist jedes Angebot eine Beleidigung.
+    /// </summary>
+    private void SetzeReglerSpanne()
+    {
+        if (_stand == null) return;
+        double bis = AusWoche(ForderungBeiWahl);
+        double von = Math.Floor(bis * 0.55 / Schritt) * Schritt;
+        _gleichtAb = true;
+        _regler.MinValue = von;
+        _regler.MaxValue = bis;
+        _regler.Value = Math.Clamp(_gehalt.Value, von, bis);
+        _gleichtAb = false;
+    }
+
+    private void GehaltGeaendert(double wert, bool ausRegler)
+    {
+        if (_gleichtAb) return;
+        _gleichtAb = true;
+        if (ausRegler) _gehalt.Value = wert;
+        else _regler.Value = Math.Clamp(wert, _regler.MinValue, _regler.MaxValue);
+        _gleichtAb = false;
+        AktualisiereGehaltText();
+    }
+
+    private void LaufzeitGeaendert()
+    {
+        AktualisiereForderung();
+        SetzeReglerSpanne();
+        AktualisiereLaufzeitText();
+        AktualisiereGehaltText();
+    }
 
     private void AktualisiereGehaltText()
     {
         if (_stand == null) return;
         long woche = ZuWoche(_gehalt.Value);
-        double gegenJetzt = _stand.AktuellesGehalt > 0 ? (woche - _stand.AktuellesGehalt) * 100.0 / _stand.AktuellesGehalt : 0;
-        _gehaltText.Text = FmTheme.Gehalt(woche) + (_stand.AktuellesGehalt > 0
-            ? $"  ·  {(gegenJetzt >= 0 ? "+" : "−")}{Math.Abs(gegenJetzt):0} % gegenüber {(Wechsel ? "bisher" : "jetzt")}"
-            : "");
+        long forderung = ForderungBeiWahl;
+        string abstand = woche >= forderung ? "erfüllt seine Forderung"
+            : $"{(forderung - woche) * 100.0 / forderung:0.0} % unter seiner Forderung";
+        string gegenJetzt = _stand.AktuellesGehalt > 0
+            ? $"  ·  {(woche >= _stand.AktuellesGehalt ? "+" : "−")}{Math.Abs((woche - _stand.AktuellesGehalt) * 100.0 / _stand.AktuellesGehalt):0} % gegenüber {(Wechsel ? "bisher" : "jetzt")}"
+            : "";
+        _gehaltText.Text = abstand + gegenJetzt;
     }
 
     private void AktualisiereLaufzeitText()
@@ -421,7 +469,7 @@ public partial class VertragsverhandlungDialog : Overlaykarte
     {
         for (int i = 0; i < 40 && _stand == null; i++) await ToSignal(GetTree().CreateTimer(0.1), "timeout");
         if (_stand == null) return;
-        _gehalt.Value = AusWoche((long)(_stand.Forderung * anteil));
+        _gehalt.Value = AusWoche((long)(ForderungBeiWahl * anteil));
         await Biete();
     }
 }

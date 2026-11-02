@@ -13,6 +13,9 @@ namespace FMDesktop.UI.Taktik;
 // Drop-target slot on the football field
 // ---------------------------------------------------------------------------
 
+/// <summary>Formwert, Frische und Stärke bei Anpfiff eines aufgestellten Spielers - für den Mouseover.</summary>
+public record SlotZustand(int Form, int Frische, double FrischeFaktor, int Spielstaerke);
+
 /// <summary>
 /// Ein Platz auf dem Feld oder auf der Bank - gezeichnet als Spielerplakette.
 ///
@@ -35,6 +38,8 @@ public partial class PositionSlot : Button
     public int?   Eingespieltheit { get; private set; }
     /// <summary>Was die Form ausmacht - in <see cref="Staerke"/> schon verrechnet.</summary>
     public double FormFaktor { get; private set; } = 1.0;
+    /// <summary>Formwert, Frische und Stärke bei Anpfiff - nur für den Mouseover.</summary>
+    public SlotZustand? Zustand { get; private set; }
     /// <summary>Gelernte Position des Spielers - für die Bank, wo der Platz keine hat.</summary>
     public string? SpielerPosition { get; private set; }
 
@@ -83,7 +88,7 @@ public partial class PositionSlot : Button
 
     public void Assign(long spielerId, string spielerName, int? staerke = null,
         int? grundstaerke = null, int? eingespieltheit = null, string? spielerPosition = null,
-        double formFaktor = 1.0)
+        double formFaktor = 1.0, SlotZustand? zustand = null)
     {
         SpielerId       = spielerId;
         SpielerName     = spielerName;
@@ -92,6 +97,7 @@ public partial class PositionSlot : Button
         Eingespieltheit = eingespieltheit;
         SpielerPosition = spielerPosition;
         FormFaktor      = formFaktor;
+        Zustand         = zustand;
         Refresh();
     }
 
@@ -100,6 +106,7 @@ public partial class PositionSlot : Button
         Staerke         = staerke;
         Grundstaerke    = grundstaerke;
         Eingespieltheit = eingespieltheit;
+        Zustand         = null;
         Refresh();
     }
 
@@ -111,6 +118,7 @@ public partial class PositionSlot : Button
         Grundstaerke    = null;
         Eingespieltheit = null;
         SpielerPosition = null;
+        Zustand         = null;
         Refresh();
     }
 
@@ -170,7 +178,10 @@ public partial class PositionSlot : Button
     {
         Text = "";
         TooltipText = SpielerId.HasValue && Staerke.HasValue && Grundstaerke.HasValue && Eingespieltheit.HasValue
-            ? StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value, FormFaktor)
+            ? Zustand is { } z
+                ? StaerkeErklaerung.Aufstellung(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value,
+                    FormFaktor, z.Form, z.Frische, z.FrischeFaktor, z.Spielstaerke)
+                : StaerkeErklaerung.Basis(Anzeige, Grundstaerke.Value, Eingespieltheit.Value, Staerke.Value, FormFaktor)
             : SpielerId.HasValue
                 ? IstBank ? $"{SpielerName} - Rechtsklick entfernt" : $"{SpielerName} - ziehen verschiebt, Rechtsklick entfernt"
                 : IstBank ? "Freier Bankplatz - Spieler hierher ziehen" : $"{Anzeige} - Spieler hierher ziehen, Platz verschieben mit der Maus";
@@ -822,8 +833,7 @@ public partial class AufstellungView : Control
         if (aufstellung != null && aufstellung.Koordinaten.Count > 0)
         {
             UebernimmPlaetze(aufstellung);
-            WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
-                aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit, aufstellung.SlotFormFaktor);
+            WendeSpielerZuweisungenAn(aufstellung);
             AktualisiereSaerkeLabel(aufstellung.Gesamtstaerke);
         }
         else
@@ -918,8 +928,7 @@ public partial class AufstellungView : Control
         foreach (var slot in _bankSlots)
             slot.Clear();
 
-        WendeSpielerZuweisungenAn(aufstellung.Positionen, aufstellung.SlotStaerken,
-            aufstellung.SlotGrundstaerken, aufstellung.SlotEingespieltheit, aufstellung.SlotFormFaktor);
+        WendeSpielerZuweisungenAn(aufstellung);
         WendeBankAn(aufstellung.Ersatzbank);
         AktualisiereListenPositionen();
         AktualisiereWarnung(aufstellung);
@@ -963,30 +972,28 @@ public partial class AufstellungView : Control
         }
     }
 
-    private void WendeSpielerZuweisungenAn(Dictionary<string, long>? positionen,
-        Dictionary<string, int>? slotStaerken = null,
-        Dictionary<string, int>? slotGrundstaerken = null,
-        Dictionary<string, int>? slotEingespieltheit = null,
-        Dictionary<string, double>? slotFormFaktor = null)
+    private void WendeSpielerZuweisungenAn(AufstellungModel aufstellung)
     {
-        if (positionen == null) return;
-        foreach (var (slot, spielerId) in positionen)
+        if (aufstellung.Positionen == null) return;
+        foreach (var (slot, spielerId) in aufstellung.Positionen)
         {
             if (_slots.TryGetValue(slot, out var slotCtrl) &&
                 _playerNames.TryGetValue(spielerId, out var name))
             {
-                int? slotStaerke = null;
-                if (slotStaerken != null && slotStaerken.TryGetValue(slot, out var st))
-                    slotStaerke = st;
-                int? grundstaerke = null;
-                if (slotGrundstaerken != null && slotGrundstaerken.TryGetValue(slot, out var g))
-                    grundstaerke = g;
-                int? eingespieltheit = null;
-                if (slotEingespieltheit != null && slotEingespieltheit.TryGetValue(slot, out var e))
-                    eingespieltheit = e;
-                double formFaktor = slotFormFaktor != null && slotFormFaktor.TryGetValue(slot, out var f) ? f : 1.0;
+                int? slotStaerke = aufstellung.SlotStaerken.TryGetValue(slot, out var st) ? st : null;
+                int? grundstaerke = aufstellung.SlotGrundstaerken.TryGetValue(slot, out var g) ? g : null;
+                int? eingespieltheit = aufstellung.SlotEingespieltheit.TryGetValue(slot, out var e) ? e : null;
+                double formFaktor = aufstellung.SlotFormFaktor.TryGetValue(slot, out var f) ? f : 1.0;
+                // Ein älterer Server liefert Form und Frische nicht - dann bleibt es beim kurzen Mouseover.
+                SlotZustand? zustand =
+                    aufstellung.SlotForm.TryGetValue(slot, out var form)
+                    && aufstellung.SlotFrische.TryGetValue(slot, out var frische)
+                    && aufstellung.SlotFrischeFaktor.TryGetValue(slot, out var frischeFaktor)
+                    && aufstellung.SlotSpielstaerke.TryGetValue(slot, out var spielstaerke)
+                        ? new SlotZustand(form, frische, frischeFaktor, spielstaerke)
+                        : null;
                 slotCtrl.Assign(spielerId, name, slotStaerke, grundstaerke, eingespieltheit,
-                    formFaktor: formFaktor);
+                    formFaktor: formFaktor, zustand: zustand);
             }
         }
     }

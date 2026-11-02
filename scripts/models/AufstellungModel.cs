@@ -62,6 +62,14 @@ public class AufstellungModel
     public Dictionary<string, int> SlotEingespieltheit { get; set; } = new();
     /// <summary>Formfaktor je Slot - die Slot-Stärken enthalten die Form schon.</summary>
     public Dictionary<string, double> SlotFormFaktor { get; set; } = new();
+    /// <summary>Formwert je Slot (10-90, normal 50).</summary>
+    public Dictionary<string, int> SlotForm { get; set; } = new();
+    /// <summary>Frische bei Anpfiff je Slot (0-100).</summary>
+    public Dictionary<string, int> SlotFrische { get; set; } = new();
+    /// <summary>Was die Frische bei Anpfiff von der Stärke übrig lässt.</summary>
+    public Dictionary<string, double> SlotFrischeFaktor { get; set; } = new();
+    /// <summary>Stärke bei Anpfiff - mit Form und Frische.</summary>
+    public Dictionary<string, int> SlotSpielstaerke { get; set; } = new();
 
     /// <summary>Mouseover-Text: wie sich die Stärke auf diesem Slot zusammensetzt.</summary>
     public string SlotErklaerung(string slot, string position)
