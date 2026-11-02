@@ -37,19 +37,19 @@ public partial class TaktikView : Control
     internal static readonly Einstellung[] Einstellungen =
     {
         new("Grundausrichtung",
-            "Wie hoch die Mannschaft steht und wie viel sie wagt - im Ballbesitz wie gegen den Ball.",
+            "Wie viel die Mannschaft wagt - im Passspiel, im Abschluss und wie eng sie gegen den Ball steht.",
             new[] { "BETON", "DEFENSIV", "NEUTRAL", "KONTROLLIERT_OFFENSIV", "OFFENSIV", "BRECHSTANGE" },
             new[] { "Beton anrühren", "Defensiv", "Neutral", "Kontr. Offensive", "Offensiv", "Brechstange" },
             new[]
             {
-                "Alle stehen tief vor dem eigenen Tor, Risiko wird gemieden. Kaum Gegentore - aber auch kaum eigene Chancen.",
-                "Die Abwehr steht tiefer, Ballverluste werden vermieden. Weniger Gegentore, weniger Chancen.",
+                "Alles hinter den Ball: Der Block zieht sich eng zusammen, Ballverluste werden um jeden Preis vermieden, geschossen wird nur aus guter Lage. Wenige Tore - auf beiden Seiten.",
+                "Kompakter gegen den Ball, sichere Pässe, wenig Risiko. Weniger Chancen auf beiden Seiten.",
                 "Ausgewogen - so spielen die meisten Mannschaften.",
-                "Etwas höher und mutiger nach vorn, ohne die Absicherung aufzugeben.",
-                "Hoher Block, riskantere Pässe, früher Abschluss. Mehr Chancen - und mehr Räume für den Gegner.",
-                "Alles nach vorn: Die Abwehr rückt auf, es wird aus jeder Lage geschossen. Für die letzten Minuten.",
+                "Etwas mutiger im Passspiel und im Abschluss, ohne die Ordnung aufzugeben.",
+                "Riskantere Pässe und Dribblings, früher Abschluss. Mehr Chancen - und mehr Ballverluste, aus denen der Gegner kontert.",
+                "Alles nach vorn: Jeder Ball sucht den Weg zum Tor, geschossen wird aus jeder Lage. Viele Chancen, viele Gegenchancen - für die letzten Minuten.",
             },
-            t => t.Ausrichtung, (t, v) => t.Ausrichtung = v, 150, WirktNoch: false),
+            t => t.Ausrichtung, (t, v) => t.Ausrichtung = v, 150),
         new("Deckung",
             "Wie gegen den Ball verteidigt wird.",
             new[] { "MANN", "RAUM" },
@@ -91,7 +91,7 @@ public partial class TaktikView : Control
                 "Kurz oder lang, je nach Lage.",
                 "Raumgewinn zählt: Der Ball geht schnell und gern weit nach vorn - schneller am Tor, häufiger verloren.",
             },
-            t => t.Passlaenge, (t, v) => t.Passlaenge = v, 170, WirktNoch: false),
+            t => t.Passlaenge, (t, v) => t.Passlaenge = v, 170),
     };
 
     public override async void _Ready()
